@@ -68,11 +68,11 @@ export function FloatingCTA() {
   if (!isVisible) return null
 
   return (
-    <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 animate-in slide-in-from-bottom-5 duration-300">
+    <div className="fixed bottom-4 sm:bottom-6 left-1/2 transform -translate-x-1/2 z-50 animate-in slide-in-from-bottom-5 duration-300 px-4 w-full max-w-sm sm:max-w-none sm:w-auto sm:px-0">
       <a
         href="#booking-section"
         onClick={scrollToBooking}
-        className="inline-block bg-orange-500 hover:bg-orange-600 text-white font-semibold text-base sm:text-lg md:text-xl px-6 py-3 sm:px-8 sm:py-4 rounded-lg transition-colors duration-200 shadow-2xl hover:shadow-orange-500/50"
+        className="block w-full sm:w-auto bg-orange-500 hover:bg-orange-600 text-white font-semibold text-base sm:text-lg md:text-xl px-8 py-3.5 sm:px-8 sm:py-4 rounded-lg transition-colors duration-200 shadow-2xl hover:shadow-orange-500/50 text-center whitespace-nowrap"
       >
         SHOW ME THE DEAL
       </a>
