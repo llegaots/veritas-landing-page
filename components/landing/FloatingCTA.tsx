@@ -9,27 +9,37 @@ export function FloatingCTA() {
   useEffect(() => {
     // Find all "SHOW ME THE DEAL" buttons on the page
     const ctaButtons = document.querySelectorAll('a[href="#booking-section"]')
+    // Find the booking section itself
+    const bookingSection = document.getElementById('booking-section')
     
-    if (ctaButtons.length === 0) return
+    if (ctaButtons.length === 0 && !bookingSection) return
 
-    const buttonVisibilityMap = new Map<Element, boolean>()
+    const elementVisibilityMap = new Map<Element, boolean>()
 
-    // Use Intersection Observer to detect when buttons are visible
+    // Use Intersection Observer to detect when buttons or booking section are visible
     observerRef.current = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
-          buttonVisibilityMap.set(entry.target, entry.isIntersecting)
+          elementVisibilityMap.set(entry.target, entry.isIntersecting)
         })
 
-        // Check if any button is visible
-        const anyButtonVisible = Array.from(buttonVisibilityMap.values()).some(visible => visible)
+        // Check if any CTA button is visible
+        const anyButtonVisible = Array.from(elementVisibilityMap.entries())
+          .filter(([element]) => Array.from(ctaButtons).includes(element as Element))
+          .some(([, visible]) => visible)
 
-        // Show floating button if no CTA button is visible and user has scrolled down
+        // Check if booking section is in view
+        const bookingSectionVisible = bookingSection 
+          ? elementVisibilityMap.get(bookingSection) || false
+          : false
+
+        // Hide floating button if booking section is visible or any CTA button is visible
+        // Show floating button if none are visible and user has scrolled down
         const hasScrolled = window.scrollY > 200
-        setIsVisible(!anyButtonVisible && hasScrolled)
+        setIsVisible(!anyButtonVisible && !bookingSectionVisible && hasScrolled)
       },
       {
-        threshold: 0.1, // Trigger when 10% of button is visible
+        threshold: 0.1, // Trigger when 10% of element is visible
       }
     )
 
@@ -40,11 +50,23 @@ export function FloatingCTA() {
       }
     })
 
+    // Observe the booking section itself
+    if (bookingSection && observerRef.current) {
+      observerRef.current.observe(bookingSection)
+    }
+
     // Also check scroll position
     const handleScroll = () => {
-      const anyButtonVisible = Array.from(buttonVisibilityMap.values()).some(visible => visible)
+      const anyButtonVisible = Array.from(elementVisibilityMap.entries())
+        .filter(([element]) => Array.from(ctaButtons).includes(element as Element))
+        .some(([, visible]) => visible)
+      
+      const bookingSectionVisible = bookingSection 
+        ? elementVisibilityMap.get(bookingSection) || false
+        : false
+
       const hasScrolled = window.scrollY > 200
-      setIsVisible(!anyButtonVisible && hasScrolled)
+      setIsVisible(!anyButtonVisible && !bookingSectionVisible && hasScrolled)
     }
 
     window.addEventListener('scroll', handleScroll, { passive: true })
@@ -54,6 +76,9 @@ export function FloatingCTA() {
         ctaButtons.forEach((button) => {
           observerRef.current?.unobserve(button)
         })
+        if (bookingSection) {
+          observerRef.current.unobserve(bookingSection)
+        }
         observerRef.current.disconnect()
       }
       window.removeEventListener('scroll', handleScroll)
