@@ -42,8 +42,9 @@ export function FloatingCTA() {
 
     // Also check scroll position
     const handleScroll = () => {
+      const anyButtonVisible = Array.from(buttonVisibilityMap.values()).some(visible => visible)
       const hasScrolled = window.scrollY > 200
-      setIsVisible(visibleButtonsCount === 0 && hasScrolled)
+      setIsVisible(!anyButtonVisible && hasScrolled)
     }
 
     window.addEventListener('scroll', handleScroll, { passive: true })
