@@ -110,10 +110,10 @@ export function CaseStudiesSection() {
             transition={{ duration: 0.6 }}
             className="text-center mb-16"
           >
-            <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
+            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
               Case Studies & Success Stories
             </h2>
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+            <p className="text-lg sm:text-xl text-gray-600 max-w-3xl mx-auto px-4">
               Veritas Equity Partners invests in workforce housing communities throughout the Pacific Northwest, 
               with a focus on stability, consistent cash flow, and long-term growth.
             </p>
@@ -176,7 +176,7 @@ export function CaseStudiesSection() {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
               {[
                 {
                   number: 1,
@@ -243,7 +243,7 @@ export function CaseStudiesSection() {
                   e.preventDefault()
                   document.getElementById('booking-section')?.scrollIntoView({ behavior: 'smooth' })
                 }}
-                className="inline-block bg-orange-500 hover:bg-orange-600 text-white font-semibold text-2xl md:text-3xl px-12 py-6 md:px-16 md:py-8 rounded-lg transition-colors duration-200 shadow-lg"
+                className="inline-block bg-orange-500 hover:bg-orange-600 text-white font-semibold text-lg sm:text-xl md:text-2xl lg:text-3xl px-6 py-4 sm:px-8 sm:py-5 md:px-12 md:py-6 lg:px-16 lg:py-8 rounded-lg transition-colors duration-200 shadow-lg"
               >
                 SHOW ME THE DEAL
               </a>
@@ -332,7 +332,7 @@ export function CaseStudiesSection() {
             <h3 className="text-2xl font-bold text-gray-900 text-center mb-6">
               Meet the Team
             </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8">
               {team.map((member, index) => (
                 <motion.div
                   key={index}
@@ -342,7 +342,7 @@ export function CaseStudiesSection() {
                   transition={{ duration: 0.6, delay: index * 0.1 }}
                   className="text-center"
                 >
-                  <div className="relative w-48 h-48 mx-auto mb-4 rounded-lg overflow-hidden border-4 border-orange-100 shadow-lg">
+                  <div className="relative w-32 h-32 sm:w-40 sm:h-40 md:w-48 md:h-48 mx-auto mb-4 rounded-lg overflow-hidden border-4 border-orange-100 shadow-lg">
                     <img
                       src={member.image}
                       alt={member.name}

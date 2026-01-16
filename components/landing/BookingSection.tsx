@@ -38,10 +38,10 @@ export function BookingSection() {
             transition={{ duration: 0.6 }}
             className="text-center mb-12"
           >
-            <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
+            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-4">
               Schedule Your Investor Call
             </h2>
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+            <p className="text-lg sm:text-xl text-gray-600 max-w-3xl mx-auto px-4">
               Book a time that works for you to discuss the Horizon Park Apartments opportunity
             </p>
           </motion.div>
@@ -52,9 +52,9 @@ export function BookingSection() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.6, delay: 0.2 }}
-            className="bg-white rounded-xl p-8 lg:p-10 border border-gray-200 shadow-lg max-w-4xl mx-auto"
+            className="bg-white rounded-xl p-4 sm:p-6 md:p-8 lg:p-10 border border-gray-200 shadow-lg max-w-4xl mx-auto"
           >
-            <div className="calendly-inline-widget" style={{ minWidth: '320px', height: '700px' }}>
+            <div className="calendly-inline-widget h-[500px] sm:h-[600px] md:h-[700px]" style={{ minWidth: '320px' }}>
               {iframeSrc && (
                 <iframe
                   src={iframeSrc}

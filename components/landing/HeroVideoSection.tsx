@@ -56,10 +56,10 @@ export function HeroVideoSection() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.3 }}
             >
-              <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold mb-4">
+              <h2 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold mb-4">
                 Ready to Learn More About This Opportunity?
               </h2>
-              <p className="text-lg md:text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
+              <p className="text-base sm:text-lg md:text-xl text-gray-600 mb-6 sm:mb-8 max-w-3xl mx-auto px-4">
                 It's a personalized investor call where you'll receive detailed, actionable insights about <strong className="text-gray-900">Horizon Park Apartments</strong> from the team that's built a <strong className="text-gray-900">$50M+ portfolio</strong> and delivered <strong className="text-gray-900">32% lifetime annualized returns</strong> in the Pacific Northwest.
               </p>
               <a
@@ -68,7 +68,7 @@ export function HeroVideoSection() {
                   e.preventDefault()
                   document.getElementById('booking-section')?.scrollIntoView({ behavior: 'smooth' })
                 }}
-                className="inline-block bg-orange-500 hover:bg-orange-600 text-white font-semibold text-2xl md:text-3xl px-12 py-6 md:px-16 md:py-8 rounded-lg transition-colors duration-200 shadow-lg"
+                className="inline-block bg-orange-500 hover:bg-orange-600 text-white font-semibold text-lg sm:text-xl md:text-2xl lg:text-3xl px-6 py-4 sm:px-8 sm:py-5 md:px-12 md:py-6 lg:px-16 lg:py-8 rounded-lg transition-colors duration-200 shadow-lg"
               >
                 SHOW ME THE DEAL
               </a>
@@ -80,7 +80,7 @@ export function HeroVideoSection() {
       {/* Property Image Section with Overlaid Metrics */}
       <div className="relative w-full pt-8 pb-16 bg-white">
         <div className="container mx-auto px-4">
-          <div className="relative aspect-[21/9] w-full rounded-2xl overflow-hidden shadow-2xl group cursor-pointer transition-all duration-300">
+          <div className="relative aspect-[16/9] sm:aspect-[21/9] w-full rounded-2xl overflow-hidden shadow-2xl group cursor-pointer transition-all duration-300">
             {/* Dark Blue Overlay on Image - Matching Video Section Color */}
             <div className="absolute inset-0 bg-slate-900 z-0 rounded-2xl opacity-40 group-hover:opacity-60 transition-opacity duration-300"></div>
             
@@ -110,18 +110,18 @@ export function HeroVideoSection() {
                 transition={{ duration: 0.6, delay: 0.2 }}
                 className="max-w-5xl w-full"
               >
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-12 text-center">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-8 md:gap-12 text-center">
                   <div>
-                    <div className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-2 drop-shadow-lg">$50K</div>
-                    <div className="text-sm md:text-base text-white/90 uppercase tracking-wide drop-shadow-md">Minimum Investment</div>
+                    <div className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-2 drop-shadow-lg">$50K</div>
+                    <div className="text-xs sm:text-sm md:text-base text-white/90 uppercase tracking-wide drop-shadow-md">Minimum Investment</div>
                   </div>
                   <div>
-                    <div className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-2 drop-shadow-lg">2.22x</div>
-                    <div className="text-sm md:text-base text-white/90 uppercase tracking-wide drop-shadow-md">Equity Multiple</div>
+                    <div className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-2 drop-shadow-lg">2.22x</div>
+                    <div className="text-xs sm:text-sm md:text-base text-white/90 uppercase tracking-wide drop-shadow-md">Equity Multiple</div>
                   </div>
                   <div>
-                    <div className="text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-2 drop-shadow-lg">18.1%</div>
-                    <div className="text-sm md:text-base text-white/90 uppercase tracking-wide drop-shadow-md">Target Annual IRR</div>
+                    <div className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-2 drop-shadow-lg">18.1%</div>
+                    <div className="text-xs sm:text-sm md:text-base text-white/90 uppercase tracking-wide drop-shadow-md">Target Annual IRR</div>
                   </div>
                 </div>
               </motion.div>

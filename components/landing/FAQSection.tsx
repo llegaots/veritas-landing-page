@@ -49,10 +49,10 @@ export function FAQSection() {
             transition={{ duration: 0.6 }}
             className="text-center mb-16 lg:mb-20"
           >
-            <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-6">
+            <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-4 sm:mb-6">
               Frequently Asked Questions
             </h2>
-            <p className="text-xl lg:text-2xl text-gray-600">
+            <p className="text-lg sm:text-xl lg:text-2xl text-gray-600 px-4">
               Everything you need to know about investing in Horizon Park Apartments
             </p>
           </motion.div>
@@ -97,7 +97,7 @@ export function FAQSection() {
                 e.preventDefault()
                 document.getElementById('booking-section')?.scrollIntoView({ behavior: 'smooth' })
               }}
-              className="inline-block bg-orange-500 hover:bg-orange-600 text-white font-semibold text-2xl md:text-3xl px-12 py-6 md:px-16 md:py-8 rounded-lg transition-colors duration-200 shadow-lg"
+              className="inline-block bg-orange-500 hover:bg-orange-600 text-white font-semibold text-lg sm:text-xl md:text-2xl lg:text-3xl px-6 py-4 sm:px-8 sm:py-5 md:px-12 md:py-6 lg:px-16 lg:py-8 rounded-lg transition-colors duration-200 shadow-lg"
             >
               SHOW ME THE DEAL
             </a>
