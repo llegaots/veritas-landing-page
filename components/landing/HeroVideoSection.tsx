@@ -48,8 +48,8 @@ export function HeroVideoSection() {
       </div>
 
       {/* Call to Action Section Before Image */}
-      <div className="bg-white py-12 lg:py-16">
-        <div className="container mx-auto px-4">
+      <div className="bg-white py-8 sm:py-10 lg:py-16">
+        <div className="container mx-auto px-4 sm:px-6">
           <div className="mx-auto max-w-4xl text-center text-gray-900">
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -78,9 +78,9 @@ export function HeroVideoSection() {
       </div>
 
       {/* Property Image Section with Overlaid Metrics */}
-      <div className="relative w-full pt-8 pb-16 bg-white">
+      <div className="relative w-full pt-6 sm:pt-8 pb-12 sm:pb-16 bg-white">
         <div className="container mx-auto px-4">
-          <div className="relative aspect-[16/9] sm:aspect-[21/9] w-full rounded-2xl overflow-hidden shadow-2xl group cursor-pointer transition-all duration-300">
+          <div className="relative aspect-[4/3] sm:aspect-[16/9] md:aspect-[21/9] w-full rounded-2xl overflow-hidden shadow-2xl group cursor-pointer transition-all duration-300">
             {/* Dark Blue Overlay on Image - Matching Video Section Color */}
             <div className="absolute inset-0 bg-slate-900 z-0 rounded-2xl opacity-40 group-hover:opacity-60 transition-opacity duration-300"></div>
             
@@ -95,31 +95,31 @@ export function HeroVideoSection() {
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.6, delay: 0.1 }}
-              className="absolute top-4 left-4 md:top-6 md:left-6 z-20"
+              className="absolute top-3 left-3 sm:top-4 sm:left-4 md:top-6 md:left-6 z-20"
             >
-              <div className="bg-orange-500 px-4 py-2 md:px-6 md:py-3 rounded-lg shadow-lg">
-                <span className="text-white font-bold text-sm md:text-lg uppercase tracking-wide drop-shadow-md">85% Raised Already</span>
+              <div className="bg-orange-500 px-3 py-1.5 sm:px-4 sm:py-2 md:px-6 md:py-3 rounded-lg shadow-lg">
+                <span className="text-white font-bold text-xs sm:text-sm md:text-lg uppercase tracking-wide drop-shadow-md whitespace-nowrap">85% Raised Already</span>
               </div>
             </motion.div>
 
             {/* White Text Metrics Overlay - No Box */}
-            <div className="absolute inset-0 flex items-center justify-center px-4 z-10">
+            <div className="absolute inset-0 flex items-center justify-center px-4 py-8 sm:py-4 z-10">
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, delay: 0.2 }}
                 className="max-w-5xl w-full"
               >
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-8 md:gap-12 text-center">
-                  <div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 sm:gap-6 md:gap-8 lg:gap-12 text-center">
+                  <div className="mt-2 sm:mt-0">
                     <div className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-2 drop-shadow-lg">$50K</div>
                     <div className="text-xs sm:text-sm md:text-base text-white/90 uppercase tracking-wide drop-shadow-md">Minimum Investment</div>
                   </div>
-                  <div>
+                  <div className="my-4 sm:my-0">
                     <div className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-2 drop-shadow-lg">2.22x</div>
                     <div className="text-xs sm:text-sm md:text-base text-white/90 uppercase tracking-wide drop-shadow-md">Equity Multiple</div>
                   </div>
-                  <div>
+                  <div className="mb-2 sm:mb-0">
                     <div className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-white mb-2 drop-shadow-lg">18.1%</div>
                     <div className="text-xs sm:text-sm md:text-base text-white/90 uppercase tracking-wide drop-shadow-md">Target Annual IRR</div>
                   </div>
