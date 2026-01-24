@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
 
     // Insert event into database
     try {
-      insertEvent({
+      await insertEvent({
         event,
         properties: properties || {},
         anonymous_id,
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
 
       // If name is provided, update all previous events for this anonymous_id
       if (name) {
-        updateNameForAnonymousId(anonymous_id, name)
+        await updateNameForAnonymousId(anonymous_id, name)
         console.log('Updated name for anonymous_id:', anonymous_id.substring(0, 20), '→', name)
       }
     } catch (dbError) {

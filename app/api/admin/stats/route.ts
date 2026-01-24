@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getDb } from '@/lib/db'
+import { getAllEvents } from '@/lib/db'
 
 export async function GET(request: NextRequest) {
   try {
@@ -15,10 +15,8 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const db = getDb()
-
     // Get all events
-    const events = db.prepare('SELECT * FROM events ORDER BY timestamp DESC').all() as Array<{
+    const events = await getAllEvents() as Array<{
       id: number
       event: string
       properties: string
