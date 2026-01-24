@@ -1,27 +1,24 @@
 import Database from 'better-sqlite3';
-import { createClient } from '@libsql/client';
+import { createClient } from '@supabase/supabase-js';
 import path from 'path';
 import { existsSync, mkdirSync } from 'fs';
 
 // Database configuration
 const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV;
-const useTurso = !!process.env.TURSO_DATABASE_URL;
+const useSupabase = !!(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY);
 
 let db: Database.Database | null = null;
-let tursoClient: ReturnType<typeof createClient> | null = null;
+let supabaseClient: ReturnType<typeof createClient> | null = null;
 
-// Initialize Turso client if configured
-if (useTurso) {
-  const url = process.env.TURSO_DATABASE_URL!;
-  const authToken = process.env.TURSO_AUTH_TOKEN!;
+// Initialize Supabase client if configured
+if (useSupabase) {
+  const supabaseUrl = process.env.SUPABASE_URL!;
+  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY!;
   
-  if (!url || !authToken) {
-    console.warn('Turso configured but missing TURSO_DATABASE_URL or TURSO_AUTH_TOKEN');
+  if (!supabaseUrl || !supabaseAnonKey) {
+    console.warn('Supabase configured but missing SUPABASE_URL or SUPABASE_ANON_KEY');
   } else {
-    tursoClient = createClient({
-      url,
-      authToken,
-    });
+    supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
   }
 }
 
@@ -84,63 +81,18 @@ function getLocalDb(): Database.Database {
   return db;
 }
 
-// Initialize Turso database schema
-async function initTursoSchema() {
-  if (!tursoClient) return;
-
-  try {
-    await tursoClient.execute(`
-      CREATE TABLE IF NOT EXISTS events (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        event TEXT NOT NULL,
-        properties TEXT NOT NULL,
-        anonymous_id TEXT NOT NULL,
-        name TEXT,
-        url TEXT,
-        referrer TEXT,
-        timestamp INTEGER NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    // Try to add name column (ignore if it already exists)
-    try {
-      await tursoClient.execute(`ALTER TABLE events ADD COLUMN name TEXT;`);
-    } catch (e) {
-      // Column already exists, ignore error
-    }
-
-    // Create indexes
-    await tursoClient.execute(`
-      CREATE INDEX IF NOT EXISTS idx_events_event ON events(event);
-    `);
-    await tursoClient.execute(`
-      CREATE INDEX IF NOT EXISTS idx_events_anonymous_id ON events(anonymous_id);
-    `);
-    await tursoClient.execute(`
-      CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp);
-    `);
-    await tursoClient.execute(`
-      CREATE INDEX IF NOT EXISTS idx_events_name ON events(name);
-    `);
-  } catch (error) {
-    console.error('Failed to initialize Turso schema:', error);
-  }
-}
-
-// Initialize schema on first use
-if (useTurso && tursoClient) {
-  initTursoSchema().catch(console.error);
-}
+// Note: Supabase table creation must be done manually via SQL Editor
+// The anon key doesn't have permissions to create tables
+// Users should run the SQL from supabase-schema.sql in their Supabase SQL Editor
 
 export function getDb(): Database.Database {
-  if (useTurso) {
-    throw new Error('Turso is configured. Use async database functions instead.');
+  if (useSupabase) {
+    throw new Error('Supabase is configured. Use async database functions instead.');
   }
   return getLocalDb();
 }
 
-// Async database functions for Turso
+// Async database functions for Supabase
 export async function insertEvent(data: {
   event: string;
   properties: Record<string, any>;
@@ -150,23 +102,23 @@ export async function insertEvent(data: {
   referrer?: string;
   timestamp: number;
 }) {
-  if (useTurso && tursoClient) {
-    await initTursoSchema();
-    await tursoClient.execute({
-      sql: `
-        INSERT INTO events (event, properties, anonymous_id, name, url, referrer, timestamp)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `,
-      args: [
-        data.event,
-        JSON.stringify(data.properties),
-        data.anonymous_id,
-        data.name || null,
-        data.url || null,
-        data.referrer || null,
-        data.timestamp,
-      ],
-    });
+  if (useSupabase && supabaseClient) {
+    const { error } = await (supabaseClient
+      .from('events') as any)
+      .insert({
+        event: data.event,
+        properties: data.properties, // Supabase handles JSONB automatically
+        anonymous_id: data.anonymous_id,
+        name: data.name || null,
+        url: data.url || null,
+        referrer: data.referrer || null,
+        timestamp: data.timestamp,
+      });
+
+    if (error) {
+      console.error('Supabase insert error:', error);
+      throw error;
+    }
   } else {
     const db = getLocalDb();
     const stmt = db.prepare(`
@@ -187,15 +139,17 @@ export async function insertEvent(data: {
 }
 
 export async function updateNameForAnonymousId(anonymousId: string, name: string) {
-  if (useTurso && tursoClient) {
-    await tursoClient.execute({
-      sql: `
-        UPDATE events 
-        SET name = ? 
-        WHERE anonymous_id = ? AND name IS NULL
-      `,
-      args: [name, anonymousId],
-    });
+  if (useSupabase && supabaseClient) {
+    const { error } = await (supabaseClient
+      .from('events') as any)
+      .update({ name })
+      .eq('anonymous_id', anonymousId)
+      .is('name', null);
+
+    if (error) {
+      console.error('Supabase update error:', error);
+      throw error;
+    }
   } else {
     const db = getLocalDb();
     const stmt = db.prepare(`
@@ -210,12 +164,23 @@ export async function updateNameForAnonymousId(anonymousId: string, name: string
 
 // Query functions for admin stats
 export async function getAllEvents() {
-  if (useTurso && tursoClient) {
-    const result = await tursoClient.execute('SELECT * FROM events ORDER BY timestamp DESC');
-    return result.rows.map((row: any) => ({
+  if (useSupabase && supabaseClient) {
+    const { data, error } = await (supabaseClient
+      .from('events') as any)
+      .select('*')
+      .order('timestamp', { ascending: false });
+
+    if (error) {
+      console.error('Supabase query error:', error);
+      throw error;
+    }
+
+    return (data || []).map((row: any) => ({
       id: Number(row.id),
       event: String(row.event),
-      properties: typeof row.properties === 'string' ? row.properties : JSON.stringify(row.properties),
+      properties: typeof row.properties === 'string' 
+        ? row.properties 
+        : JSON.stringify(row.properties),
       anonymous_id: String(row.anonymous_id),
       name: row.name ? String(row.name) : null,
       url: row.url ? String(row.url) : null,

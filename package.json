@@ -12,6 +12,7 @@
     "@libsql/client": "^0.17.0",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-slot": "^1.2.4",
+    "@supabase/supabase-js": "^2.91.1",
     "@types/better-sqlite3": "^7.6.13",
     "better-sqlite3": "^12.6.2",
     "class-variance-authority": "^0.7.1",
