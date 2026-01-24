@@ -5,12 +5,19 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
     const password = searchParams.get('key')
+    // Use veritas2024admin as the password (can be overridden with ADMIN_PASSWORD env var)
     const adminPassword = process.env.ADMIN_PASSWORD || 'veritas2024admin'
 
     // Simple password protection
-    if (password !== adminPassword) {
+    if (!password || password !== adminPassword) {
+      console.log('Admin access denied:', {
+        provided: password ? password.substring(0, 3) + '...' : 'none',
+        expected: adminPassword.substring(0, 3) + '...',
+        hasEnvVar: !!process.env.ADMIN_PASSWORD,
+        envValue: process.env.ADMIN_PASSWORD ? process.env.ADMIN_PASSWORD.substring(0, 3) + '...' : 'not set'
+      })
       return NextResponse.json(
-        { error: 'Unauthorized' },
+        { error: 'Unauthorized', message: 'Invalid password' },
         { status: 401 }
       )
     }
