@@ -5,7 +5,7 @@ export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
     const password = searchParams.get('key')
-    const adminPassword = process.env.ADMIN_PASSWORD || 'default_password_change_me'
+    const adminPassword = process.env.ADMIN_PASSWORD || 'veritas2024admin'
 
     // Simple password protection
     if (password !== adminPassword) {
