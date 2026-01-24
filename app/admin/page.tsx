@@ -33,6 +33,7 @@ import {
   formatDateTime,
 } from '@/lib/admin/format'
 import { Event, VisitorProfile, TableColumn, KPITrend } from '@/lib/admin/types'
+import Link from 'next/link'
 
 interface Stats {
   summary: {
@@ -515,6 +516,19 @@ function AdminDashboardContent() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Toaster />
+      {/* Navigation Bar */}
+      <div className="bg-white border-b sticky top-0 z-10">
+        <div className="px-4 lg:px-8 py-3 max-w-7xl mx-auto">
+          <div className="flex items-center justify-between">
+            <h1 className="text-xl font-semibold text-gray-900">Engagement Analytics</h1>
+            <Link href={`/admin/investors?key=${encodeURIComponent(password)}`}>
+              <Button variant="outline" size="sm">
+                View Investors
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </div>
       <FilterBar
         filters={filters}
         onFiltersChange={setFilters}

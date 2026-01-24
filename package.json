@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "sync:airtable": "node scripts/sync-to-airtable.js",
+    "import:airtable": "node scripts/import-airtable-to-supabase.js"
   },
   "dependencies": {
     "@libsql/client": "^0.17.0",
@@ -21,10 +23,12 @@
     "@supabase/supabase-js": "^2.91.1",
     "@tanstack/react-virtual": "^3.13.18",
     "@types/better-sqlite3": "^7.6.13",
+    "airtable": "^0.12.2",
     "better-sqlite3": "^12.6.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "dotenv": "^17.2.3",
     "framer-motion": "^12.26.2",
     "lucide-react": "^0.562.0",
     "next": "16.1.2",
@@ -33,6 +37,7 @@
     "recharts": "^3.7.0",
     "tailwind-merge": "^3.4.0",
     "tailwindcss-animate": "^1.0.7",
+    "tsx": "^4.21.0",
     "vaul": "^1.1.2"
   },
   "devDependencies": {
