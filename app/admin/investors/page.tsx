@@ -346,12 +346,12 @@ function InvestorsPageContent() {
                   className="pl-10"
                 />
               </div>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <Select value={statusFilter || 'all'} onValueChange={(value) => setStatusFilter(value === 'all' ? '' : value)}>
                 <SelectTrigger>
                   <SelectValue placeholder="All Statuses" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Statuses</SelectItem>
+                  <SelectItem value="all">All Statuses</SelectItem>
                   {data?.filters.statuses.map((status) => (
                     <SelectItem key={status} value={status}>
                       {status}
@@ -359,12 +359,12 @@ function InvestorsPageContent() {
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={sourceFilter} onValueChange={setSourceFilter}>
+              <Select value={sourceFilter || 'all'} onValueChange={(value) => setSourceFilter(value === 'all' ? '' : value)}>
                 <SelectTrigger>
                   <SelectValue placeholder="All Sources" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Sources</SelectItem>
+                  <SelectItem value="all">All Sources</SelectItem>
                   {data?.filters.sources.map((source) => (
                     <SelectItem key={source} value={source}>
                       {source}
@@ -372,12 +372,12 @@ function InvestorsPageContent() {
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={readyForFollowUpFilter} onValueChange={setReadyForFollowUpFilter}>
+              <Select value={readyForFollowUpFilter || 'all'} onValueChange={(value) => setReadyForFollowUpFilter(value === 'all' ? '' : value)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Follow Up Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All</SelectItem>
+                  <SelectItem value="all">All</SelectItem>
                   <SelectItem value="YES">Ready for Follow Up</SelectItem>
                   <SelectItem value="NO">Not Ready</SelectItem>
                 </SelectContent>
