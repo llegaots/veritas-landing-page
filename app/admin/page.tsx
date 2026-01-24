@@ -290,13 +290,15 @@ function AdminDashboardContent() {
       const delta = currentVal - previousVal
       const deltaPercent = previousVal > 0 ? (delta / previousVal) * 100 : 0
 
+      const trend: 'up' | 'down' | 'neutral' = delta > 0 ? 'up' : delta < 0 ? 'down' : 'neutral'
+
       return {
         event,
         current: currentVal,
         previous: previousVal,
         delta,
         deltaPercent,
-        trend: delta > 0 ? 'up' : delta < 0 ? 'down' : 'neutral',
+        trend,
       }
     })
 

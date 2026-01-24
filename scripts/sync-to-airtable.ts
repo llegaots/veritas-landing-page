@@ -73,7 +73,7 @@ async function getVisitorData(): Promise<VisitorData[]> {
   const events = await getAllEvents()
   
   // Parse properties
-  const parsedEvents = events.map(e => ({
+  const parsedEvents = events.map((e: any) => ({
     ...e,
     properties: typeof e.properties === 'string' ? JSON.parse(e.properties) : e.properties,
   }))
