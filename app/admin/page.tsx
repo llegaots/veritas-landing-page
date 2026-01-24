@@ -1,7 +1,34 @@
 'use client'
 
-import { useEffect, useState, Suspense } from 'react'
+import { useEffect, useState, Suspense, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { FilterBar } from '@/components/admin/FilterBar'
+import { KPIStatCard } from '@/components/admin/KPIStatCard'
+import { FunnelChart } from '@/components/admin/FunnelChart'
+import { TimeDistributionChart } from '@/components/admin/TimeDistributionChart'
+import { DataTable } from '@/components/admin/DataTable'
+import { VisitorDrawer } from '@/components/admin/VisitorDrawer'
+import { EmptyState } from '@/components/admin/EmptyState'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  calculateKPITrends,
+  splitEventsByPeriod,
+  getDefaultDateRange,
+} from '@/lib/admin/trends'
+import { applyFilters, FilterState } from '@/lib/admin/filters'
+import {
+  formatNumber,
+  formatPercent,
+  formatTime,
+  formatDateTime,
+} from '@/lib/admin/format'
+import { Event, VisitorProfile, TableColumn } from '@/lib/admin/types'
+import { Search, ChevronDown } from 'lucide-react'
 
 interface Stats {
   summary: {
@@ -30,7 +57,7 @@ interface Stats {
       scroll_75: number
     }
   }>
-  recent_events: Array<any>
+  recent_events: Array<Event>
   per_user_stats: Array<{
     anonymous_id: string
     name: string | null
@@ -57,9 +84,15 @@ function AdminDashboardContent() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [selectedVisitor, setSelectedVisitor] = useState<VisitorProfile | null>(null)
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [filters, setFilters] = useState<FilterState>({
+    dateRange: getDefaultDateRange(),
+  })
+  const [showMoreKPIs, setShowMoreKPIs] = useState(false)
 
   useEffect(() => {
-    // Check if password is in URL
     const key = searchParams.get('key')
     if (key) {
       setPassword(key)
@@ -84,6 +117,7 @@ function AdminDashboardContent() {
       }
       const data = await response.json()
       setStats(data)
+      setLastUpdated(new Date())
     } catch (err) {
       setError('Error fetching stats')
       console.error(err)
@@ -97,7 +131,6 @@ function AdminDashboardContent() {
     if (password) {
       setAuthenticated(true)
       fetchStats(password)
-      // Update URL with password
       window.history.pushState({}, '', `?key=${encodeURIComponent(password)}`)
     }
   }
@@ -107,6 +140,296 @@ function AdminDashboardContent() {
       fetchStats(password)
     }
   }
+
+  const handleExport = () => {
+    // Placeholder for export functionality
+    console.log('Export clicked')
+  }
+
+  // Calculate trends from recent_events
+  const trends = useMemo(() => {
+    if (!stats?.recent_events) return null
+
+    const events = stats.recent_events as Event[]
+    const { current, previous } = splitEventsByPeriod(
+      events,
+      filters.dateRange.start,
+      filters.dateRange.end
+    )
+
+    return {
+      totalEvents: calculateKPITrends(
+        current,
+        previous,
+        (e) => e.length
+      ),
+      uniqueVisitors: calculateKPITrends(
+        current,
+        previous,
+        (e) => new Set(e.map((ev) => ev.anonymous_id)).size
+      ),
+      returnVisitors: calculateKPITrends(
+        current,
+        previous,
+        (e) => {
+          const pageViews = e.filter((ev) => ev.event === 'page_view')
+          const visitorCounts = new Map<string, number>()
+          pageViews.forEach((ev) => {
+            visitorCounts.set(ev.anonymous_id, (visitorCounts.get(ev.anonymous_id) || 0) + 1)
+          })
+          return Array.from(visitorCounts.values()).filter((count) => count > 1).length
+        }
+      ),
+      avgTime: calculateKPITrends(
+        current,
+        previous,
+        (e) => {
+          const timeEvents = e.filter((ev) => ev.event === 'time_on_page')
+          if (timeEvents.length === 0) return 0
+          const total = timeEvents.reduce((sum, ev) => sum + (ev.properties?.seconds || 0), 0)
+          return Math.round(total / timeEvents.length)
+        }
+      ),
+      conversionRate: calculateKPITrends(
+        current,
+        previous,
+        (e) => {
+          const ctaClicks = e.filter((ev) => ev.event === 'cta_click').length
+          const demoBooked = e.filter((ev) => ev.event === 'demo_booked').length
+          return ctaClicks > 0 ? (demoBooked / ctaClicks) * 100 : 0
+        }
+      ),
+    }
+  }, [stats?.recent_events, filters.dateRange])
+
+  // Calculate top drivers (event type changes)
+  const topDrivers = useMemo(() => {
+    if (!stats?.recent_events) return []
+    const events = stats.recent_events as Event[]
+    const { current, previous } = splitEventsByPeriod(
+      events,
+      filters.dateRange.start,
+      filters.dateRange.end
+    )
+
+    const currentCounts: Record<string, number> = {}
+    const previousCounts: Record<string, number> = {}
+
+    current.forEach((e) => {
+      currentCounts[e.event] = (currentCounts[e.event] || 0) + 1
+    })
+    previous.forEach((e) => {
+      previousCounts[e.event] = (previousCounts[e.event] || 0) + 1
+    })
+
+    const changes = Object.keys({ ...currentCounts, ...previousCounts }).map((event) => {
+      const currentVal = currentCounts[event] || 0
+      const previousVal = previousCounts[event] || 0
+      const delta = currentVal - previousVal
+      const deltaPercent = previousVal > 0 ? (delta / previousVal) * 100 : 0
+
+      return {
+        event,
+        current: currentVal,
+        previous: previousVal,
+        delta,
+        deltaPercent,
+        trend: delta > 0 ? 'up' : delta < 0 ? 'down' : 'neutral',
+      }
+    })
+
+    return changes
+      .filter((c) => Math.abs(c.delta) > 0)
+      .sort((a, b) => Math.abs(b.deltaPercent) - Math.abs(a.deltaPercent))
+      .slice(0, 5)
+  }, [stats?.recent_events, filters.dateRange])
+
+  // Calculate funnel data
+  const funnelData = useMemo(() => {
+    if (!stats) return null
+
+    const pageViews = stats.events_by_type['page_view'] || 0
+    const scroll75 = stats.scroll_depth.scroll_75
+    const ctaClicks = stats.events_by_type['cta_click'] || 0
+    const demoBooked = stats.events_by_type['demo_booked'] || 0
+
+    return [
+      { label: 'Page Views', value: pageViews, color: '#3b82f6' },
+      { label: '75% Scroll', value: scroll75, color: '#10b981' },
+      { label: 'CTA Clicks', value: ctaClicks, color: '#f59e0b' },
+      { label: 'Demo Booked', value: demoBooked, color: '#8b5cf6' },
+    ]
+  }, [stats])
+
+  // Prepare visitor profiles for drawer
+  const visitorProfiles = useMemo(() => {
+    if (!stats) return new Map<string, VisitorProfile>()
+
+    const profiles = new Map<string, VisitorProfile>()
+    const eventsByVisitor = new Map<string, Event[]>()
+
+    // Get all events, not just recent
+    const allEvents = (stats.recent_events || []) as Event[]
+
+    allEvents.forEach((event) => {
+      if (!eventsByVisitor.has(event.anonymous_id)) {
+        eventsByVisitor.set(event.anonymous_id, [])
+      }
+      eventsByVisitor.get(event.anonymous_id)!.push(event)
+    })
+
+    stats.per_user_stats.forEach((user) => {
+      profiles.set(user.anonymous_id, {
+        ...user,
+        events: eventsByVisitor.get(user.anonymous_id) || [],
+      })
+    })
+
+    return profiles
+  }, [stats])
+
+  const handleVisitorClick = (visitor: any) => {
+    const profile = visitorProfiles.get(visitor.anonymous_id)
+    if (profile) {
+      setSelectedVisitor(profile)
+      setDrawerOpen(true)
+    }
+  }
+
+  // Table columns for Top Intent
+  const topIntentColumns: TableColumn<any>[] = [
+    {
+      id: 'anonymous_id',
+      header: 'Visitor',
+      accessor: (row) => (
+        <span className="font-mono text-sm">
+          {row.anonymous_id.substring(0, 20)}...
+        </span>
+      ),
+      sortable: true,
+    },
+    {
+      id: 'score',
+      header: 'Intent Score',
+      accessor: (row) => (
+        <span className="font-bold">{row.score}</span>
+      ),
+      sortable: true,
+    },
+    {
+      id: 'scroll_events',
+      header: 'Scroll',
+      accessor: (row) => (
+        <div className="flex gap-1">
+          {row.scroll_events.scroll_25 > 0 && (
+            <Badge variant="outline" className="bg-blue-50 text-blue-800 text-xs">
+              25%
+            </Badge>
+          )}
+          {row.scroll_events.scroll_50 > 0 && (
+            <Badge variant="outline" className="bg-orange-50 text-orange-800 text-xs">
+              50%
+            </Badge>
+          )}
+          {row.scroll_events.scroll_75 > 0 && (
+            <Badge variant="outline" className="bg-green-50 text-green-800 text-xs">
+              75%
+            </Badge>
+          )}
+        </div>
+      ),
+    },
+    {
+      id: 'return_visits',
+      header: 'Returns',
+      accessor: (row) => row.return_visits,
+      sortable: true,
+    },
+  ]
+
+  // Table columns for All Visitors
+  const allVisitorsColumns: TableColumn<any>[] = [
+    {
+      id: 'name',
+      header: 'Name / ID',
+      accessor: (row) => (
+        <span className={row.name ? 'font-semibold' : 'font-mono text-sm'}>
+          {row.name || `${row.anonymous_id.substring(0, 20)}...`}
+        </span>
+      ),
+      sortable: true,
+    },
+    {
+      id: 'page_views',
+      header: 'Views',
+      accessor: (row) => <span className="font-medium">{row.page_views}</span>,
+      sortable: true,
+    },
+    {
+      id: 'return_visits',
+      header: 'Returns',
+      accessor: (row) => row.return_visits,
+      sortable: true,
+    },
+    {
+      id: 'scroll',
+      header: 'Scroll',
+      accessor: (row) => (
+        <div className="flex gap-1">
+          {row.scroll_25 > 0 && (
+            <Badge variant="outline" className="bg-blue-50 text-blue-800 text-xs">
+              25
+            </Badge>
+          )}
+          {row.scroll_50 > 0 && (
+            <Badge variant="outline" className="bg-orange-50 text-orange-800 text-xs">
+              50
+            </Badge>
+          )}
+          {row.scroll_75 > 0 && (
+            <Badge variant="outline" className="bg-green-50 text-green-800 text-xs">
+              75
+            </Badge>
+          )}
+        </div>
+      ),
+    },
+    {
+      id: 'cta_clicks',
+      header: 'CTA',
+      accessor: (row) => row.cta_clicks,
+      sortable: true,
+    },
+    {
+      id: 'demo_booked',
+      header: 'Demo',
+      accessor: (row) =>
+        row.demo_booked > 0 ? (
+          <Badge variant="outline" className="bg-green-100 text-green-800">
+            ✓
+          </Badge>
+        ) : (
+          <span className="text-gray-400">-</span>
+        ),
+      sortable: true,
+    },
+    {
+      id: 'avg_time_on_page',
+      header: 'Avg Time',
+      accessor: (row) => formatTime(row.avg_time_on_page),
+      sortable: true,
+    },
+    {
+      id: 'intent_score',
+      header: 'Intent',
+      accessor: (row) => (
+        <span className={row.intent_score >= 0 ? 'text-green-600 font-bold' : 'text-red-600 font-bold'}>
+          {row.intent_score}
+        </span>
+      ),
+      sortable: true,
+    },
+  ]
 
   if (!authenticated) {
     return (
@@ -118,47 +441,41 @@ function AdminDashboardContent() {
               <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
                 Password
               </label>
-              <input
+              <Input
                 type="password"
                 id="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-orange-500 focus:border-orange-500"
                 placeholder="Enter admin password"
                 required
               />
             </div>
-            <button
-              type="submit"
-              className="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-2 px-4 rounded-md transition-colors"
-            >
+            <Button type="submit" className="w-full">
               Access Dashboard
-            </button>
+            </Button>
           </form>
-          {error && (
-            <p className="mt-4 text-sm text-red-600">{error}</p>
-          )}
+          {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 lg:p-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-6 flex justify-between items-center">
-          <h1 className="text-3xl font-bold text-gray-900">Engagement Analytics</h1>
-          <button
-            onClick={handleRefresh}
-            className="bg-orange-500 hover:bg-orange-600 text-white font-semibold py-2 px-4 rounded-md transition-colors"
-          >
-            Refresh
-          </button>
-        </div>
+    <div className="min-h-screen bg-gray-50">
+      <FilterBar
+        filters={filters}
+        onFiltersChange={setFilters}
+        onRefresh={handleRefresh}
+        onExport={handleExport}
+        lastUpdated={lastUpdated || undefined}
+      />
 
+      <div className="px-4 lg:px-8 py-6 max-w-7xl mx-auto">
         {loading && (
-          <div className="text-center py-12">
-            <p className="text-gray-600">Loading statistics...</p>
+          <div className="space-y-4">
+            {[...Array(8)].map((_, i) => (
+              <Skeleton key={i} className="h-24 w-full" />
+            ))}
           </div>
         )}
 
@@ -170,371 +487,253 @@ function AdminDashboardContent() {
 
         {stats && !loading && (
           <>
-            {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-              <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-sm font-medium text-gray-500 mb-2">Total Events</h3>
-                <p className="text-3xl font-bold text-gray-900">{stats.summary.total_events}</p>
+            {/* KPI Strip */}
+            <div className="mb-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <KPIStatCard
+                  title="Total Events"
+                  value={stats.summary.total_events}
+                  trend={trends?.totalEvents}
+                />
+                <KPIStatCard
+                  title="Unique Visitors"
+                  value={stats.summary.unique_visitors}
+                  trend={trends?.uniqueVisitors}
+                />
+                <KPIStatCard
+                  title="Return Visitors"
+                  value={stats.summary.return_visitors}
+                  trend={trends?.returnVisitors}
+                />
+                <KPIStatCard
+                  title="Avg Time on Page"
+                  value={`${stats.summary.avg_time_on_page_seconds}s`}
+                  formatValue={(v) => `${v}s`}
+                  trend={trends?.avgTime}
+                />
+                <KPIStatCard
+                  title="Conversion Rate"
+                  value={stats.summary.conversion_rate_percent}
+                  formatValue={(v) => `${typeof v === 'string' ? v : v.toFixed(1)}%`}
+                  trend={trends?.conversionRate}
+                />
+                <KPIStatCard
+                  title="Quick Exit Rate"
+                  value={stats.summary.quick_exit_rate_percent}
+                  formatValue={(v) => `${typeof v === 'string' ? v : v.toFixed(1)}%`}
+                  description="Left within 10s, no engagement"
+                />
+                {showMoreKPIs && (
+                  <>
+                    <KPIStatCard
+                      title="Early Exit Rate"
+                      value={stats.summary.early_exit_rate_percent}
+                      formatValue={(v) => `${typeof v === 'string' ? v : v.toFixed(1)}%`}
+                      description="Left before 7s"
+                    />
+                    <KPIStatCard
+                      title="Early Exits"
+                      value={stats.summary.early_exits}
+                    />
+                  </>
+                )}
               </div>
-              <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-sm font-medium text-gray-500 mb-2">Unique Visitors</h3>
-                <p className="text-3xl font-bold text-gray-900">{stats.summary.unique_visitors}</p>
-              </div>
-              <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-sm font-medium text-gray-500 mb-2">Return Visitors</h3>
-                <p className="text-3xl font-bold text-gray-900">{stats.summary.return_visitors}</p>
-              </div>
-              <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-sm font-medium text-gray-500 mb-2">Avg Time on Page</h3>
-                <p className="text-3xl font-bold text-gray-900">{stats.summary.avg_time_on_page_seconds}s</p>
-              </div>
-              <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-sm font-medium text-gray-500 mb-2">Conversion Rate</h3>
-                <p className="text-3xl font-bold text-gray-900">{stats.summary.conversion_rate_percent}%</p>
-              </div>
-              <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-sm font-medium text-gray-500 mb-2">Quick Exit Rate</h3>
-                <p className="text-3xl font-bold text-gray-900">{stats.summary.quick_exit_rate_percent}%</p>
-                <p className="text-xs text-gray-400 mt-1">Left within 10s, no engagement</p>
-              </div>
-              <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-sm font-medium text-gray-500 mb-2">Early Exit Rate</h3>
-                <p className="text-3xl font-bold text-gray-900">{stats.summary.early_exit_rate_percent}%</p>
-                <p className="text-xs text-gray-400 mt-1">Left before 7s (not counted as page view)</p>
-              </div>
-              <div className="bg-white rounded-lg shadow p-6">
-                <h3 className="text-sm font-medium text-gray-500 mb-2">Early Exits</h3>
-                <p className="text-3xl font-bold text-gray-900">{stats.summary.early_exits}</p>
-                <p className="text-xs text-gray-400 mt-1">Total early exits</p>
-              </div>
+              {!showMoreKPIs && (
+                <Button
+                  variant="ghost"
+                  className="mt-4"
+                  onClick={() => setShowMoreKPIs(true)}
+                >
+                  Show More KPIs <ChevronDown className="ml-2 h-4 w-4" />
+                </Button>
+              )}
             </div>
 
-            {/* Events by Type */}
-            <div className="bg-white rounded-lg shadow p-6 mb-8">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">Events by Type</h2>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Event
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Count
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {Object.entries(stats.events_by_type)
-                      .sort(([, a], [, b]) => b - a)
-                      .map(([event, count]) => {
-                        // Special handling for time_on_page - show it's tracked per session
-                        const isTimeEvent = event === 'time_on_page'
-                        return (
-                          <tr key={event}>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                              {event}
-                              {isTimeEvent && (
-                                <span className="ml-2 text-xs text-gray-400">(per session)</span>
-                              )}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                              {count}
-                              {isTimeEvent && (
-                                <span className="ml-2 text-xs text-gray-400">
-                                  sessions tracked
-                                </span>
-                              )}
-                            </td>
-                          </tr>
-                        )
-                      })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Scroll Depth - Intent Indicators */}
-            <div className="bg-white rounded-lg shadow p-6 mb-8">
-              <h2 className="text-xl font-bold text-gray-900 mb-2">Scroll Depth (Intent Indicators)</h2>
-              <p className="text-sm text-gray-500 mb-4">Users who scrolled to these depths show engagement intent</p>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-200">
-                  <p className="text-3xl font-bold text-blue-700">{stats.scroll_depth.scroll_25}</p>
-                  <p className="text-sm font-medium text-blue-600 mt-1">25% Scroll</p>
-                  <p className="text-xs text-gray-500 mt-1">+1 Intent Score</p>
-                </div>
-                <div className="text-center p-4 bg-orange-50 rounded-lg border border-orange-200">
-                  <p className="text-3xl font-bold text-orange-700">{stats.scroll_depth.scroll_50}</p>
-                  <p className="text-sm font-medium text-orange-600 mt-1">50% Scroll</p>
-                  <p className="text-xs text-gray-500 mt-1">+2 Intent Score</p>
-                </div>
-                <div className="text-center p-4 bg-green-50 rounded-lg border border-green-200">
-                  <p className="text-3xl font-bold text-green-700">{stats.scroll_depth.scroll_75}</p>
-                  <p className="text-sm font-medium text-green-600 mt-1">75% Scroll</p>
-                  <p className="text-xs text-gray-500 mt-1">+3 Intent Score</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Top Intent Scores */}
-            <div className="bg-white rounded-lg shadow p-6 mb-8">
-              <h2 className="text-xl font-bold text-gray-900 mb-2">Top Intent Scores</h2>
-              <p className="text-sm text-gray-500 mb-4">Users ranked by engagement intent (scroll events, CTA clicks, return visits)</p>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Anonymous ID
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Intent Score
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Scroll Events
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Return Visits
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {stats.top_intent_scores.map((item, idx) => (
-                      <tr key={idx}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">
-                          {item.anonymous_id.substring(0, 20)}...
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className="text-sm font-bold text-gray-900">{item.score}</span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex gap-2">
-                            {item.scroll_events.scroll_25 > 0 && (
-                              <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                                25%
-                              </span>
-                            )}
-                            {item.scroll_events.scroll_50 > 0 && (
-                              <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-orange-100 text-orange-800">
-                                50%
-                              </span>
-                            )}
-                            {item.scroll_events.scroll_75 > 0 && (
-                              <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-800">
-                                75%
-                              </span>
-                            )}
-                            {item.scroll_events.scroll_25 === 0 && item.scroll_events.scroll_50 === 0 && item.scroll_events.scroll_75 === 0 && (
-                              <span className="text-xs text-gray-400">None</span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {item.return_visits}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* All Visitors Table */}
-            <div className="bg-white rounded-lg shadow p-4 mb-8">
-              <h2 className="text-xl font-bold text-gray-900 mb-2">All Visitors</h2>
-              <p className="text-sm text-gray-500 mb-4">Complete breakdown of all visitors and their engagement metrics</p>
-              <div className="w-full">
-                <table className="w-full divide-y divide-gray-200 table-auto">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">
-                        Name / ID
-                      </th>
-                      <th className="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
-                        Views
-                      </th>
-                      <th className="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
-                        Returns
-                      </th>
-                      <th className="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-24">
-                        Scroll
-                      </th>
-                      <th className="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
-                        CTA
-                      </th>
-                      <th className="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
-                        Demo
-                      </th>
-                      <th className="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
-                        Time
-                      </th>
-                      <th className="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-16">
-                        Exits
-                      </th>
-                      <th className="px-2 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider w-20">
-                        Score
-                      </th>
-                      <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">
-                        First Visit
-                      </th>
-                      <th className="px-2 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">
-                        Last Visit
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {stats.per_user_stats.map((user, idx) => (
-                      <tr key={idx} className="hover:bg-gray-50">
-                        <td className="px-2 py-2 text-xs truncate max-w-[160px]" title={user.anonymous_id}>
-                          {user.name ? (
-                            <span className="font-semibold text-gray-900">{user.name}</span>
-                          ) : (
-                            <span className="font-mono text-gray-600">{user.anonymous_id.substring(0, 20)}...</span>
-                          )}
-                        </td>
-                        <td className="px-2 py-2 text-center text-xs text-gray-900 font-medium">
-                          {user.page_views}
-                        </td>
-                        <td className="px-2 py-2 text-center text-xs text-gray-500">
-                          {user.return_visits}
-                        </td>
-                        <td className="px-2 py-2 text-center">
-                          <div className="flex gap-0.5 justify-center">
-                            {user.scroll_25 > 0 && (
-                              <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-800">
-                                25
-                              </span>
-                            )}
-                            {user.scroll_50 > 0 && (
-                              <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium bg-orange-100 text-orange-800">
-                                50
-                              </span>
-                            )}
-                            {user.scroll_75 > 0 && (
-                              <span className="inline-flex items-center px-1 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-800">
-                                75
-                              </span>
-                            )}
-                            {user.scroll_25 === 0 && user.scroll_50 === 0 && user.scroll_75 === 0 && (
-                              <span className="text-[10px] text-gray-400">-</span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-2 py-2 text-center text-xs text-gray-900">
-                          {user.cta_clicks}
-                        </td>
-                        <td className="px-2 py-2 text-center text-xs">
-                          {user.demo_booked > 0 ? (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-100 text-green-800">
-                              ✓
+            {/* Insight Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Top Drivers</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {topDrivers.length > 0 ? (
+                      topDrivers.map((driver) => (
+                        <div
+                          key={driver.event}
+                          className="flex items-center justify-between p-2 rounded hover:bg-gray-50"
+                        >
+                          <span className="text-sm font-medium">{driver.event}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-gray-600">
+                              {driver.current}
                             </span>
-                          ) : (
-                            <span className="text-gray-400">-</span>
-                          )}
-                        </td>
-                        <td className="px-2 py-2 text-center text-xs text-gray-500">
-                          {user.avg_time_on_page}s
-                        </td>
-                        <td className="px-2 py-2 text-center text-xs">
-                          {user.quick_exits > 0 ? (
-                            <span className="text-orange-600 font-medium">{user.quick_exits}</span>
-                          ) : (
-                            <span className="text-gray-400">0</span>
-                          )}
-                        </td>
-                        <td className="px-2 py-2 text-center text-xs font-bold">
-                          <span className={user.intent_score >= 0 ? 'text-green-600' : 'text-red-600'}>
-                            {user.intent_score}
-                          </span>
-                        </td>
-                        <td className="px-2 py-2 text-xs text-gray-500">
-                          {new Date(user.first_visit).toLocaleDateString()} {new Date(user.first_visit).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </td>
-                        <td className="px-2 py-2 text-xs text-gray-500">
-                          {new Date(user.last_visit).toLocaleDateString()} {new Date(user.last_visit).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                            <Badge
+                              variant={
+                                driver.trend === 'up'
+                                  ? 'default'
+                                  : driver.trend === 'down'
+                                    ? 'destructive'
+                                    : 'secondary'
+                              }
+                              className="text-xs"
+                            >
+                              {driver.deltaPercent > 0 ? '+' : ''}
+                              {driver.deltaPercent.toFixed(1)}%
+                            </Badge>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-gray-500 text-center py-4">
+                        No significant changes
+                      </p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {funnelData && (
+                <FunnelChart steps={funnelData} title="Conversion Funnel" />
+              )}
             </div>
 
-            {/* Recent Events */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">Recent Events (Last 50)</h2>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Time
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Event
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Anonymous ID
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {stats.recent_events.slice(0, 20).map((event, idx) => {
-                      const isTimeEvent = event.event === 'time_on_page'
-                      const timeValue = isTimeEvent && event.properties?.seconds
-                        ? `${event.properties.seconds}s`
-                        : null
-                      const isQuickExit = event.event === 'quick_exit'
-                      
-                      return (
-                        <tr key={idx}>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {new Date(event.timestamp).toLocaleString()}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium text-gray-900">
-                                {event.event}
-                              </span>
-                              {timeValue && (
-                                <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
-                                  {timeValue}
-                                </span>
-                              )}
-                              {isQuickExit && (
-                                <span className="text-xs text-orange-600 bg-orange-50 px-2 py-0.5 rounded">
-                                  {event.properties?.seconds ? `${event.properties.seconds}s` : 'exited'}
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-500">
-                            {event.anonymous_id.substring(0, 15)}...
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            {/* Engagement Section */}
+            <Tabs defaultValue="scroll" className="mb-6">
+              <TabsList>
+                <TabsTrigger value="scroll">Scroll Depth</TabsTrigger>
+                <TabsTrigger value="time">Time Distribution</TabsTrigger>
+              </TabsList>
+              <TabsContent value="scroll">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Scroll Depth Distribution</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-200">
+                        <p className="text-3xl font-bold text-blue-700">
+                          {stats.scroll_depth.scroll_25}
+                        </p>
+                        <p className="text-sm font-medium text-blue-600 mt-1">25% Scroll</p>
+                        <p className="text-xs text-gray-500 mt-1">+1 Intent Score</p>
+                      </div>
+                      <div className="text-center p-4 bg-orange-50 rounded-lg border border-orange-200">
+                        <p className="text-3xl font-bold text-orange-700">
+                          {stats.scroll_depth.scroll_50}
+                        </p>
+                        <p className="text-sm font-medium text-orange-600 mt-1">50% Scroll</p>
+                        <p className="text-xs text-gray-500 mt-1">+2 Intent Score</p>
+                      </div>
+                      <div className="text-center p-4 bg-green-50 rounded-lg border border-green-200">
+                        <p className="text-3xl font-bold text-green-700">
+                          {stats.scroll_depth.scroll_75}
+                        </p>
+                        <p className="text-sm font-medium text-green-600 mt-1">75% Scroll</p>
+                        <p className="text-xs text-gray-500 mt-1">+3 Intent Score</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+              <TabsContent value="time">
+                <TimeDistributionChart
+                  timeEvents={
+                    stats.recent_events
+                      .filter((e) => e.event === 'time_on_page')
+                      .map((e) => ({ seconds: e.properties?.seconds || 0 }))
+                  }
+                />
+              </TabsContent>
+            </Tabs>
+
+            {/* People Section */}
+            <Tabs defaultValue="top-intent" className="mb-6">
+              <TabsList>
+                <TabsTrigger value="top-intent">Top Intent</TabsTrigger>
+                <TabsTrigger value="all-visitors">All Visitors</TabsTrigger>
+              </TabsList>
+              <TabsContent value="top-intent">
+                {stats.top_intent_scores.length > 0 ? (
+                  <DataTable
+                    data={stats.top_intent_scores}
+                    columns={topIntentColumns}
+                    onRowClick={handleVisitorClick}
+                    pageSize={10}
+                  />
+                ) : (
+                  <EmptyState
+                    title="No intent scores"
+                    description="No visitors have generated intent scores yet."
+                  />
+                )}
+              </TabsContent>
+              <TabsContent value="all-visitors">
+                {stats.per_user_stats.length > 0 ? (
+                  <DataTable
+                    data={stats.per_user_stats}
+                    columns={allVisitorsColumns}
+                    onRowClick={handleVisitorClick}
+                    pageSize={20}
+                  />
+                ) : (
+                  <EmptyState
+                    title="No visitors"
+                    description="No visitor data available yet."
+                  />
+                )}
+              </TabsContent>
+            </Tabs>
+
+            {/* Activity Section */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Recent Events</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {stats.recent_events.slice(0, 20).map((event, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Badge variant="outline">{event.event}</Badge>
+                        <span className="text-sm text-gray-600 font-mono">
+                          {event.anonymous_id.substring(0, 15)}...
+                        </span>
+                      </div>
+                      <span className="text-xs text-gray-500">
+                        {formatDateTime(event.timestamp)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           </>
         )}
       </div>
+
+      <VisitorDrawer
+        visitor={selectedVisitor}
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+      />
     </div>
   )
 }
 
 export default function AdminDashboard() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <p className="text-gray-600">Loading...</p>
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      }
+    >
       <AdminDashboardContent />
     </Suspense>
   )
 }
-
