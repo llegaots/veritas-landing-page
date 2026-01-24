@@ -249,7 +249,7 @@ export function DataTable<T extends { [key: string]: any }>({
                   <TableRow
                     key={index}
                     className={cn(
-                      onRowClick && 'cursor-pointer',
+                      onRowClick && 'cursor-pointer transition-colors hover:bg-gray-50',
                       tableState.density === 'compact' && 'py-1'
                     )}
                     onClick={() => onRowClick?.(row)}

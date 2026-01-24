@@ -3,12 +3,16 @@
 import { useEffect, useState, Suspense, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { FilterBar } from '@/components/admin/FilterBar'
-import { KPIStatCard } from '@/components/admin/KPIStatCard'
+import { LeadsDashboard } from '@/components/admin/LeadsDashboard'
+import { HealthMetrics } from '@/components/admin/HealthMetrics'
+import { QuickInsights } from '@/components/admin/QuickInsights'
 import { FunnelChart } from '@/components/admin/FunnelChart'
 import { TimeDistributionChart } from '@/components/admin/TimeDistributionChart'
 import { DataTable } from '@/components/admin/DataTable'
 import { VisitorDrawer } from '@/components/admin/VisitorDrawer'
 import { EmptyState } from '@/components/admin/EmptyState'
+import { Toaster } from '@/components/admin/Toast'
+import { useToast } from '@/hooks/use-toast'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -21,14 +25,14 @@ import {
   getDefaultDateRange,
 } from '@/lib/admin/trends'
 import { applyFilters, FilterState } from '@/lib/admin/filters'
+import { generateInsights } from '@/lib/admin/insights'
 import {
   formatNumber,
   formatPercent,
   formatTime,
   formatDateTime,
 } from '@/lib/admin/format'
-import { Event, VisitorProfile, TableColumn } from '@/lib/admin/types'
-import { Search, ChevronDown } from 'lucide-react'
+import { Event, VisitorProfile, TableColumn, KPITrend } from '@/lib/admin/types'
 
 interface Stats {
   summary: {
@@ -79,6 +83,7 @@ interface Stats {
 
 function AdminDashboardContent() {
   const searchParams = useSearchParams()
+  const { toast } = useToast()
   const [password, setPassword] = useState('')
   const [authenticated, setAuthenticated] = useState(false)
   const [stats, setStats] = useState<Stats | null>(null)
@@ -87,10 +92,10 @@ function AdminDashboardContent() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [selectedVisitor, setSelectedVisitor] = useState<VisitorProfile | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const [filters, setFilters] = useState<FilterState>({
+  const [filters, setFilters] = useState({
     dateRange: getDefaultDateRange(),
   })
-  const [showMoreKPIs, setShowMoreKPIs] = useState(false)
+  const [activeTab, setActiveTab] = useState('leads')
 
   useEffect(() => {
     const key = searchParams.get('key')
@@ -138,12 +143,45 @@ function AdminDashboardContent() {
   const handleRefresh = () => {
     if (password) {
       fetchStats(password)
+      toast({
+        title: 'Refreshing...',
+        description: 'Data is being updated',
+      })
     }
   }
 
-  const handleExport = () => {
-    // Placeholder for export functionality
-    console.log('Export clicked')
+  const handleExport = (leads?: VisitorProfile[]) => {
+    const dataToExport = leads || stats?.per_user_stats || []
+    const csv = [
+      ['Name', 'Anonymous ID', 'Intent Score', 'Demo Booked', 'Return Visits', 'CTA Clicks', 'Avg Time'].join(','),
+      ...dataToExport.map((lead) =>
+        [
+          lead.name || '',
+          lead.anonymous_id,
+          lead.intent_score,
+          lead.demo_booked > 0 ? 'Yes' : 'No',
+          lead.return_visits,
+          lead.cta_clicks,
+          lead.avg_time_on_page,
+        ].join(',')
+      ),
+    ].join('\n')
+
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `leads-export-${new Date().toISOString().split('T')[0]}.csv`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    window.URL.revokeObjectURL(url)
+
+    toast({
+      title: 'Export successful',
+      description: `Exported ${dataToExport.length} lead${dataToExport.length !== 1 ? 's' : ''}`,
+      variant: 'success',
+    })
   }
 
   // Calculate trends from recent_events
@@ -199,6 +237,29 @@ function AdminDashboardContent() {
           return ctaClicks > 0 ? (demoBooked / ctaClicks) * 100 : 0
         }
       ),
+      quickExitRate: calculateKPITrends(
+        current,
+        previous,
+        (e) => {
+          const pageViews = e.filter((ev) => ev.event === 'page_view').length
+          const quickExits = e.filter((ev) => ev.event === 'quick_exit').length
+          return pageViews > 0 ? (quickExits / pageViews) * 100 : 0
+        }
+      ),
+      returnVisitorRate: calculateKPITrends(
+        current,
+        previous,
+        (e) => {
+          const pageViews = e.filter((ev) => ev.event === 'page_view')
+          const visitorCounts = new Map<string, number>()
+          pageViews.forEach((ev) => {
+            visitorCounts.set(ev.anonymous_id, (visitorCounts.get(ev.anonymous_id) || 0) + 1)
+          })
+          const totalVisitors = visitorCounts.size
+          const returnVisitors = Array.from(visitorCounts.values()).filter((count) => count > 1).length
+          return totalVisitors > 0 ? (returnVisitors / totalVisitors) * 100 : 0
+        }
+      ),
     }
   }, [stats?.recent_events, filters.dateRange])
 
@@ -243,6 +304,18 @@ function AdminDashboardContent() {
       .sort((a, b) => Math.abs(b.deltaPercent) - Math.abs(a.deltaPercent))
       .slice(0, 5)
   }, [stats?.recent_events, filters.dateRange])
+
+  // Generate insights
+  const insights = useMemo(() => {
+    if (!stats?.recent_events) return []
+    const events = stats.recent_events as Event[]
+    const { current, previous } = splitEventsByPeriod(
+      events,
+      filters.dateRange.start,
+      filters.dateRange.end
+    )
+    return generateInsights(current, previous, stats)
+  }, [stats, filters.dateRange])
 
   // Calculate funnel data
   const funnelData = useMemo(() => {
@@ -296,58 +369,37 @@ function AdminDashboardContent() {
     }
   }
 
-  // Table columns for Top Intent
-  const topIntentColumns: TableColumn<any>[] = [
-    {
-      id: 'anonymous_id',
-      header: 'Visitor',
-      accessor: (row) => (
-        <span className="font-mono text-sm">
-          {row.anonymous_id.substring(0, 20)}...
-        </span>
-      ),
-      sortable: true,
-    },
-    {
-      id: 'score',
-      header: 'Intent Score',
-      accessor: (row) => (
-        <span className="font-bold">{row.score}</span>
-      ),
-      sortable: true,
-    },
-    {
-      id: 'scroll_events',
-      header: 'Scroll',
-      accessor: (row) => (
-        <div className="flex gap-1">
-          {row.scroll_events.scroll_25 > 0 && (
-            <Badge variant="outline" className="bg-blue-50 text-blue-800 text-xs">
-              25%
-            </Badge>
-          )}
-          {row.scroll_events.scroll_50 > 0 && (
-            <Badge variant="outline" className="bg-orange-50 text-orange-800 text-xs">
-              50%
-            </Badge>
-          )}
-          {row.scroll_events.scroll_75 > 0 && (
-            <Badge variant="outline" className="bg-green-50 text-green-800 text-xs">
-              75%
-            </Badge>
-          )}
-        </div>
-      ),
-    },
-    {
-      id: 'return_visits',
-      header: 'Returns',
-      accessor: (row) => row.return_visits,
-      sortable: true,
-    },
-  ]
+  const handleLeadClick = (lead: VisitorProfile) => {
+    setSelectedVisitor(lead)
+    setDrawerOpen(true)
+  }
 
-  // Table columns for All Visitors
+  const handleContact = (lead: VisitorProfile) => {
+    toast({
+      title: 'Contact lead',
+      description: `Opening contact options for ${lead.name || lead.anonymous_id.substring(0, 8)}`,
+    })
+    // TODO: Implement contact functionality
+  }
+
+  const handleTag = (lead: VisitorProfile) => {
+    toast({
+      title: 'Tag lead',
+      description: `Tagging ${lead.name || lead.anonymous_id.substring(0, 8)}`,
+    })
+    // TODO: Implement tagging functionality
+  }
+
+  // Convert per_user_stats to VisitorProfile format for LeadsDashboard
+  const leads = useMemo(() => {
+    if (!stats) return []
+    return stats.per_user_stats.map((user) => ({
+      ...user,
+      events: visitorProfiles.get(user.anonymous_id)?.events || [],
+    })) as VisitorProfile[]
+  }, [stats, visitorProfiles])
+
+  // Table columns for All Visitors (in Analytics tab)
   const allVisitorsColumns: TableColumn<any>[] = [
     {
       id: 'name',
@@ -462,11 +514,12 @@ function AdminDashboardContent() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <Toaster />
       <FilterBar
         filters={filters}
         onFiltersChange={setFilters}
         onRefresh={handleRefresh}
-        onExport={handleExport}
+        onExport={() => handleExport()}
         lastUpdated={lastUpdated || undefined}
       />
 
@@ -487,188 +540,141 @@ function AdminDashboardContent() {
 
         {stats && !loading && (
           <>
-            {/* KPI Strip */}
-            <div className="mb-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <KPIStatCard
-                  title="Total Events"
-                  value={stats.summary.total_events}
-                  trend={trends?.totalEvents}
-                />
-                <KPIStatCard
-                  title="Unique Visitors"
-                  value={stats.summary.unique_visitors}
-                  trend={trends?.uniqueVisitors}
-                />
-                <KPIStatCard
-                  title="Return Visitors"
-                  value={stats.summary.return_visitors}
-                  trend={trends?.returnVisitors}
-                />
-                <KPIStatCard
-                  title="Avg Time on Page"
-                  value={`${stats.summary.avg_time_on_page_seconds}s`}
-                  formatValue={(v) => `${v}s`}
-                  trend={trends?.avgTime}
-                />
-                <KPIStatCard
-                  title="Conversion Rate"
-                  value={stats.summary.conversion_rate_percent}
-                  formatValue={(v) => `${typeof v === 'string' ? v : v.toFixed(1)}%`}
-                  trend={trends?.conversionRate}
-                />
-                <KPIStatCard
-                  title="Quick Exit Rate"
-                  value={stats.summary.quick_exit_rate_percent}
-                  formatValue={(v) => `${typeof v === 'string' ? v : v.toFixed(1)}%`}
-                  description="Left within 10s, no engagement"
-                />
-                {showMoreKPIs && (
-                  <>
-                    <KPIStatCard
-                      title="Early Exit Rate"
-                      value={stats.summary.early_exit_rate_percent}
-                      formatValue={(v) => `${typeof v === 'string' ? v : v.toFixed(1)}%`}
-                      description="Left before 7s"
-                    />
-                    <KPIStatCard
-                      title="Early Exits"
-                      value={stats.summary.early_exits}
-                    />
-                  </>
-                )}
-              </div>
-              {!showMoreKPIs && (
-                <Button
-                  variant="ghost"
-                  className="mt-4"
-                  onClick={() => setShowMoreKPIs(true)}
-                >
-                  Show More KPIs <ChevronDown className="ml-2 h-4 w-4" />
-                </Button>
-              )}
-            </div>
+            {/* Primary Navigation Tabs */}
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
+              <TabsList className="grid w-full max-w-md grid-cols-3">
+                <TabsTrigger value="leads">Leads</TabsTrigger>
+                <TabsTrigger value="analytics">Analytics</TabsTrigger>
+                <TabsTrigger value="activity">Activity</TabsTrigger>
+              </TabsList>
 
-            {/* Insight Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Top Drivers</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {topDrivers.length > 0 ? (
-                      topDrivers.map((driver) => (
-                        <div
-                          key={driver.event}
-                          className="flex items-center justify-between p-2 rounded hover:bg-gray-50"
-                        >
-                          <span className="text-sm font-medium">{driver.event}</span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm text-gray-600">
-                              {driver.current}
-                            </span>
-                            <Badge
-                              variant={
-                                driver.trend === 'up'
-                                  ? 'default'
-                                  : driver.trend === 'down'
-                                    ? 'destructive'
-                                    : 'secondary'
-                              }
-                              className="text-xs"
-                            >
-                              {driver.deltaPercent > 0 ? '+' : ''}
-                              {driver.deltaPercent.toFixed(1)}%
-                            </Badge>
+              {/* Leads Tab - Primary View */}
+              <TabsContent value="leads" className="space-y-6 mt-6">
+                {/* Health Metrics (Collapsible) */}
+                <HealthMetrics
+                  conversionRate={stats.summary.conversion_rate_percent}
+                  conversionTrend={trends?.conversionRate}
+                  quickExitRate={stats.summary.quick_exit_rate_percent}
+                  quickExitTrend={trends?.quickExitRate}
+                  avgTimeOnPage={stats.summary.avg_time_on_page_seconds}
+                  avgTimeTrend={trends?.avgTime}
+                  returnVisitorRate={
+                    stats.summary.unique_visitors > 0
+                      ? (stats.summary.return_visitors / stats.summary.unique_visitors) * 100
+                      : 0
+                  }
+                  returnVisitorTrend={trends?.returnVisitorRate}
+                />
+
+                {/* Quick Insights (Collapsible) */}
+                <QuickInsights
+                  insights={insights}
+                  topDrivers={topDrivers}
+                />
+
+                {/* Leads Dashboard - Hero Section */}
+                <LeadsDashboard
+                  leads={leads}
+                  onLeadClick={handleLeadClick}
+                  onContact={handleContact}
+                  onTag={handleTag}
+                  onExport={handleExport}
+                />
+              </TabsContent>
+
+              {/* Analytics Tab - Secondary View */}
+              <TabsContent value="analytics" className="space-y-6 mt-6">
+                {/* KPI Overview */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium text-gray-600">Total Events</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{stats.summary.total_events}</div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium text-gray-600">Unique Visitors</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{stats.summary.unique_visitors}</div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium text-gray-600">Return Visitors</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{stats.summary.return_visitors}</div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium text-gray-600">Avg Time</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">{stats.summary.avg_time_on_page_seconds}s</div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Funnel Chart */}
+                {funnelData && (
+                  <FunnelChart steps={funnelData} title="Conversion Funnel" />
+                )}
+
+                {/* Engagement Section */}
+                <Tabs defaultValue="scroll">
+                  <TabsList>
+                    <TabsTrigger value="scroll">Scroll Depth</TabsTrigger>
+                    <TabsTrigger value="time">Time Distribution</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="scroll">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Scroll Depth Distribution</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid grid-cols-3 gap-4">
+                          <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-200">
+                            <p className="text-3xl font-bold text-blue-700">
+                              {stats.scroll_depth.scroll_25}
+                            </p>
+                            <p className="text-sm font-medium text-blue-600 mt-1">25% Scroll</p>
+                            <p className="text-xs text-gray-500 mt-1">+1 Intent Score</p>
+                          </div>
+                          <div className="text-center p-4 bg-orange-50 rounded-lg border border-orange-200">
+                            <p className="text-3xl font-bold text-orange-700">
+                              {stats.scroll_depth.scroll_50}
+                            </p>
+                            <p className="text-sm font-medium text-orange-600 mt-1">50% Scroll</p>
+                            <p className="text-xs text-gray-500 mt-1">+2 Intent Score</p>
+                          </div>
+                          <div className="text-center p-4 bg-green-50 rounded-lg border border-green-200">
+                            <p className="text-3xl font-bold text-green-700">
+                              {stats.scroll_depth.scroll_75}
+                            </p>
+                            <p className="text-sm font-medium text-green-600 mt-1">75% Scroll</p>
+                            <p className="text-xs text-gray-500 mt-1">+3 Intent Score</p>
                           </div>
                         </div>
-                      ))
-                    ) : (
-                      <p className="text-sm text-gray-500 text-center py-4">
-                        No significant changes
-                      </p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+                  <TabsContent value="time">
+                    <TimeDistributionChart
+                      timeEvents={
+                        stats.recent_events
+                          .filter((e) => e.event === 'time_on_page')
+                          .map((e) => ({ seconds: e.properties?.seconds || 0 }))
+                      }
+                    />
+                  </TabsContent>
+                </Tabs>
 
-              {funnelData && (
-                <FunnelChart steps={funnelData} title="Conversion Funnel" />
-              )}
-            </div>
-
-            {/* Engagement Section */}
-            <Tabs defaultValue="scroll" className="mb-6">
-              <TabsList>
-                <TabsTrigger value="scroll">Scroll Depth</TabsTrigger>
-                <TabsTrigger value="time">Time Distribution</TabsTrigger>
-              </TabsList>
-              <TabsContent value="scroll">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Scroll Depth Distribution</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-200">
-                        <p className="text-3xl font-bold text-blue-700">
-                          {stats.scroll_depth.scroll_25}
-                        </p>
-                        <p className="text-sm font-medium text-blue-600 mt-1">25% Scroll</p>
-                        <p className="text-xs text-gray-500 mt-1">+1 Intent Score</p>
-                      </div>
-                      <div className="text-center p-4 bg-orange-50 rounded-lg border border-orange-200">
-                        <p className="text-3xl font-bold text-orange-700">
-                          {stats.scroll_depth.scroll_50}
-                        </p>
-                        <p className="text-sm font-medium text-orange-600 mt-1">50% Scroll</p>
-                        <p className="text-xs text-gray-500 mt-1">+2 Intent Score</p>
-                      </div>
-                      <div className="text-center p-4 bg-green-50 rounded-lg border border-green-200">
-                        <p className="text-3xl font-bold text-green-700">
-                          {stats.scroll_depth.scroll_75}
-                        </p>
-                        <p className="text-sm font-medium text-green-600 mt-1">75% Scroll</p>
-                        <p className="text-xs text-gray-500 mt-1">+3 Intent Score</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-              <TabsContent value="time">
-                <TimeDistributionChart
-                  timeEvents={
-                    stats.recent_events
-                      .filter((e) => e.event === 'time_on_page')
-                      .map((e) => ({ seconds: e.properties?.seconds || 0 }))
-                  }
-                />
-              </TabsContent>
-            </Tabs>
-
-            {/* People Section */}
-            <Tabs defaultValue="top-intent" className="mb-6">
-              <TabsList>
-                <TabsTrigger value="top-intent">Top Intent</TabsTrigger>
-                <TabsTrigger value="all-visitors">All Visitors</TabsTrigger>
-              </TabsList>
-              <TabsContent value="top-intent">
-                {stats.top_intent_scores.length > 0 ? (
-                  <DataTable
-                    data={stats.top_intent_scores}
-                    columns={topIntentColumns}
-                    onRowClick={handleVisitorClick}
-                    pageSize={10}
-                  />
-                ) : (
-                  <EmptyState
-                    title="No intent scores"
-                    description="No visitors have generated intent scores yet."
-                  />
-                )}
-              </TabsContent>
-              <TabsContent value="all-visitors">
+                {/* All Visitors Table */}
                 {stats.per_user_stats.length > 0 ? (
                   <DataTable
                     data={stats.per_user_stats}
@@ -683,34 +689,39 @@ function AdminDashboardContent() {
                   />
                 )}
               </TabsContent>
-            </Tabs>
 
-            {/* Activity Section */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Recent Events</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {stats.recent_events.slice(0, 20).map((event, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50"
-                    >
-                      <div className="flex items-center gap-3">
-                        <Badge variant="outline">{event.event}</Badge>
-                        <span className="text-sm text-gray-600 font-mono">
-                          {event.anonymous_id.substring(0, 15)}...
-                        </span>
-                      </div>
-                      <span className="text-xs text-gray-500">
-                        {formatDateTime(event.timestamp)}
-                      </span>
+              {/* Activity Tab - Tertiary View */}
+              <TabsContent value="activity" className="space-y-6 mt-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Recent Events</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {stats.recent_events.slice(0, 50).map((event, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors"
+                        >
+                          <div className="flex items-center gap-3">
+                            <Badge variant="outline">{event.event}</Badge>
+                            <span className="text-sm text-gray-600 font-mono">
+                              {event.anonymous_id.substring(0, 15)}...
+                            </span>
+                            {event.name && (
+                              <span className="text-sm font-medium text-gray-900">{event.name}</span>
+                            )}
+                          </div>
+                          <span className="text-xs text-gray-500">
+                            {formatDateTime(event.timestamp)}
+                          </span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
           </>
         )}
       </div>
