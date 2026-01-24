@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion'
 import { useEffect, useState } from 'react'
+import { track } from '@/lib/tracking'
 
 export function BookingSection() {
   // Calendly embed URL
@@ -19,11 +20,48 @@ export function BookingSection() {
     script.async = true
     document.body.appendChild(script)
 
+    // Listen for Calendly events
+    const handleCalendlyEvent = (e: MessageEvent) => {
+      if (e.data.event && e.data.event.indexOf('calendly') === 0) {
+        const eventName = e.data.event
+        const payload = e.data.payload || {}
+
+        if (eventName === 'calendly.date_and_time_selected') {
+          // Track when user selects a date/time slot
+          track('calendly_date_selected', {
+            event_type: 'calendly_date_selection',
+            invitee_uri: payload.invitee_uri,
+            event_uri: payload.event_uri,
+            time: payload.time,
+          })
+        } else if (eventName === 'calendly.event_scheduled') {
+          // Extract name and email from payload
+          const invitee = payload.invitee || {}
+          const name = invitee.name || ''
+          const email = invitee.email || ''
+
+          // Track demo booked with name
+          // The name will be extracted by the track function and used to update all previous events for this anonymous_id
+          track('demo_booked', {
+            event_type: 'calendly_booking',
+            name: name,
+            email: email,
+            invitee_uri: payload.invitee_uri,
+            event_uri: payload.event_uri,
+            payload: payload,
+          })
+        }
+      }
+    }
+
+    window.addEventListener('message', handleCalendlyEvent)
+
     return () => {
       // Cleanup script on unmount
       if (document.body.contains(script)) {
         document.body.removeChild(script)
       }
+      window.removeEventListener('message', handleCalendlyEvent)
     }
   }, [])
 

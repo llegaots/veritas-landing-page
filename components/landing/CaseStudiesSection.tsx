@@ -4,8 +4,13 @@ import { motion } from 'framer-motion'
 import Image from 'next/image'
 import { Star } from 'lucide-react'
 import { BookingSection } from './BookingSection'
+import { track } from '@/lib/tracking'
 
 export function CaseStudiesSection() {
+  const handleCTAClick = () => {
+    track('cta_click', { cta: 'schedule_demo', location: 'case_studies_section' })
+    window.dispatchEvent(new CustomEvent('cta_click'))
+  }
   const caseStudies = [
     {
       title: "Centennial West",
@@ -241,6 +246,7 @@ export function CaseStudiesSection() {
                 href="#booking-section"
                 onClick={(e) => {
                   e.preventDefault()
+                  handleCTAClick()
                   document.getElementById('booking-section')?.scrollIntoView({ behavior: 'smooth' })
                 }}
                 className="inline-block bg-orange-500 hover:bg-orange-600 text-white font-semibold text-lg sm:text-xl md:text-2xl lg:text-3xl px-6 py-4 sm:px-8 sm:py-5 md:px-12 md:py-6 lg:px-16 lg:py-8 rounded-lg transition-colors duration-200 shadow-lg"

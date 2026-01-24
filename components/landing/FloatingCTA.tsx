@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { track } from '@/lib/tracking'
 
 export function FloatingCTA() {
   const [isVisible, setIsVisible] = useState(false)
@@ -87,6 +88,8 @@ export function FloatingCTA() {
 
   const scrollToBooking = (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault()
+    track('cta_click', { cta: 'schedule_demo', location: 'floating_cta' })
+    window.dispatchEvent(new CustomEvent('cta_click'))
     document.getElementById('booking-section')?.scrollIntoView({ behavior: 'smooth' })
   }
 

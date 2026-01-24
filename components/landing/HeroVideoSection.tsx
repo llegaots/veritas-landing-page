@@ -1,8 +1,13 @@
 'use client'
 
 import { motion } from 'framer-motion'
+import { track } from '@/lib/tracking'
 
 export function HeroVideoSection() {
+  const handleCTAClick = () => {
+    track('cta_click', { cta: 'schedule_demo', location: 'hero_section' })
+    window.dispatchEvent(new CustomEvent('cta_click'))
+  }
   return (
     <section className="relative overflow-hidden bg-slate-900">
       {/* Text Content Section */}
@@ -66,6 +71,7 @@ export function HeroVideoSection() {
                 href="#booking-section"
                 onClick={(e) => {
                   e.preventDefault()
+                  handleCTAClick()
                   document.getElementById('booking-section')?.scrollIntoView({ behavior: 'smooth' })
                 }}
                 className="inline-block bg-orange-500 hover:bg-orange-600 text-white font-semibold text-lg sm:text-xl md:text-2xl lg:text-3xl px-6 py-4 sm:px-8 sm:py-5 md:px-12 md:py-6 lg:px-16 lg:py-8 rounded-lg transition-colors duration-200 shadow-lg"
