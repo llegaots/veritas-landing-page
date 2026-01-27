@@ -1,34 +1,5 @@
-// Lazy import better-sqlite3 only when needed (not in Vercel)
-// This prevents native module initialization in serverless environments
-// IMPORTANT: We check isVercel BEFORE requiring to prevent any module evaluation
-let Database: any = null;
-const getDatabase = () => {
-  // Never load in Vercel - always fail fast
-  if (isVercel) {
-    return null;
-  }
-  if (!Database) {
-    try {
-      // Try to require better-sqlite3, but don't fail if it's not installed
-      // This allows the app to work in Vercel where it's not needed
-      Database = require('better-sqlite3');
-    } catch (error: any) {
-      // If better-sqlite3 is not available (e.g., in Vercel), that's OK
-      // We'll use Supabase instead
-      if (error.code === 'MODULE_NOT_FOUND') {
-        console.warn('[DB] better-sqlite3 not available, using Supabase only');
-      } else {
-        console.error('[DB] Failed to load better-sqlite3:', error);
-      }
-      return null;
-    }
-  }
-  return Database;
-};
-
 import { createClient } from '@supabase/supabase-js';
-import path from 'path';
-import { existsSync, mkdirSync } from 'fs';
+import { getLocalSqliteDb } from './sqlite';
 
 // Database configuration
 // More robust Vercel detection - check multiple environment variables
@@ -103,40 +74,15 @@ if (useSupabase) {
 
 // Initialize local SQLite database
 // NOTE: This should NEVER be called in Vercel - use Supabase instead
-function getLocalDb(): any {
-  // CRITICAL: Prevent local DB initialization in Vercel
-  // This prevents trying to create directories in /var/task
-  if (isVercel) {
-    const errorMsg = `Local SQLite database is not available in Vercel. Please configure Supabase environment variables (SUPABASE_URL and SUPABASE_ANON_KEY). Current env: VERCEL=${process.env.VERCEL}, VERCEL_ENV=${process.env.VERCEL_ENV}, cwd=${process.cwd()}`;
-    console.error('[DB INIT] ❌ BLOCKED getLocalDb() in Vercel:', errorMsg);
-    throw new Error(errorMsg);
-  }
-
+// Now uses async getLocalSqliteDb() from lib/sqlite.ts which has proper Vercel guards
+let db: any = null;
+async function getLocalDb(): Promise<any> {
   if (db) {
     return db;
   }
 
-  // In local dev, use ./data directory
-  const DB_DIR = path.join(process.cwd(), 'data');
-  const DB_PATH = path.join(DB_DIR, 'events.db');
-
-  // Only try to create directory in local development
-  if (!existsSync(DB_DIR)) {
-    try {
-      mkdirSync(DB_DIR, { recursive: true });
-    } catch (error) {
-      console.error('Failed to create DB directory:', error);
-      // If we can't create the directory, throw an error
-      throw new Error(`Cannot create database directory: ${DB_DIR}`);
-    }
-  }
-
   try {
-    const DatabaseClass = getDatabase();
-    if (!DatabaseClass) {
-      throw new Error('better-sqlite3 is not available in this environment');
-    }
-    db = new DatabaseClass(DB_PATH);
+    db = await getLocalSqliteDb();
     
     // Create events table if it doesn't exist
     db.exec(`
@@ -179,11 +125,11 @@ function getLocalDb(): any {
 // The anon key doesn't have permissions to create tables
 // Users should run the SQL from supabase-schema.sql in their Supabase SQL Editor
 
-export function getDb(): any {
+export async function getDb(): Promise<any> {
   if (useSupabase) {
     throw new Error('Supabase is configured. Use async database functions instead.');
   }
-  return getLocalDb();
+  return await getLocalDb();
 }
 
 // Async database functions for Supabase
@@ -242,7 +188,7 @@ export async function insertEvent(data: {
     if (isVercel) {
       throw new Error('Local database not available in Vercel. Please configure Supabase.');
     }
-    const db = getLocalDb();
+    const db = await getLocalDb();
     const stmt = db.prepare(`
       INSERT INTO events (event, properties, anonymous_id, name, url, referrer, timestamp)
       VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -288,7 +234,7 @@ export async function updateNameForAnonymousId(anonymousId: string, name: string
     if (runtimeIsVercel) {
       throw new Error('Local database not available in Vercel. Please configure Supabase (SUPABASE_URL and SUPABASE_ANON_KEY).');
     }
-    const db = getLocalDb();
+    const db = await getLocalDb();
     const stmt = db.prepare(`
       UPDATE events 
       SET name = ? 
@@ -341,7 +287,7 @@ export async function getAllEvents() {
     if (runtimeIsVercel) {
       throw new Error('Local database not available in Vercel. Please configure Supabase (SUPABASE_URL and SUPABASE_ANON_KEY).');
     }
-    const db = getLocalDb();
+    const db = await getLocalDb();
     return db.prepare('SELECT * FROM events ORDER BY timestamp DESC').all() as Array<{
       id: number;
       event: string;
