@@ -1,0 +1,180 @@
+/**
+ * Integration helper for automatically triggering SMS sequences when leads are created
+ * 
+ * This module provides utilities to connect lead creation to SMS sequence triggers
+ */
+
+export interface LeadData {
+  lead_id: string;
+  phone: string;
+  name?: string;
+  email?: string;
+  investor_id?: string | number;
+  property_name?: string;
+  attributes?: Record<string, any>;
+}
+
+/**
+ * Trigger SMS sequence for a new lead
+ * Call this function whenever a lead is created in your system
+ */
+export async function triggerSmsSequenceForLead(leadData: LeadData): Promise<{
+  success: boolean;
+  runs_created?: number;
+  run_ids?: string[];
+  error?: string;
+}> {
+  try {
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
+                   (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
+    
+    const adminPassword = process.env.ADMIN_PASSWORD || 'veritas2024admin';
+    
+    // Prepare attributes for SMS personalization
+    const attributes: Record<string, any> = {
+      FirstName: extractFirstName(leadData.name),
+      PropertyName: leadData.property_name || 'Investment Opportunity',
+      ...leadData.attributes,
+    };
+    
+    // Add investor_id if provided
+    if (leadData.investor_id) {
+      attributes.investor_id = leadData.investor_id.toString();
+    }
+    
+    // Add email if provided
+    if (leadData.email) {
+      attributes.email = leadData.email;
+    }
+    
+    const response = await fetch(`${baseUrl}/api/events/lead.created`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${adminPassword}`,
+      },
+      body: JSON.stringify({
+        lead_id: leadData.lead_id,
+        phone: leadData.phone,
+        attributes,
+      }),
+    });
+    
+    if (!response.ok) {
+      const error = await response.text();
+      return {
+        success: false,
+        error: error || 'Failed to trigger SMS sequence',
+      };
+    }
+    
+    const result = await response.json();
+    return {
+      success: true,
+      runs_created: result.runs_created,
+      run_ids: result.run_ids,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+}
+
+/**
+ * Extract first name from full name
+ */
+function extractFirstName(name?: string): string {
+  if (!name) return '';
+  return name.split(' ')[0] || name;
+}
+
+/**
+ * Helper to trigger SMS sequence from investor data
+ * Use this when adding a new investor who should receive SMS
+ * 
+ * @param investor - Investor data with id, name, phone, etc.
+ * @param options - Optional configuration
+ * @param options.onlyIfStatus - Only trigger if investor status matches (e.g., "New Lead")
+ */
+export async function triggerSmsSequenceForInvestor(
+  investor: {
+    id: string | number;
+    investor_name: string | null;
+    phone_number: string | null;
+    email_address?: string | null;
+    property_name?: string;
+    status?: string | null;
+  },
+  options?: {
+    onlyIfStatus?: string;
+  }
+): Promise<{
+  success: boolean;
+  runs_created?: number;
+  error?: string;
+  skipped?: boolean;
+}> {
+  if (!investor.phone_number) {
+    return {
+      success: false,
+      error: 'Investor phone number is required',
+    };
+  }
+
+  // Check status filter if provided
+  if (options?.onlyIfStatus) {
+    const investorStatus = investor.status?.toLowerCase().trim();
+    const requiredStatus = options.onlyIfStatus.toLowerCase().trim();
+    
+    if (investorStatus !== requiredStatus) {
+      return {
+        success: true,
+        skipped: true,
+        error: `Investor status "${investor.status}" does not match required status "${options.onlyIfStatus}"`,
+      };
+    }
+  }
+  
+  return triggerSmsSequenceForLead({
+    lead_id: `investor_${investor.id}`,
+    phone: investor.phone_number,
+    name: investor.investor_name || undefined,
+    email: investor.email_address || undefined,
+    investor_id: investor.id.toString(),
+    property_name: investor.property_name,
+  });
+}
+
+/**
+ * Helper to trigger SMS sequence from visitor/lead profile
+ * Use this when a visitor becomes a qualified lead
+ */
+export async function triggerSmsSequenceForVisitor(visitor: {
+  anonymous_id: string;
+  name?: string | null;
+  phone?: string;
+  email?: string;
+  property_name?: string;
+}): Promise<{
+  success: boolean;
+  runs_created?: number;
+  error?: string;
+}> {
+  if (!visitor.phone) {
+    return {
+      success: false,
+      error: 'Visitor phone number is required',
+    };
+  }
+  
+  return triggerSmsSequenceForLead({
+    lead_id: visitor.anonymous_id,
+    phone: visitor.phone,
+    name: visitor.name || undefined,
+    email: visitor.email,
+    property_name: visitor.property_name,
+  });
+}
+

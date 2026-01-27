@@ -1,0 +1,33 @@
+[
+  {
+    "op": "add",
+    "path": "/nodes/-",
+    "value": {
+      "id": "msg2",
+      "type": "send_sms",
+      "content": "Follow-up message"
+    }
+  },
+  {
+    "op": "add",
+    "path": "/ui/positions/msg2",
+    "value": {
+      "x": 100,
+      "y": 250
+    }
+  },
+  {
+    "op": "add",
+    "path": "/edges/-",
+    "value": {
+      "from": "msg1",
+      "to": "msg2"
+    }
+  },
+  {
+    "op": "replace",
+    "path": "/edges/1/to",
+    "value": "msg2"
+  }
+]
+
