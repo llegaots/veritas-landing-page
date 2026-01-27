@@ -32,12 +32,15 @@ export async function getLocalSqliteDb() {
   }
 
   // Dynamic load so bundler doesn't require it at build time
+  // Use Function constructor to make import truly dynamic and prevent bundler analysis
   let Database: any;
   try {
-    const mod: any = await import("better-sqlite3");
+    // Use Function constructor to create a truly dynamic import that bundlers won't analyze
+    const importBetterSqlite3 = new Function('specifier', 'return import(specifier)');
+    const mod: any = await importBetterSqlite3('better-sqlite3');
     Database = mod.default ?? mod;
   } catch (error: any) {
-    if (error.code === 'MODULE_NOT_FOUND') {
+    if (error.code === 'MODULE_NOT_FOUND' || error.message?.includes('Cannot find module')) {
       throw new Error("better-sqlite3 is not installed. Install it with: npm install better-sqlite3");
     }
     throw error;
@@ -72,7 +75,9 @@ export async function isSqliteAvailable(): Promise<boolean> {
   }
   
   try {
-    await import("better-sqlite3");
+    // Use Function constructor to create a truly dynamic import that bundlers won't analyze
+    const importBetterSqlite3 = new Function('specifier', 'return import(specifier)');
+    await importBetterSqlite3('better-sqlite3');
     return true;
   } catch {
     return false;
