@@ -40,7 +40,6 @@ if (!useSupabase && isVercel) {
   });
 }
 
-let db: any = null;
 let supabaseClient: ReturnType<typeof createClient> | null = null;
 
 // Initialize Supabase client - create a function to get/init client at runtime
