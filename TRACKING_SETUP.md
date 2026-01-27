@@ -44,3 +44,4 @@ The system automatically sends events to Meta Pixel when configured:
 - `scroll_75` → `trackCustom("Scroll_75")`
 - `demo_booked` → `track("Lead")`
 
+

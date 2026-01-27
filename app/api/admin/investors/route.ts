@@ -1,93 +1,77 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 
+const supabaseUrl = process.env.SUPABASE_URL!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+function checkAuth(request: NextRequest): boolean {
+  const key = request.nextUrl.searchParams.get('key');
+  const expectedPassword = process.env.ADMIN_PASSWORD || 'veritas2024admin';
+  return key === expectedPassword;
+}
+
+/**
+ * Admin API endpoint to fetch investors
+ * Used by the admin dashboard investor list page
+ */
 export async function GET(request: NextRequest) {
+  if (!checkAuth(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  const { searchParams } = new URL(request.url);
+  
+  const page = parseInt(searchParams.get('page') || '1');
+  const pageSize = parseInt(searchParams.get('page_size') || '50');
+  const offset = (page - 1) * pageSize;
+  
+  const search = searchParams.get('search');
+  const status = searchParams.get('status');
+  const source = searchParams.get('source');
+  const readyForFollowUp = searchParams.get('ready_for_follow_up');
+
   try {
-    const searchParams = request.nextUrl.searchParams
-    const password = searchParams.get('key')
-    const adminPassword = process.env.ADMIN_PASSWORD || 'veritas2024admin'
-
-    // Password protection
-    if (!password || password !== adminPassword) {
-      console.log('Admin access denied for investors endpoint')
-      return NextResponse.json(
-        { error: 'Unauthorized', message: 'Invalid password' },
-        { status: 401 }
-      )
-    }
-
-    // Get Supabase credentials
-    const supabaseUrl = process.env.SUPABASE_URL
-    const supabaseAnonKey = process.env.SUPABASE_ANON_KEY
-
-    if (!supabaseUrl || !supabaseAnonKey) {
-      return NextResponse.json(
-        { error: 'Supabase not configured' },
-        { status: 500 }
-      )
-    }
-
-    // Initialize Supabase client
-    const supabase = createClient(supabaseUrl, supabaseAnonKey)
-
-    // Get query parameters for filtering/sorting
-    const search = searchParams.get('search') || ''
-    const status = searchParams.get('status')
-    const source = searchParams.get('source')
-    const readyForFollowUp = searchParams.get('ready_for_follow_up')
-    const sortBy = searchParams.get('sort_by') || 'created_time'
-    const sortOrder = searchParams.get('sort_order') || 'desc'
-    const page = parseInt(searchParams.get('page') || '1')
-    const pageSize = parseInt(searchParams.get('page_size') || '50')
-
     // Build query
     let query = supabase
       .from('investors')
       .select('*', { count: 'exact' })
+      .order('created_time', { ascending: false })
+      .range(offset, offset + pageSize - 1);
 
-    // Apply filters
     if (search) {
-      query = query.or(`investor_name.ilike.%${search}%,email_address.ilike.%${search}%,phone_number.ilike.%${search}%`)
+      query = query.or(`investor_name.ilike.%${search}%,email_address.ilike.%${search}%,phone_number.ilike.%${search}%`);
     }
 
     if (status) {
-      query = query.eq('status', status)
+      query = query.eq('status', status);
     }
 
     if (source) {
-      query = query.eq('source', source)
+      query = query.eq('source', source);
     }
 
     if (readyForFollowUp) {
-      query = query.eq('ready_for_follow_up', readyForFollowUp)
+      query = query.eq('ready_for_follow_up', readyForFollowUp);
     }
 
-    // Apply sorting
-    query = query.order(sortBy, { ascending: sortOrder === 'asc' })
-
-    // Apply pagination
-    const from = (page - 1) * pageSize
-    const to = from + pageSize - 1
-    query = query.range(from, to)
-
-    // Execute query
-    const { data, error, count } = await query
+    const { data, error, count } = await query;
 
     if (error) {
-      console.error('Supabase error:', error)
+      console.error('Error fetching investors:', error);
       return NextResponse.json(
-        { error: 'Database error', details: error.message },
+        { error: 'Failed to fetch investors' },
         { status: 500 }
-      )
+      );
     }
 
-    // Get unique values for filters
+    // Get unique statuses and sources for filters
     const { data: allInvestors } = await supabase
       .from('investors')
-      .select('status, source, ready_for_follow_up')
+      .select('status, source');
 
-    const uniqueStatuses = [...new Set(allInvestors?.map(i => i.status).filter(Boolean) || [])]
-    const uniqueSources = [...new Set(allInvestors?.map(i => i.source).filter(Boolean) || [])]
+    const statuses = [...new Set(allInvestors?.map(i => i.status).filter(Boolean) || [])];
+    const sources = [...new Set(allInvestors?.map(i => i.source).filter(Boolean) || [])];
 
     return NextResponse.json({
       investors: data || [],
@@ -96,16 +80,16 @@ export async function GET(request: NextRequest) {
       pageSize,
       totalPages: Math.ceil((count || 0) / pageSize),
       filters: {
-        statuses: uniqueStatuses,
-        sources: uniqueSources,
+        statuses,
+        sources,
       },
-    })
+    });
   } catch (error) {
-    console.error('Error fetching investors:', error)
+    console.error('Error in GET /api/admin/investors:', error);
     return NextResponse.json(
-      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
+      { error: 'Internal server error' },
       { status: 500 }
-    )
+    );
   }
 }
 

@@ -21,6 +21,7 @@ const Airtable = require('airtable')
 const { createClient } = require('@supabase/supabase-js')
 const dotenv = require('dotenv')
 const path = require('path')
+const fetch = require('node-fetch')
 
 // Load environment variables
 dotenv.config({ path: path.join(process.cwd(), '.env.local') })
@@ -188,6 +189,60 @@ function mapAirtableToSupabase(airtableRecord) {
 }
 
 /**
+ * Trigger SMS sequences for "New Lead" investors
+ */
+async function triggerSmsForNewLeads(investors) {
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+  const webhookSecret = process.env.WEBHOOK_SECRET || process.env.ADMIN_PASSWORD || 'veritas2024admin'
+  
+  let triggered = 0
+  let errors = 0
+  
+  for (const investor of investors) {
+    try {
+      const response = await fetch(`${baseUrl}/api/webhooks/investor-created`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-webhook-secret': webhookSecret,
+        },
+        body: JSON.stringify({
+          investor: {
+            id: investor.id,
+            investor_name: investor.investor_name,
+            phone_number: investor.phone_number,
+            email_address: investor.email_address,
+            status: investor.status,
+            property_name: investor.deal,
+          },
+        }),
+      })
+      
+      const result = await response.json()
+      
+      if (result.success && !result.skipped) {
+        triggered++
+      } else if (result.skipped) {
+        // Expected for non-"New Lead" statuses
+      } else {
+        console.error(`  ⚠️  Failed to trigger SMS for investor ${investor.id}:`, result.error)
+        errors++
+      }
+    } catch (err) {
+      console.error(`  ⚠️  Error triggering SMS for investor ${investor.id}:`, err.message)
+      errors++
+    }
+  }
+  
+  if (triggered > 0) {
+    console.log(`  ✅ Triggered SMS sequences for ${triggered} investor(s)`)
+  }
+  if (errors > 0) {
+    console.log(`  ⚠️  ${errors} SMS trigger(s) failed`)
+  }
+}
+
+/**
  * Import records to Supabase
  */
 async function importToSupabase(records) {
@@ -240,9 +295,10 @@ async function importToSupabase(records) {
 
       // Batch insert new records
       if (toCreate.length > 0) {
-        const { error } = await supabase
+        const { error, data: insertedData } = await supabase
           .from('investors')
           .insert(toCreate)
+          .select()
         
         if (error) {
           console.error(`❌ Error inserting batch:`, error.message)
@@ -250,6 +306,18 @@ async function importToSupabase(records) {
         } else {
           created += toCreate.length
           console.log(`✅ Created ${toCreate.length} new records`)
+          
+          // Trigger SMS sequences for "New Lead" investors
+          if (insertedData) {
+            const newLeadInvestors = insertedData.filter(inv => 
+              inv.status && inv.status.toLowerCase().trim() === 'new lead' && inv.phone_number
+            )
+            
+            if (newLeadInvestors.length > 0) {
+              console.log(`📱 Triggering SMS sequences for ${newLeadInvestors.length} "New Lead" investor(s)...`)
+              await triggerSmsForNewLeads(newLeadInvestors)
+            }
+          }
         }
       }
 

@@ -162,7 +162,12 @@ function InvestorsPageContent() {
       id: 'investor_name',
       header: 'Name',
       accessor: (row) => (
-        <span className="font-semibold">{row.investor_name || 'N/A'}</span>
+        <div className="flex items-center gap-2">
+          <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-semibold text-sm shadow-sm">
+            {row.investor_name ? row.investor_name.charAt(0).toUpperCase() : '?'}
+          </div>
+          <span className="font-semibold text-gray-900">{row.investor_name || 'N/A'}</span>
+        </div>
       ),
       sortable: true,
     },
@@ -171,15 +176,15 @@ function InvestorsPageContent() {
       header: 'Email',
       accessor: (row) =>
         row.email_address ? (
-          <a
-            href={`mailto:${row.email_address}`}
-            className="text-blue-600 hover:underline flex items-center gap-1"
-          >
-            <Mail className="h-3 w-3" />
-            {row.email_address}
-          </a>
-        ) : (
-          <span className="text-gray-400">-</span>
+            <a
+              href={`mailto:${row.email_address}`}
+              className="text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1.5 font-medium bg-blue-50 px-2 py-1 rounded-md hover:bg-blue-100 transition-colors"
+            >
+              <Mail className="h-3.5 w-3.5" />
+              {row.email_address}
+            </a>
+          ) : (
+            <span className="text-gray-400">-</span>
         ),
       sortable: true,
     },
@@ -188,15 +193,15 @@ function InvestorsPageContent() {
       header: 'Phone',
       accessor: (row) =>
         row.phone_number ? (
-          <a
-            href={`tel:${row.phone_number}`}
-            className="text-blue-600 hover:underline flex items-center gap-1"
-          >
-            <Phone className="h-3 w-3" />
-            {row.phone_number}
-          </a>
-        ) : (
-          <span className="text-gray-400">-</span>
+            <a
+              href={`tel:${row.phone_number}`}
+              className="text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1.5 font-medium bg-blue-50 px-2 py-1 rounded-md hover:bg-blue-100 transition-colors"
+            >
+              <Phone className="h-3.5 w-3.5" />
+              {row.phone_number}
+            </a>
+          ) : (
+            <span className="text-gray-400">-</span>
         ),
       sortable: true,
     },
@@ -206,13 +211,12 @@ function InvestorsPageContent() {
       accessor: (row) =>
         row.status ? (
           <Badge
-            variant="outline"
             className={
               row.status === 'New Lead'
-                ? 'bg-purple-50 text-purple-800 border-purple-300'
+                ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white border-0 shadow-sm font-medium px-3 py-1'
                 : row.status === 'Contacted'
-                  ? 'bg-blue-50 text-blue-800 border-blue-300'
-                  : 'bg-gray-50 text-gray-800 border-gray-300'
+                  ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white border-0 shadow-sm font-medium px-3 py-1'
+                  : 'bg-gradient-to-r from-gray-400 to-gray-500 text-white border-0 shadow-sm font-medium px-3 py-1'
             }
           >
             {row.status}
@@ -227,7 +231,7 @@ function InvestorsPageContent() {
       header: 'Source',
       accessor: (row) =>
         row.source ? (
-          <Badge variant="outline" className="bg-orange-50 text-orange-800 border-orange-300">
+          <Badge className="bg-gradient-to-r from-orange-500 to-orange-600 text-white border-0 shadow-sm font-medium px-3 py-1">
             {row.source}
           </Badge>
         ) : (
@@ -239,10 +243,12 @@ function InvestorsPageContent() {
       id: 'amount_dollars',
       header: 'Amount',
       accessor: (row) =>
-        row.amount_dollars ? (
-          <span className="font-medium">${row.amount_dollars.toLocaleString()}</span>
+        row.amount_dollars && row.amount_dollars > 0 ? (
+          <span className="font-bold text-green-700 bg-green-50 px-3 py-1.5 rounded-lg border border-green-200">
+            ${row.amount_dollars.toLocaleString()}
+          </span>
         ) : (
-          <span className="text-gray-400">$0</span>
+          <span className="text-gray-400 font-medium">$0</span>
         ),
       sortable: true,
     },
@@ -251,9 +257,9 @@ function InvestorsPageContent() {
       header: 'Follow Up',
       accessor: (row) =>
         row.ready_for_follow_up === 'YES' ? (
-          <Badge className="bg-green-100 text-green-800 border-green-300">YES</Badge>
+          <Badge className="bg-gradient-to-r from-green-500 to-emerald-600 text-white border-0 shadow-sm font-semibold px-3 py-1">YES</Badge>
         ) : (
-          <Badge variant="outline" className="bg-gray-50 text-gray-600">NO</Badge>
+          <Badge className="bg-gray-200 text-gray-600 border-0 font-medium px-3 py-1">NO</Badge>
         ),
       sortable: true,
     },
@@ -274,12 +280,12 @@ function InvestorsPageContent() {
 
   if (!authenticated) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
-          <h1 className="text-2xl font-bold text-gray-900 mb-6">Investors Dashboard</h1>
+      <div className="admin-theme min-h-screen bg-[hsl(var(--background))] flex items-center justify-center p-4">
+        <div className="bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-lg shadow-xl p-8 max-w-md w-full">
+          <h1 className="text-2xl font-bold text-[hsl(var(--foreground))] mb-6">Investors Dashboard</h1>
           <form onSubmit={handleLogin}>
             <div className="mb-4">
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="password" className="block text-sm font-medium text-[hsl(var(--foreground))] mb-2">
                 Password
               </label>
               <Input
@@ -289,41 +295,42 @@ function InvestorsPageContent() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter admin password"
                 required
+                className="bg-[hsl(var(--input))] border-[hsl(var(--border))] text-[hsl(var(--foreground))]"
               />
             </div>
-            <Button type="submit" className="w-full">
+            <Button type="submit" className="w-full bg-[hsl(var(--primary))] hover:opacity-90 text-[hsl(var(--primary-foreground))]">
               Access Dashboard
             </Button>
           </form>
-          {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+          {error && <p className="mt-4 text-sm text-red-400">{error}</p>}
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b sticky top-0 z-10">
-        <div className="px-4 lg:px-8 py-4 max-w-7xl mx-auto">
+    <div className="admin-theme min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50">
+      {/* Header with gradient */}
+      <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 text-white shadow-lg sticky top-0 z-10">
+        <div className="px-4 lg:px-8 py-6 max-w-7xl mx-auto">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Investors</h1>
-              <p className="text-sm text-gray-600 mt-1">
+              <h1 className="text-3xl font-bold text-white">Investors</h1>
+              <p className="text-sm text-blue-100 mt-1.5">
                 {data?.total || 0} total investors
               </p>
             </div>
             <div className="flex items-center gap-2">
               <Link href={`/admin?key=${encodeURIComponent(password)}`}>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" className="bg-white/10 border-white/20 text-white hover:bg-white/20">
                   Back to Analytics
                 </Button>
               </Link>
-              <Button onClick={handleExport} size="sm">
+              <Button onClick={handleExport} size="sm" className="bg-white text-blue-700 hover:bg-blue-50 shadow-md">
                 <Download className="h-4 w-4 mr-2" />
                 Export CSV
               </Button>
-              <Button onClick={handleRefresh} variant="outline" size="sm">
+              <Button onClick={handleRefresh} variant="outline" size="sm" className="bg-white/10 border-white/20 text-white hover:bg-white/20">
                 Refresh
               </Button>
             </div>
@@ -332,18 +339,21 @@ function InvestorsPageContent() {
       </div>
 
       <div className="px-4 lg:px-8 py-6 max-w-7xl mx-auto">
-        {/* Filters */}
-        <Card className="mb-6">
-          <CardContent className="pt-6">
+        {/* Filters with colored background */}
+        <div className="mb-6 bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden">
+          <div className="bg-gradient-to-r from-indigo-50 to-blue-50 px-6 py-4 border-b border-indigo-100">
+            <h2 className="text-lg font-semibold text-gray-800">Filter Investors</h2>
+          </div>
+          <CardContent className="pt-6 bg-white">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-indigo-500" />
                 <Input
                   placeholder="Search name, email, phone..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                  className="pl-10"
+                  className="pl-10 border-indigo-200 focus:border-indigo-400 focus:ring-indigo-400"
                 />
               </div>
               <Select value={statusFilter || 'all'} onValueChange={(value) => setStatusFilter(value === 'all' ? '' : value)}>
@@ -384,7 +394,7 @@ function InvestorsPageContent() {
               </Select>
             </div>
             <div className="mt-4 flex gap-2">
-              <Button onClick={handleSearch} size="sm">
+              <Button onClick={handleSearch} size="sm" className="bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white shadow-md">
                 Apply Filters
               </Button>
               <Button
@@ -397,12 +407,13 @@ function InvestorsPageContent() {
                 }}
                 variant="outline"
                 size="sm"
+                className="border-gray-300 hover:bg-gray-50"
               >
                 Clear
               </Button>
             </div>
           </CardContent>
-        </Card>
+        </div>
 
         {loading && (
           <div className="space-y-4">
@@ -435,10 +446,11 @@ function InvestorsPageContent() {
                 />
                 {/* Pagination */}
                 {data.totalPages > 1 && (
-                  <div className="mt-4 flex items-center justify-between">
-                    <div className="text-sm text-gray-600">
-                      Showing {((currentPage - 1) * data.pageSize) + 1} to{' '}
-                      {Math.min(currentPage * data.pageSize, data.total)} of {data.total} investors
+                  <div className="mt-6 bg-white rounded-lg shadow-sm border border-gray-200 px-6 py-4 flex items-center justify-between">
+                    <div className="text-sm font-medium text-gray-700">
+                      Showing <span className="font-semibold text-gray-900">{((currentPage - 1) * data.pageSize) + 1}</span> to{' '}
+                      <span className="font-semibold text-gray-900">{Math.min(currentPage * data.pageSize, data.total)}</span> of{' '}
+                      <span className="font-semibold text-gray-900">{data.total}</span> investors
                     </div>
                     <div className="flex gap-2">
                       <Button
@@ -446,6 +458,7 @@ function InvestorsPageContent() {
                         size="sm"
                         onClick={() => fetchInvestors(password, currentPage - 1)}
                         disabled={currentPage === 1}
+                        className="border-gray-300 hover:bg-gray-50 disabled:opacity-50"
                       >
                         Previous
                       </Button>
@@ -454,6 +467,7 @@ function InvestorsPageContent() {
                         size="sm"
                         onClick={() => fetchInvestors(password, currentPage + 1)}
                         disabled={currentPage >= data.totalPages}
+                        className="border-gray-300 hover:bg-gray-50 disabled:opacity-50"
                       >
                         Next
                       </Button>

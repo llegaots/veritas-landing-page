@@ -32,10 +32,10 @@ export function HealthMetrics({
   const [expanded, setExpanded] = useState(false)
 
   return (
-    <Card>
+    <Card className="bg-[hsl(var(--card))] border-[hsl(var(--border))]">
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle>Health Metrics</CardTitle>
+          <CardTitle className="text-[hsl(var(--foreground))]">Health Metrics</CardTitle>
           <Button
             variant="ghost"
             size="sm"

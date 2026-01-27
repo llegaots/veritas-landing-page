@@ -464,7 +464,7 @@ function AdminDashboardContent() {
             ✓
           </Badge>
         ) : (
-          <span className="text-gray-400">-</span>
+          <span className="text-[hsl(var(--muted-foreground))]">-</span>
         ),
       sortable: true,
     },
@@ -488,12 +488,12 @@ function AdminDashboardContent() {
 
   if (!authenticated) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
-          <h1 className="text-2xl font-bold text-gray-900 mb-6">Admin Dashboard</h1>
+      <div className="admin-theme min-h-screen bg-[hsl(var(--background))] flex items-center justify-center p-4">
+        <div className="bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-lg shadow-xl p-8 max-w-md w-full">
+          <h1 className="text-2xl font-bold text-[hsl(var(--foreground))] mb-6">Admin Dashboard</h1>
           <form onSubmit={handleLogin}>
             <div className="mb-4">
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="password" className="block text-sm font-medium text-[hsl(var(--foreground))] mb-2">
                 Password
               </label>
               <Input
@@ -503,31 +503,44 @@ function AdminDashboardContent() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter admin password"
                 required
+                className="bg-[hsl(var(--input))] border-[hsl(var(--border))] text-[hsl(var(--foreground))]"
               />
             </div>
-            <Button type="submit" className="w-full">
+            <Button type="submit" className="w-full bg-[hsl(var(--primary))] hover:opacity-90 text-[hsl(var(--primary-foreground))]">
               Access Dashboard
             </Button>
           </form>
-          {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+          {error && <p className="mt-4 text-sm text-red-400">{error}</p>}
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="admin-theme min-h-screen bg-[hsl(var(--background))]">
       <Toaster />
       {/* Navigation Bar */}
-      <div className="bg-white border-b sticky top-0 z-10">
+      <div className="bg-[hsl(var(--card))] border-b border-[hsl(var(--border))] sticky top-0 z-10 backdrop-blur-sm bg-opacity-95">
         <div className="px-4 lg:px-8 py-3 max-w-7xl mx-auto">
           <div className="flex items-center justify-between">
-            <h1 className="text-xl font-semibold text-gray-900">Engagement Analytics</h1>
-            <Link href={`/admin/investors?key=${encodeURIComponent(password)}`}>
-              <Button variant="outline" size="sm">
-                View Investors
-              </Button>
-            </Link>
+            <h1 className="text-xl font-semibold text-[hsl(var(--foreground))]">Engagement Analytics</h1>
+            <div className="flex gap-2">
+              <Link href={`/admin/investors?key=${encodeURIComponent(password)}`}>
+                <Button variant="outline" size="sm" className="border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--accent))]">
+                  View Investors
+                </Button>
+              </Link>
+              <Link href={`/admin/sequences?key=${encodeURIComponent(password)}`}>
+                <Button variant="outline" size="sm" className="border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--accent))]">
+                  SMS Sequences
+                </Button>
+              </Link>
+              <Link href={`/admin/sms-veritas?key=${encodeURIComponent(password)}`}>
+                <Button variant="outline" size="sm" className="border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--accent))]">
+                  Veritas Sequence
+                </Button>
+              </Link>
+            </div>
           </div>
         </div>
       </div>
@@ -602,36 +615,36 @@ function AdminDashboardContent() {
               <TabsContent value="analytics" className="space-y-6 mt-6">
                 {/* KPI Overview */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <Card>
+                  <Card className="bg-[hsl(var(--card))] border-[hsl(var(--border))]">
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium text-gray-600">Total Events</CardTitle>
+                      <CardTitle className="text-sm font-medium text-[hsl(var(--muted-foreground))]">Total Events</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold">{stats.summary.total_events}</div>
+                      <div className="text-2xl font-bold text-[hsl(var(--foreground))]">{stats.summary.total_events}</div>
                     </CardContent>
                   </Card>
-                  <Card>
+                  <Card className="bg-[hsl(var(--card))] border-[hsl(var(--border))]">
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium text-gray-600">Unique Visitors</CardTitle>
+                      <CardTitle className="text-sm font-medium text-[hsl(var(--muted-foreground))]">Unique Visitors</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold">{stats.summary.unique_visitors}</div>
+                      <div className="text-2xl font-bold text-[hsl(var(--foreground))]">{stats.summary.unique_visitors}</div>
                     </CardContent>
                   </Card>
-                  <Card>
+                  <Card className="bg-[hsl(var(--card))] border-[hsl(var(--border))]">
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium text-gray-600">Return Visitors</CardTitle>
+                      <CardTitle className="text-sm font-medium text-[hsl(var(--muted-foreground))]">Return Visitors</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold">{stats.summary.return_visitors}</div>
+                      <div className="text-2xl font-bold text-[hsl(var(--foreground))]">{stats.summary.return_visitors}</div>
                     </CardContent>
                   </Card>
-                  <Card>
+                  <Card className="bg-[hsl(var(--card))] border-[hsl(var(--border))]">
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium text-gray-600">Avg Time</CardTitle>
+                      <CardTitle className="text-sm font-medium text-[hsl(var(--muted-foreground))]">Avg Time</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold">{stats.summary.avg_time_on_page_seconds}s</div>
+                      <div className="text-2xl font-bold text-[hsl(var(--foreground))]">{stats.summary.avg_time_on_page_seconds}s</div>
                     </CardContent>
                   </Card>
                 </div>

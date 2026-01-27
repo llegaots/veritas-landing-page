@@ -49,10 +49,10 @@ export function QuickInsights({
   }
 
   return (
-    <Card>
+    <Card className="bg-[hsl(var(--card))] border-[hsl(var(--border))]">
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle>Quick Insights</CardTitle>
+          <CardTitle className="text-[hsl(var(--foreground))]">Quick Insights</CardTitle>
           <Button
             variant="ghost"
             size="sm"
@@ -82,8 +82,8 @@ export function QuickInsights({
               >
                 {getInsightIcon(insight.type)}
                 <div className="flex-1 min-w-0">
-                  <div className="font-medium text-sm text-gray-900">{insight.title}</div>
-                  <div className="text-xs text-gray-600 mt-1">{insight.message}</div>
+                  <div className="font-medium text-sm text-[hsl(var(--foreground))]">{insight.title}</div>
+                  <div className="text-xs text-[hsl(var(--muted-foreground))] mt-1">{insight.message}</div>
                   {insight.action && (
                     <Button
                       variant="link"
@@ -102,15 +102,15 @@ export function QuickInsights({
 
         {/* Top Drivers */}
         {topDrivers && topDrivers.length > 0 && expanded && (
-          <div className="pt-3 border-t">
-            <h4 className="text-sm font-medium text-gray-700 mb-2">Top Changes</h4>
+          <div className="pt-3 border-t border-[hsl(var(--border))]">
+            <h4 className="text-sm font-medium text-[hsl(var(--foreground))] mb-2">Top Changes</h4>
             <div className="space-y-2">
               {topDrivers.slice(0, 3).map((driver, idx) => (
                 <div
                   key={idx}
-                  className="flex items-center justify-between p-2 rounded hover:bg-gray-50"
+                  className="flex items-center justify-between p-2 rounded hover:bg-[hsl(var(--accent))]"
                 >
-                  <span className="text-sm text-gray-900">{driver.event}</span>
+                  <span className="text-sm text-[hsl(var(--foreground))]">{driver.event}</span>
                   <Badge
                     variant={
                       driver.trend === 'up'
@@ -131,7 +131,7 @@ export function QuickInsights({
         )}
 
         {insights.length === 0 && (!topDrivers || topDrivers.length === 0) && (
-          <p className="text-sm text-gray-500 text-center py-4">
+          <p className="text-sm text-[hsl(var(--muted-foreground))] text-center py-4">
             No insights available for this period
           </p>
         )}

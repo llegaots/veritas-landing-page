@@ -66,3 +66,4 @@ export function FunnelChart({ steps, title = 'Conversion Funnel' }: FunnelChartP
   )
 }
 
+

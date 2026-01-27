@@ -54,3 +54,4 @@ CREATE POLICY "Allow all operations for service role" ON investors
   USING (true)
   WITH CHECK (true);
 
+

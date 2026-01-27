@@ -1,0 +1,60 @@
+{
+  "trigger": {
+    "type": "lead.created"
+  },
+  "variables": {
+    "firstName": "{{lead.first_name}}"
+  },
+  "nodes": [
+    {
+      "id": "trigger",
+      "type": "trigger"
+    },
+    {
+      "id": "wait1",
+      "type": "wait",
+      "duration": "60 minutes"
+    },
+    {
+      "id": "msg1",
+      "type": "send_sms",
+      "content": "Hi {{lead.first_name}}, following up on your interest."
+    },
+    {
+      "id": "end",
+      "type": "end"
+    }
+  ],
+  "edges": [
+    {
+      "from": "trigger",
+      "to": "wait1"
+    },
+    {
+      "from": "wait1",
+      "to": "msg1"
+    },
+    {
+      "from": "msg1",
+      "to": "end"
+    }
+  ],
+  "ui": {
+    "positions": {
+      "trigger": { "x": 100, "y": 100 },
+      "wait1": { "x": 100, "y": 200 },
+      "msg1": { "x": 100, "y": 300 },
+      "end": { "x": 100, "y": 400 }
+    },
+    "zoom": 1
+  },
+  "metadata": {
+    "name": "Wait Flow Test",
+    "status": "draft",
+    "version": 1,
+    "createdBy": "test",
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-01T00:00:00.000Z"
+  }
+}
+

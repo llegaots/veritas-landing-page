@@ -78,3 +78,4 @@ The script will:
 
 **"Base not found"** → Check the Base ID in your Airtable URL
 
+

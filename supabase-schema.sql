@@ -30,3 +30,4 @@ CREATE POLICY "Allow all operations for service role" ON events
   USING (true)
   WITH CHECK (true);
 
+

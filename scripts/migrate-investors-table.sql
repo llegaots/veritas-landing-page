@@ -70,3 +70,4 @@ CREATE INDEX IF NOT EXISTS idx_investors_created_time ON investors(created_time)
 -- WHERE table_name = 'investors'
 -- ORDER BY ordinal_position;
 
+

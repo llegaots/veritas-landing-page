@@ -131,10 +131,10 @@ export function DataTable<T extends { [key: string]: any }>({
   }
 
   return (
-    <Card className={className}>
-      <CardHeader>
+    <Card className={cn("bg-white border-0 shadow-lg rounded-xl overflow-hidden", className)}>
+      <CardHeader className="bg-gradient-to-r from-slate-50 to-gray-50 border-b border-gray-200">
         <div className="flex items-center justify-between">
-          <CardTitle>
+          <CardTitle className="text-gray-800 font-semibold">
             {processedData.length} {processedData.length === 1 ? 'result' : 'results'}
           </CardTitle>
           <div className="flex items-center gap-2">
@@ -207,17 +207,18 @@ export function DataTable<T extends { [key: string]: any }>({
           </div>
         </div>
       </CardHeader>
-      <CardContent>
-        <div className="rounded-md border">
+      <CardContent className="p-0">
+        <div className="rounded-lg overflow-hidden border-0 shadow-sm">
           <Table>
             <TableHeader>
-              <TableRow>
+              <TableRow className="bg-gradient-to-r from-slate-100 to-gray-100 hover:from-slate-100 hover:to-gray-100 border-b-2 border-gray-200">
                 {visibleColumns.map((column) => (
                   <TableHead
                     key={column.id}
                     className={cn(
-                      column.sortable !== false && 'cursor-pointer hover:bg-gray-50',
-                      tableState.density === 'compact' && 'py-2'
+                      'font-semibold text-gray-700',
+                      column.sortable !== false && 'cursor-pointer hover:bg-gray-200/50',
+                      tableState.density === 'compact' ? 'py-3' : 'py-4'
                     )}
                     style={{ width: column.width }}
                     onClick={() =>
@@ -227,7 +228,7 @@ export function DataTable<T extends { [key: string]: any }>({
                     <div className="flex items-center gap-2">
                       {column.header}
                       {column.sortable !== false && (
-                        <ArrowUpDown className="h-3 w-3 text-gray-400" />
+                        <ArrowUpDown className="h-3.5 w-3.5 text-gray-500" />
                       )}
                     </div>
                   </TableHead>
@@ -239,7 +240,7 @@ export function DataTable<T extends { [key: string]: any }>({
                 <TableRow>
                   <TableCell
                     colSpan={visibleColumns.length}
-                    className="text-center py-8 text-gray-500"
+                    className="text-center py-12 text-gray-500 bg-gray-50"
                   >
                     No results found
                   </TableCell>
@@ -249,13 +250,15 @@ export function DataTable<T extends { [key: string]: any }>({
                   <TableRow
                     key={index}
                     className={cn(
-                      onRowClick && 'cursor-pointer transition-colors hover:bg-gray-50',
-                      tableState.density === 'compact' && 'py-1'
+                      'border-b border-gray-100',
+                      index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50',
+                      onRowClick && 'cursor-pointer transition-all hover:bg-blue-50 hover:shadow-sm',
+                      tableState.density === 'compact' ? 'py-2' : 'py-4'
                     )}
                     onClick={() => onRowClick?.(row)}
                   >
                     {visibleColumns.map((column) => (
-                      <TableCell key={column.id}>
+                      <TableCell key={column.id} className="font-medium">
                         {column.accessor(row)}
                       </TableCell>
                     ))}

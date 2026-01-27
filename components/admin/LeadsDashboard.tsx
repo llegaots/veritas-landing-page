@@ -84,14 +84,14 @@ export function LeadsDashboard({
   return (
     <div className="space-y-6">
       {/* Hero Section: Leads Ready to Contact */}
-      <Card className="border-2 border-orange-200 bg-gradient-to-br from-orange-50 to-white">
+      <Card className="bg-[hsl(var(--card))] border-[hsl(var(--border))] border-2 border-orange-200 bg-gradient-to-br from-orange-50 to-white">
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-2xl font-bold text-gray-900 mb-2">
+              <CardTitle className="text-2xl font-bold text-[hsl(var(--foreground))] mb-2">
                 Leads Ready to Contact
               </CardTitle>
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-[hsl(var(--muted-foreground))]">
                 {readyToContact.length} lead{readyToContact.length !== 1 ? 's' : ''} ready for
                 follow-up
               </p>
@@ -172,7 +172,7 @@ export function LeadsDashboard({
 
           {/* Search */}
           <div className="relative mb-4">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-[hsl(var(--muted-foreground))]" />
             <Input
               placeholder="Search leads by name or ID..."
               value={searchQuery}

@@ -34,7 +34,7 @@ export function LeadCard({
   return (
     <Card
       className={cn(
-        'cursor-pointer transition-all duration-200 hover:shadow-lg hover:border-orange-300',
+        'bg-[hsl(var(--card))] border-[hsl(var(--border))] cursor-pointer transition-all duration-200 hover:shadow-lg hover:border-orange-300',
         selected && 'ring-2 ring-orange-500 border-orange-500',
         hasBookedDemo && 'border-green-200 bg-green-50/50'
       )}
@@ -56,7 +56,7 @@ export function LeadCard({
                   className="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
                 />
               )}
-              <h3 className="font-semibold text-gray-900 truncate">
+              <h3 className="font-semibold text-[hsl(var(--foreground))] truncate">
                 {lead.name || `Visitor ${lead.anonymous_id.substring(0, 8)}`}
               </h3>
               {hasBookedDemo && (
@@ -72,9 +72,9 @@ export function LeadCard({
               )}
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 text-sm text-gray-600 mb-3">
+            <div className="flex flex-wrap items-center gap-3 text-sm text-[hsl(var(--muted-foreground))] mb-3">
               <span className="flex items-center gap-1">
-                <span className="font-medium text-gray-900">Intent:</span>
+                <span className="font-medium text-[hsl(var(--foreground))]">Intent:</span>
                 <span
                   className={cn(
                     'font-bold',
@@ -86,17 +86,17 @@ export function LeadCard({
               </span>
               {lead.return_visits > 0 && (
                 <span className="flex items-center gap-1">
-                  <span className="font-medium text-gray-900">Returns:</span>
+                  <span className="font-medium text-[hsl(var(--foreground))]">Returns:</span>
                   <span>{lead.return_visits}</span>
                 </span>
               )}
               {lead.cta_clicks > 0 && (
                 <span className="flex items-center gap-1">
-                  <span className="font-medium text-gray-900">CTAs:</span>
+                  <span className="font-medium text-[hsl(var(--foreground))]">CTAs:</span>
                   <span>{lead.cta_clicks}</span>
                 </span>
               )}
-              <span className="text-gray-400">
+              <span className="text-[hsl(var(--muted-foreground))]">
                 {formatRelativeTime(lead.last_visit)}
               </span>
             </div>
@@ -119,7 +119,7 @@ export function LeadCard({
                 </Badge>
               )}
               {lead.avg_time_on_page > 60 && (
-                <Badge variant="outline" className="text-xs">
+                <Badge variant="outline" className="text-xs bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] border-[hsl(var(--border))]">
                   {formatTime(lead.avg_time_on_page)} avg
                 </Badge>
               )}

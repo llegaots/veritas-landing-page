@@ -89,17 +89,17 @@ export function FilterBar({
   }
 
   return (
-    <div className="sticky top-0 z-50 bg-white border-b shadow-sm">
+    <div className="sticky top-0 z-50 bg-[hsl(var(--card))] border-b border-[hsl(var(--border))] shadow-sm backdrop-blur-sm bg-opacity-95">
       <div className="px-4 lg:px-8 py-4">
         <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
           {/* Left: Title and Date Range */}
           <div className="flex items-center gap-4 flex-1">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">
+              <h1 className="text-2xl font-bold text-[hsl(var(--foreground))]">
                 Engagement Analytics
               </h1>
               {lastUpdated && (
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
                   Last updated: {lastUpdated.toLocaleTimeString()}
                 </p>
               )}
@@ -134,11 +134,11 @@ export function FilterBar({
                   >
                     {filter.label}: {filter.value}
                     <button
-                      onClick={() => removeFilter(filter.key)}
-                      className="ml-1 hover:bg-gray-300 rounded-full p-0.5"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
+                    onClick={() => removeFilter(filter.key)}
+                    className="ml-1 hover:bg-gray-300 rounded-full p-0.5"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
                   </Badge>
                 ))}
                 <Button
