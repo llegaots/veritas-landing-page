@@ -117,7 +117,13 @@ export const useSequenceStore = create<SequenceStore>((set, get) => ({
       spec = createEmptySpec('New Sequence', 'user');
       set({ spec });
     }
-
+    
+    // Ensure spec is not null before applying patches
+    if (!spec) {
+      console.error('Failed to create empty spec');
+      return;
+    }
+    
     try {
       // Client-side validation
       const updatedSpec = applyPatchesToSpec(spec, ops);

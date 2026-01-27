@@ -528,9 +528,10 @@ export async function buildDraft(state: AgentState): Promise<Partial<AgentState>
     console.log('[buildDraft] No patches generated - messageCount:', messageCount, 'decisions:', decisions);
   }
 
+  const patchesState = addPatches(state, patches);
   return {
-    currentSpec: updatedSpec,
-    ...addPatches(state, patches),
+    ...patchesState,
+    currentSpec: updatedSpec, // Override with the updated spec after patches are applied
   };
 }
 
@@ -583,7 +584,9 @@ export async function writeCopy(state: AgentState): Promise<Partial<AgentState>>
     }
   }
 
-  for (const node of smsNodes) {
+  const messageCount = smsNodes.length;
+  for (let idx = 0; idx < smsNodes.length; idx++) {
+    const node = smsNodes[idx];
     if (node.type === 'send_sms' && (!node.content || node.content.trim().length === 0)) {
       let content = '';
       

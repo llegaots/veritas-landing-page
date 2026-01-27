@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createEmptySpec } from '@/lib/sequences/spec';
 import { compileSequenceToJobs } from '@/lib/sequences/compiler';
-import { applyPatchesToSpec } from '@/lib/sequences/patches';
+import { applyPatchesToSpec, type JSONPatchOperation } from '@/lib/sequences/patches';
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     spec.trigger.type = 'lead.created';
     
     // Add 2 SMS nodes manually
-    const patches = [
+    const patches: JSONPatchOperation[] = [
       {
         op: 'add',
         path: '/nodes/-',
