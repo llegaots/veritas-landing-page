@@ -79,7 +79,7 @@ if (useSupabase) {
 // Initialize local SQLite database
 // NOTE: This should NEVER be called in Vercel - use Supabase instead
 // Now uses async getLocalSqliteDb() from lib/sqlite.ts which has proper Vercel guards
-let db: any = null;
+// Note: db variable is declared above (line 47)
 async function getLocalDb(): Promise<any> {
   if (db) {
     return db;
