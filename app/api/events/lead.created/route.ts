@@ -4,20 +4,8 @@ import { getActiveVersion } from '@/lib/db';
 import { SequenceSpec } from '@/lib/sequences/spec';
 import { compileSequenceToJobs } from '@/lib/sequences/compiler';
 
-// Force Node.js runtime (not Edge)
-export const runtime = 'nodejs';
-
-// Runtime env validation - only check inside request handlers
-function getSupabaseEnv() {
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  
-  if (!supabaseUrl || !supabaseServiceKey) {
-    throw new Error('Missing required Supabase environment variables: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY');
-  }
-  
-  return { supabaseUrl, supabaseServiceKey };
-}
+const supabaseUrl = process.env.SUPABASE_URL!;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 // Verify webhook signature or org secret
 function verifyAuth(request: NextRequest): boolean {
@@ -43,21 +31,6 @@ export async function POST(request: NextRequest) {
   // Verify authentication
   if (!verifyAuth(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  // Get env vars at runtime (not module scope)
-  let supabaseUrl: string;
-  let supabaseServiceKey: string;
-  try {
-    const env = getSupabaseEnv();
-    supabaseUrl = env.supabaseUrl;
-    supabaseServiceKey = env.supabaseServiceKey;
-  } catch (error) {
-    console.error('Missing Supabase environment variables:', error);
-    return NextResponse.json(
-      { error: 'Server configuration error' },
-      { status: 500 }
-    );
   }
 
   try {

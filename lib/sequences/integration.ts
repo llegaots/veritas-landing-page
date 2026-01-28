@@ -25,8 +25,21 @@ export async function triggerSmsSequenceForLead(leadData: LeadData): Promise<{
   error?: string;
 }> {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
-                   (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
+    // Determine base URL - prefer env var, fallback to Vercel URL, then localhost
+    let baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+    
+    if (!baseUrl) {
+      // In server-side context, try to construct from Vercel env vars
+      if (process.env.VERCEL_URL) {
+        baseUrl = `https://${process.env.VERCEL_URL}`;
+      } else if (process.env.VERCEL) {
+        // Use production domain if available
+        baseUrl = 'https://veritas-landing-page.vercel.app';
+      } else {
+        // Fallback to localhost for local development
+        baseUrl = 'http://localhost:3000';
+      }
+    }
     
     const adminPassword = process.env.ADMIN_PASSWORD || 'veritas2024admin';
     
@@ -47,7 +60,10 @@ export async function triggerSmsSequenceForLead(leadData: LeadData): Promise<{
       attributes.email = leadData.email;
     }
     
-    const response = await fetch(`${baseUrl}/api/events/lead.created`, {
+    const url = `${baseUrl}/api/events/lead.created`;
+    console.log(`[triggerSmsSequenceForLead] Calling: ${url}`);
+    
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -61,20 +77,22 @@ export async function triggerSmsSequenceForLead(leadData: LeadData): Promise<{
     });
     
     if (!response.ok) {
-      const error = await response.text();
+      const errorText = await response.text();
+      console.error(`[triggerSmsSequenceForLead] HTTP ${response.status}: ${errorText}`);
       return {
         success: false,
-        error: error || 'Failed to trigger SMS sequence',
+        error: `HTTP ${response.status}: ${errorText || 'Failed to trigger SMS sequence'}`,
       };
     }
     
     const result = await response.json();
     return {
       success: true,
-      runs_created: result.runs_created,
-      run_ids: result.run_ids,
+      runs_created: result.runs_created || 0,
+      run_ids: result.run_ids || [],
     };
   } catch (error) {
+    console.error('[triggerSmsSequenceForLead] Error:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',

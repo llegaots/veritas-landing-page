@@ -9,9 +9,6 @@ import {
   getActiveVersion,
 } from '@/lib/db';
 
-// Force Node.js runtime (not Edge)
-export const runtime = 'nodejs';
-
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'veritas2024admin';
 
 function checkAuth(request: NextRequest): boolean {

@@ -30,13 +30,26 @@ export async function POST(request: NextRequest) {
     const investor = body.investor || body.fields || body;
     
     // Extract investor data
+    // Helper to extract string from Airtable select fields (objects with .name property)
+    const extractString = (value: any): string | null => {
+      if (!value) return null;
+      if (typeof value === 'string') return value;
+      if (Array.isArray(value) && value.length > 0) {
+        return typeof value[0] === 'string' ? value[0] : value[0]?.name || null;
+      }
+      if (typeof value === 'object' && value.name) {
+        return value.name;
+      }
+      return String(value);
+    };
+
     const investorData = {
       id: investor.id || investor.airtable_id || investor.investor_id,
-      investor_name: investor.investor_name || investor.name || investor['Investor Name'],
-      phone_number: investor.phone_number || investor.phone || investor['Phone Number'],
-      email_address: investor.email_address || investor.email || investor['Email Address'],
-      status: investor.status || investor['Status'],
-      property_name: investor.property_name || investor['Property Name'] || investor.deal,
+      investor_name: extractString(investor.investor_name || investor.name || investor['Investor Name']),
+      phone_number: extractString(investor.phone_number || investor.phone || investor['Phone Number']),
+      email_address: extractString(investor.email_address || investor.email || investor['Email Address']),
+      status: extractString(investor.status || investor['Status']),
+      property_name: extractString(investor.property_name || investor['Property Name'] || investor.deal),
     };
 
     // Validate required fields
@@ -65,6 +78,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Trigger SMS sequence (only for "New Lead" status - already checked above)
+    console.log('[investor-created] Triggering SMS sequence for investor:', {
+      id: investorData.id,
+      name: investorData.investor_name,
+      phone: investorData.phone_number,
+      status: investorData.status,
+    });
+
     const result = await triggerSmsSequenceForInvestor({
       id: investorData.id.toString(),
       investor_name: investorData.investor_name,
@@ -76,7 +96,20 @@ export async function POST(request: NextRequest) {
       onlyIfStatus: 'New Lead', // Double-check, though we already filtered above
     });
 
+    console.log('[investor-created] Result:', result);
+
     if (!result.success) {
+      // If skipped, return success with skip message
+      if (result.skipped) {
+        return NextResponse.json({
+          success: true,
+          skipped: true,
+          message: result.error || 'SMS sequence skipped',
+          investor_id: investorData.id,
+        });
+      }
+      
+      // Otherwise return error
       return NextResponse.json(
         { 
           error: result.error || 'Failed to trigger SMS sequence',
@@ -90,7 +123,7 @@ export async function POST(request: NextRequest) {
       success: true,
       message: 'SMS sequence triggered successfully',
       investor_id: investorData.id,
-      runs_created: result.runs_created,
+      runs_created: result.runs_created || 0,
     });
   } catch (error) {
     console.error('Error processing investor webhook:', error);
