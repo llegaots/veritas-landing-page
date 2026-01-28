@@ -29,6 +29,40 @@ for (const field of table.fields) {
   fields[field.name] = record.getCellValue(field);
 }
 
+// Try to get Status field using getCellValueAsString (works for formula/computed fields)
+// This is important because some Status fields are formulas that return null with getCellValue()
+try {
+  const statusField = table.getField('Status');
+  if (statusField) {
+    const statusString = record.getCellValueAsString(statusField);
+    if (statusString && statusString.trim() !== '' && statusString !== 'null') {
+      console.log('✅ Got Status via getCellValueAsString:', statusString);
+      fields['Status'] = statusString;
+    } else {
+      console.log('Status via getCellValueAsString is empty/null:', statusString);
+    }
+  }
+} catch (e) {
+  console.log('Could not get Status via getCellValueAsString:', e.message);
+}
+
+// Also try "New Lead" field - might be a checkbox that indicates status
+try {
+  const newLeadField = table.getField('New Lead');
+  if (newLeadField) {
+    const newLeadValue = record.getCellValue(newLeadField);
+    console.log('"New Lead" field value:', newLeadValue, 'Type:', typeof newLeadValue);
+    
+    // If "New Lead" is checked (true), and Status is still null, set Status to "New Lead"
+    if (newLeadValue === true && (!fields['Status'] || fields['Status'] === null)) {
+      console.log('✅ "New Lead" checkbox is checked, setting Status to "New Lead"');
+      fields['Status'] = 'New Lead';
+    }
+  }
+} catch (e) {
+  console.log('Could not get "New Lead" field:', e.message);
+}
+
 // Debug: Log all field names to help identify the correct field name
 console.log('Available fields:', Object.keys(fields).join(', '));
 
@@ -90,7 +124,7 @@ if (phoneValue && phoneValue !== null && phoneValue !== undefined && String(phon
 
 // Map status field variations (case-insensitive)
 // Airtable select fields return objects with {id, name, color}, so extract the name
-// Priority: Check "Status" first (most common), then "SMS Status"
+// Priority: Check "Status" first, then "New Lead" checkbox, then "SMS Status"
 const statusFieldVariations = [
   'Status', 'status',  // Check Status first (most common)
   'SMS Status', 'sms status',
@@ -101,9 +135,9 @@ let statusValue = null;
 let statusFieldName = null;
 
 // First, try exact match for "Status" field
-if (fields['Status']) {
+if (fields['Status'] !== null && fields['Status'] !== undefined) {
   const rawValue = fields['Status'];
-  console.log('Found "Status" field, raw value:', JSON.stringify(rawValue));
+  console.log('Found "Status" field, raw value:', JSON.stringify(rawValue), 'Type:', typeof rawValue);
   
   if (typeof rawValue === 'object' && rawValue !== null) {
     if (rawValue.name) {
@@ -116,6 +150,22 @@ if (fields['Status']) {
   } else if (typeof rawValue === 'string' && rawValue.trim() !== '') {
     statusValue = rawValue;
     statusFieldName = 'Status';
+  } else if (typeof rawValue === 'boolean') {
+    // If it's a boolean, skip it (not a status value)
+    console.log('Status field is boolean, skipping');
+  }
+}
+
+// Check "New Lead" field - might be a checkbox that indicates new lead status
+if (!statusValue && fields['New Lead'] !== null && fields['New Lead'] !== undefined) {
+  const newLeadValue = fields['New Lead'];
+  console.log('Found "New Lead" field, raw value:', JSON.stringify(newLeadValue), 'Type:', typeof newLeadValue);
+  
+  // If "New Lead" is true/checked, set status to "New Lead"
+  if (newLeadValue === true || newLeadValue === 'true' || newLeadValue === 1) {
+    statusValue = 'New Lead';
+    statusFieldName = 'New Lead';
+    console.log('✅ "New Lead" checkbox is checked, setting status to "New Lead"');
   }
 }
 
@@ -124,9 +174,15 @@ if (!statusValue) {
   for (const fieldName of Object.keys(fields)) {
     const lowerFieldName = fieldName.toLowerCase();
     for (const statusField of statusFieldVariations) {
-      if (lowerFieldName === statusField.toLowerCase() && fields[fieldName]) {
+      if (lowerFieldName === statusField.toLowerCase()) {
         const rawValue = fields[fieldName];
-        console.log(`Checking field "${fieldName}", raw value:`, JSON.stringify(rawValue));
+        
+        // Skip null/undefined values
+        if (rawValue === null || rawValue === undefined) {
+          continue;
+        }
+        
+        console.log(`Checking field "${fieldName}", raw value:`, JSON.stringify(rawValue), 'Type:', typeof rawValue);
         
         // Handle Airtable select field objects: {id, name, color}
         if (typeof rawValue === 'object' && rawValue !== null) {
@@ -160,8 +216,18 @@ if (statusValue) {
   console.log(`Status will be sent as: "${statusValue}"`);
 } else {
   console.log('⚠️ ERROR: No status value found!');
-  console.log('All fields:', Object.keys(fields).join(', '));
+  console.log('Status field raw value:', JSON.stringify(fields['Status']));
+  console.log('New Lead field raw value:', JSON.stringify(fields['New Lead']));
   console.log('Status-related fields:', Object.keys(fields).filter(f => f.toLowerCase().includes('status')).map(f => `${f}: ${JSON.stringify(fields[f])}`).join(', '));
+  
+  // If we can't find status but "New Lead" checkbox exists, default to "New Lead"
+  if (fields['New Lead'] !== null && fields['New Lead'] !== undefined) {
+    console.log('⚠️ Status field is null, but "New Lead" field exists. Defaulting to "New Lead" status.');
+    statusValue = 'New Lead';
+    fields.Status = 'New Lead';
+    fields.status = 'New Lead';
+    fields['SMS Status'] = 'New Lead';
+  }
 }
 
 // Map name field variations (case-insensitive)
