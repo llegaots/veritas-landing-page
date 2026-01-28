@@ -90,33 +90,78 @@ if (phoneValue && phoneValue !== null && phoneValue !== undefined && String(phon
 
 // Map status field variations (case-insensitive)
 // Airtable select fields return objects with {id, name, color}, so extract the name
-const statusFieldVariations = ['Status', 'status', 'Lead Status', 'Investor Status', 'Lead Status', 'Stage'];
+// Priority: Check "Status" first (most common), then "SMS Status"
+const statusFieldVariations = [
+  'Status', 'status',  // Check Status first (most common)
+  'SMS Status', 'sms status',
+  'Lead Status', 'Investor Status', 'Stage'
+];
+
 let statusValue = null;
-for (const fieldName of Object.keys(fields)) {
-  const lowerFieldName = fieldName.toLowerCase();
-  for (const statusField of statusFieldVariations) {
-    if (lowerFieldName === statusField.toLowerCase() && fields[fieldName]) {
-      const rawValue = fields[fieldName];
-      // Handle Airtable select field objects: {id, name, color}
-      if (typeof rawValue === 'object' && rawValue !== null && rawValue.name) {
-        statusValue = rawValue.name;
-      } else if (typeof rawValue === 'string') {
-        statusValue = rawValue;
-      } else {
-        statusValue = String(rawValue);
-      }
-      break;
+let statusFieldName = null;
+
+// First, try exact match for "Status" field
+if (fields['Status']) {
+  const rawValue = fields['Status'];
+  console.log('Found "Status" field, raw value:', JSON.stringify(rawValue));
+  
+  if (typeof rawValue === 'object' && rawValue !== null) {
+    if (rawValue.name) {
+      statusValue = rawValue.name;
+      statusFieldName = 'Status';
+    } else if (Array.isArray(rawValue) && rawValue.length > 0) {
+      statusValue = typeof rawValue[0] === 'object' ? rawValue[0].name : rawValue[0];
+      statusFieldName = 'Status';
     }
+  } else if (typeof rawValue === 'string' && rawValue.trim() !== '') {
+    statusValue = rawValue;
+    statusFieldName = 'Status';
   }
-  if (statusValue) break;
 }
 
+// If Status didn't work, try other variations
+if (!statusValue) {
+  for (const fieldName of Object.keys(fields)) {
+    const lowerFieldName = fieldName.toLowerCase();
+    for (const statusField of statusFieldVariations) {
+      if (lowerFieldName === statusField.toLowerCase() && fields[fieldName]) {
+        const rawValue = fields[fieldName];
+        console.log(`Checking field "${fieldName}", raw value:`, JSON.stringify(rawValue));
+        
+        // Handle Airtable select field objects: {id, name, color}
+        if (typeof rawValue === 'object' && rawValue !== null) {
+          if (rawValue.name) {
+            statusValue = rawValue.name;
+            statusFieldName = fieldName;
+            break;
+          } else if (Array.isArray(rawValue) && rawValue.length > 0) {
+            const firstItem = rawValue[0];
+            statusValue = typeof firstItem === 'object' && firstItem.name ? firstItem.name : firstItem;
+            statusFieldName = fieldName;
+            break;
+          }
+        } else if (typeof rawValue === 'string' && rawValue.trim() !== '') {
+          statusValue = rawValue;
+          statusFieldName = fieldName;
+          break;
+        }
+      }
+    }
+    if (statusValue) break;
+  }
+}
+
+// Set status in all expected formats
 if (statusValue) {
   fields.Status = statusValue;
   fields.status = statusValue;
-  console.log(`✅ Found status: ${statusValue}`);
+  fields['SMS Status'] = statusValue; // Also set SMS Status
+  console.log(`✅ Found status in field "${statusFieldName}": "${statusValue}"`);
+  console.log(`Status will be sent as: "${statusValue}"`);
 } else {
-  console.log('⚠️ Warning: No status field found');
+  console.log('⚠️ ERROR: No status value found!');
+  console.log('All fields:', Object.keys(fields).join(', '));
+  console.log('Status-related fields:', Object.keys(fields).filter(f => f.toLowerCase().includes('status')).map(f => `${f}: ${JSON.stringify(fields[f])}`).join(', '));
 }
 
 // Map name field variations (case-insensitive)
@@ -146,6 +191,14 @@ if (nameValue) {
   fields.investor_name = nameValue;
   fields.name = nameValue;
 }
+
+// Debug: Log what status value we're sending
+console.log('Status value being sent:', fields.Status || fields.status || 'null');
+console.log('All status-related fields:', {
+  'Status': fields.Status,
+  'status': fields.status,
+  'SMS Status': fields['SMS Status'],
+});
 
 // Prepare payload in format expected by investor-created webhook
 const payload = {

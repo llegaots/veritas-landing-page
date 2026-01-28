@@ -29,6 +29,16 @@ export async function POST(request: NextRequest) {
     // Support both direct investor object and Airtable webhook format
     const investor = body.investor || body.fields || body;
     
+    // Debug logging to see what we received
+    console.log('[investor-created] Received body keys:', Object.keys(body));
+    console.log('[investor-created] Investor object keys:', Object.keys(investor));
+    console.log('[investor-created] Status field raw value:', JSON.stringify(investor.status || investor['Status'] || investor['SMS Status']));
+    console.log('[investor-created] All status-related fields:', {
+      status: investor.status,
+      'Status': investor['Status'],
+      'SMS Status': investor['SMS Status'],
+    });
+    
     // Extract investor data
     // Helper to extract string from Airtable select fields (objects with .name property)
     const extractString = (value: any): string | null => {
@@ -43,12 +53,19 @@ export async function POST(request: NextRequest) {
       return String(value);
     };
 
+    // Try multiple status field variations
+    const rawStatus = investor.status || investor['Status'] || investor['SMS Status'] || investor['Lead Status'];
+    const extractedStatus = extractString(rawStatus);
+    
+    console.log('[investor-created] Raw status:', JSON.stringify(rawStatus));
+    console.log('[investor-created] Extracted status:', extractedStatus);
+
     const investorData = {
       id: investor.id || investor.airtable_id || investor.investor_id,
       investor_name: extractString(investor.investor_name || investor.name || investor['Investor Name']),
       phone_number: extractString(investor.phone_number || investor.phone || investor['Phone Number']),
       email_address: extractString(investor.email_address || investor.email || investor['Email Address']),
-      status: extractString(investor.status || investor['Status']),
+      status: extractedStatus,
       property_name: extractString(investor.property_name || investor['Property Name'] || investor.deal),
     };
 
