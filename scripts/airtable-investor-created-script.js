@@ -271,36 +271,55 @@ const payload = {
   fields, // Webhook expects fields object with Airtable field names
 };
 
-const res = await fetch(WEBHOOK_URL, {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    "x-webhook-secret": WEBHOOK_SECRET,
-  },
-  body: JSON.stringify(payload),
-});
+console.log('📤 Sending webhook request to:', WEBHOOK_URL);
+console.log('📦 Payload keys:', Object.keys(payload.fields || {}));
+console.log('📦 Payload size:', JSON.stringify(payload).length, 'bytes');
 
-const text = await res.text();
-let result;
 try {
-  result = JSON.parse(text);
-} catch (e) {
-  result = { message: text };
-}
+  const res = await fetch(WEBHOOK_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-webhook-secret": WEBHOOK_SECRET,
+    },
+    body: JSON.stringify(payload),
+  });
 
-if (!res.ok) {
-  throw new Error(`Webhook failed: HTTP ${res.status}\n${result.error || text.slice(0, 2000)}`);
-}
+  console.log('📥 Webhook response status:', res.status, res.statusText);
 
-// Check if SMS was skipped (e.g., status not "New Lead")
-if (result.skipped) {
-  console.log(`⚠️ SMS sequence skipped: ${result.message}`);
-} else {
-  console.log(`✅ SMS sequence triggered successfully`);
-  console.log(`Runs created: ${result.runs_created || 0}`);
-  console.log(`Investor ID: ${result.investor_id}`);
-}
+  const text = await res.text();
+  console.log('📥 Webhook response text (first 500 chars):', text.slice(0, 500));
+  
+  let result;
+  try {
+    result = JSON.parse(text);
+  } catch (e) {
+    console.log('⚠️ Could not parse response as JSON:', e.message);
+    result = { message: text };
+  }
 
-console.log(`Webhook sent OK: HTTP ${res.status}`);
-if (text) console.log(text.slice(0, 2000));
+  if (!res.ok) {
+    const errorMsg = `Webhook failed: HTTP ${res.status}\n${result.error || result.message || text.slice(0, 2000)}`;
+    console.error('❌', errorMsg);
+    throw new Error(errorMsg);
+  }
+
+  // Check if SMS was skipped (e.g., status not "New Lead")
+  if (result.skipped) {
+    console.log(`⚠️ SMS sequence skipped: ${result.message}`);
+    output.text(`⚠️ Skipped: ${result.message}`);
+  } else {
+    console.log(`✅ SMS sequence triggered successfully`);
+    console.log(`Runs created: ${result.runs_created || 0}`);
+    console.log(`Investor ID: ${result.investor_id}`);
+    output.text(`✅ Success: Investor synced (ID: ${result.investor_id})`);
+  }
+
+  console.log(`✅ Webhook sent OK: HTTP ${res.status}`);
+} catch (error) {
+  console.error('❌ Error calling webhook:', error);
+  console.error('❌ Error message:', error.message);
+  console.error('❌ Error stack:', error.stack);
+  throw new Error(`Failed to call webhook: ${error.message}`);
+}
 
