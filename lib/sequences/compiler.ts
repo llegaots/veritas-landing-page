@@ -48,8 +48,9 @@ function evaluateCondition(
 
 /**
  * Parse duration string (e.g., "1 hour", "2 days", "30 minutes") to milliseconds
+ * For testing: converts hours/days to minutes for test phone number (4385017336)
  */
-function parseDuration(duration: string): number {
+function parseDuration(duration: string, phoneNumber?: string): number {
   const normalized = duration.toLowerCase().trim();
   const match = normalized.match(/^(\d+)\s*(hour|hours|day|days|minute|minutes|min|mins|h|d|m)$/);
   
@@ -61,18 +62,25 @@ function parseDuration(duration: string): number {
   const amount = parseInt(match[1], 10);
   const unit = match[2];
 
+  // TEST MODE: Convert hours/days to minutes for test phone number
+  const TEST_PHONE = '4385017336';
+  const isTestPhone = phoneNumber && (
+    phoneNumber.includes(TEST_PHONE) || 
+    phoneNumber.replace(/\D/g, '').includes(TEST_PHONE)
+  );
+  
   const multipliers: Record<string, number> = {
     minute: 60 * 1000,
     minutes: 60 * 1000,
     min: 60 * 1000,
     mins: 60 * 1000,
     m: 60 * 1000,
-    hour: 60 * 60 * 1000,
-    hours: 60 * 60 * 1000,
-    h: 60 * 60 * 1000,
-    day: 24 * 60 * 60 * 1000,
-    days: 24 * 60 * 60 * 1000,
-    d: 24 * 60 * 60 * 1000,
+    hour: isTestPhone ? 60 * 1000 : 60 * 60 * 1000, // Convert hours to minutes for test
+    hours: isTestPhone ? 60 * 1000 : 60 * 60 * 1000,
+    h: isTestPhone ? 60 * 1000 : 60 * 60 * 1000,
+    day: isTestPhone ? 60 * 1000 : 24 * 60 * 60 * 1000, // Convert days to minutes for test
+    days: isTestPhone ? 60 * 1000 : 24 * 60 * 60 * 1000,
+    d: isTestPhone ? 60 * 1000 : 24 * 60 * 60 * 1000,
   };
 
   return amount * (multipliers[unit] || 60 * 60 * 1000);
@@ -137,7 +145,7 @@ function walkGraph(
     });
   } else if (node.type === 'wait') {
     const waitNode = node as WaitNode;
-    const waitMs = parseDuration(waitNode.duration || '1 hour');
+    const waitMs = parseDuration(waitNode.duration || '1 hour', context.phone);
     currentTime = new Date(currentTime.getTime() + waitMs);
   } else if (node.type === 'condition') {
     const condNode = node as ConditionNode;

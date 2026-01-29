@@ -46,6 +46,19 @@ async function sendViaTwilio(options: SmsSendOptions): Promise<SmsSendResult> {
     };
   }
 
+  // TEST MODE: Only send SMS to test phone number (4385017336)
+  const TEST_PHONE = '4385017336';
+  const phoneDigits = options.to.replace(/\D/g, '');
+  const isTestPhone = phoneDigits.includes(TEST_PHONE);
+  
+  if (!isTestPhone) {
+    console.log(`[SMS] Skipping SMS to ${options.to} - only sending to test number ${TEST_PHONE} during testing`);
+    return {
+      success: false,
+      error: `SMS blocked: Only test phone number (${TEST_PHONE}) allowed during testing`,
+    };
+  }
+
   try {
     // Dynamic import to avoid bundling Twilio in client
     const twilio = await import('twilio');
