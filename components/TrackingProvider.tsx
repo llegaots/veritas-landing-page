@@ -5,6 +5,8 @@ import { track } from '@/lib/tracking'
 
 export function TrackingProvider({ children }: { children: React.ReactNode }) {
   const startTime = useRef<number>(Date.now())
+  const totalHiddenTime = useRef<number>(0) // Track total time page was hidden
+  const hiddenStartTime = useRef<number | null>(null) // When page became hidden
   const meaningfulActions = useRef<Set<string>>(new Set())
   const scrollFired = useRef<Record<number, boolean>>({ 25: false, 50: false, 75: false })
   const isPageVisible = useRef<boolean>(true)
@@ -29,8 +31,34 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
       setTimeout(initScroll, 1000)
     }
     
-    // Don't track page_view immediately - wait to see if they stay > 7 seconds
-    // This will be handled in trackSessionEnd
+    // Track page_view on page load (for return visit detection)
+    // Check if this is a return visit (has anonymous_id in localStorage but no active session)
+    const SESSION_KEY = 'veritas_session_active'
+    const hasActiveSession = sessionStorage.getItem(SESSION_KEY) === 'true'
+    const anonId = localStorage.getItem('veritas_anon_id')
+    const isReturnVisit = anonId && !hasActiveSession
+    
+    // Track page_view after a short delay to ensure it's a real visit
+    // For return visits, track immediately; for first visits, wait 7 seconds (handled in trackSessionEnd)
+    if (isReturnVisit) {
+      // Return visit - track page_view immediately after page loads
+      setTimeout(() => {
+        const PAGE_VIEW_KEY = 'veritas_page_view_tracked'
+        if (!sessionStorage.getItem(PAGE_VIEW_KEY)) {
+          sessionStorage.setItem(PAGE_VIEW_KEY, 'true')
+          track('page_view', {
+            url: window.location.pathname,
+            referrer: document.referrer || undefined,
+            is_return_visit: true,
+          })
+        }
+      }, 1000) // Wait 1 second to ensure page is loaded
+    }
+    
+    // Mark this session as active
+    sessionStorage.setItem(SESSION_KEY, 'true')
+    
+    // For first visits, page_view will be tracked in trackSessionEnd if they stay >7 seconds
 
     // Track meaningful actions
     const handleMeaningfulAction = (eventType: string) => {
@@ -131,6 +159,21 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
 
     window.addEventListener('scroll', throttledScroll, { passive: true })
 
+    // Calculate accurate time on page (excluding hidden time)
+    const getAccurateTimeOnPage = (): number => {
+      const now = Date.now()
+      let hiddenTime = totalHiddenTime.current
+      
+      // If page is currently hidden, add the time since it became hidden
+      if (hiddenStartTime.current !== null && !isPageVisible.current) {
+        hiddenTime += (now - hiddenStartTime.current)
+      }
+      
+      // Total time = elapsed time - hidden time
+      const accurateTime = Math.max(0, (now - startTime.current) - hiddenTime)
+      return Math.round(accurateTime / 1000) // Convert to seconds
+    }
+
     // Track time on page and page view / early exit - only when user actually leaves
     const trackSessionEnd = () => {
       // Check sessionStorage to prevent duplicate tracking (survives component remounts)
@@ -141,7 +184,8 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
         return
       }
       
-      const timeOnPage = Math.round((Date.now() - startTime.current) / 1000)
+      // Calculate accurate time (excluding hidden time)
+      const timeOnPage = getAccurateTimeOnPage()
       
       // Only track if user was actually on the page for at least 1 second
       if (timeOnPage < 1) return
@@ -149,34 +193,91 @@ export function TrackingProvider({ children }: { children: React.ReactNode }) {
       // Mark as tracked in sessionStorage immediately to prevent duplicates
       sessionStorage.setItem(TIME_TRACKED_KEY, 'true')
       
+      // Use sendBeacon for reliable tracking when page is closing (especially on mobile)
+      const trackWithBeacon = (event: string, props: Record<string, any>) => {
+        // Get anonymous_id from localStorage (persists across sessions)
+        const anonId = localStorage.getItem('veritas_anon_id') || ''
+        
+        const payload = JSON.stringify({
+          event,
+          properties: props,
+          anonymous_id: anonId,
+          url: window.location.pathname,
+          referrer: document.referrer || undefined,
+          timestamp: Date.now(),
+        })
+        
+        // Try sendBeacon first (more reliable on mobile when closing browser)
+        if (navigator.sendBeacon) {
+          const blob = new Blob([payload], { type: 'application/json' })
+          const success = navigator.sendBeacon('/api/track', blob)
+          if (!success) {
+            // Fallback if sendBeacon fails
+            fetch('/api/track', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: payload,
+              keepalive: true,
+            }).catch(() => {})
+          }
+        } else {
+          // Fallback to regular fetch with keepalive
+          fetch('/api/track', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: payload,
+            keepalive: true, // Keep request alive even if page is closing
+          }).catch(() => {}) // Ignore errors - page might be closing
+        }
+      }
+      
       // Track time on page (single event per session)
-      track('time_on_page', { seconds: timeOnPage })
+      trackWithBeacon('time_on_page', { seconds: timeOnPage })
 
       // Track page_view only if user stayed more than 7 seconds
       if (timeOnPage >= 7 && !sessionStorage.getItem(PAGE_VIEW_KEY)) {
         sessionStorage.setItem(PAGE_VIEW_KEY, 'true')
-        track('page_view', {
+        trackWithBeacon('page_view', {
           url: window.location.pathname,
           referrer: document.referrer || undefined,
         })
       } else if (timeOnPage < 7) {
         // Track early exit if they left before 7 seconds
-        track('early_exit', { seconds: timeOnPage })
+        trackWithBeacon('early_exit', { seconds: timeOnPage })
       }
 
       // Track quick exit only if no meaningful action AND time is less than 10 seconds
       if (meaningfulActions.current.size === 0 && timeOnPage < 10) {
-        track('quick_exit', { seconds: timeOnPage })
+        trackWithBeacon('quick_exit', { seconds: timeOnPage })
       }
     }
 
-    // Use visibility change to detect when user actually leaves (not just tab switch)
+    // Use visibility change to pause/resume time tracking
+    // This ensures accurate time tracking when user switches tabs, minimizes browser, or closes Chrome
     const handleVisibilityChange = () => {
+      const now = Date.now()
+      
       if (document.visibilityState === 'hidden') {
-        // Page became hidden - user might have switched tabs or left
+        // Page became hidden - pause time tracking
         isPageVisible.current = false
+        hiddenStartTime.current = now
+        
+        // On mobile, if page is hidden for more than 30 seconds, assume they closed the browser
+        // and track the session end immediately
+        setTimeout(() => {
+          if (!isPageVisible.current && hiddenStartTime.current) {
+            // Page still hidden after 30 seconds - likely closed
+            trackSessionEnd()
+          }
+        }, 30000) // 30 seconds
+        
       } else if (document.visibilityState === 'visible') {
-        // Page became visible again - user came back to tab
+        // Page became visible again - resume time tracking
+        if (hiddenStartTime.current !== null) {
+          // Add the hidden time to total
+          totalHiddenTime.current += (now - hiddenStartTime.current)
+          hiddenStartTime.current = null
+        }
         isPageVisible.current = true
       }
     }

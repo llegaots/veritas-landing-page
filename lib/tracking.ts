@@ -1,17 +1,26 @@
 'use client'
 
-// Get or create anonymous ID from localStorage
+// Get or create anonymous ID from localStorage (persists across browser sessions)
+// - First visit → Creates new anonymous_id
+// - Return visits → Uses same anonymous_id (tracked automatically via page_view events on different days)
 export function getOrCreateAnonId(): string {
   if (typeof window === 'undefined') return '';
   
-  const STORAGE_KEY = 'veritas_anon_id';
-  let anonId = localStorage.getItem(STORAGE_KEY);
+  const ID_KEY = 'veritas_anon_id';
+  
+  // Get existing ID from localStorage (persists across browser sessions)
+  let anonId = localStorage.getItem(ID_KEY);
   
   if (!anonId) {
+    // First visit - create new anonymous_id
     anonId = `anon_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    localStorage.setItem(STORAGE_KEY, anonId);
+    localStorage.setItem(ID_KEY, anonId);
   }
   
+  // Return the same ID for return visits
+  // Return visits are automatically detected by the admin stats based on:
+  // - Same anonymous_id
+  // - page_view events on different days
   return anonId;
 }
 

@@ -11,7 +11,7 @@ interface KPIStatCardProps {
   title: string
   value: number | string
   trend?: KPITrend
-  formatValue?: (value: number) => string
+  formatValue?: (value: number | string) => string
   description?: string
   className?: string
 }
@@ -41,23 +41,19 @@ export function KPIStatCard({
       ? 'text-green-600'
       : trend?.trend === 'down'
         ? 'text-red-600'
-        : 'text-[hsl(var(--muted-foreground))]'
+        : 'text-gray-400'
 
   return (
-    <Card className={cn('bg-[hsl(var(--card))] border-[hsl(var(--border))]', className)}>
+    <Card className={cn('bg-white border-0 shadow-sm hover:shadow-md transition-all duration-200 rounded-xl overflow-hidden group cursor-pointer', className)}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-sm font-medium text-[hsl(var(--muted-foreground))]">
+        <CardTitle className="text-xs font-medium text-gray-500 uppercase tracking-wide">
           {title}
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-bold text-[hsl(var(--foreground))]">{displayValue}</div>
+        <div className="text-3xl font-bold text-gray-900 mb-2">{displayValue}</div>
         {trend && (
           <div className="mt-2 flex items-center gap-2">
-            <div className={cn('flex items-center gap-1 text-xs', trendColor)}>
-              {trendIcon}
-              <span>{formatDelta(trend.deltaPercent, true)}</span>
-            </div>
             <div className="flex-1">
               <TrendSparkline
                 data={trend.sparklineData}
@@ -68,10 +64,10 @@ export function KPIStatCard({
           </div>
         )}
         {description && (
-          <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">{description}</p>
+          <p className="text-xs text-gray-500 mt-2">{description}</p>
         )}
+        <div className="h-1 bg-gradient-to-r from-purple-500 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity mt-3 rounded-full"></div>
       </CardContent>
     </Card>
   )
 }
-

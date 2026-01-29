@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { X, RefreshCw, Download, Filter } from 'lucide-react'
+import { X, RefreshCw, Download, Filter, Clock } from 'lucide-react'
 import { FilterState, DateRange } from '@/lib/admin/types'
 import { getActiveFilters } from '@/lib/admin/filters'
 import { formatDate } from '@/lib/admin/format'
@@ -89,31 +89,38 @@ export function FilterBar({
   }
 
   return (
-    <div className="sticky top-0 z-50 bg-[hsl(var(--card))] border-b border-[hsl(var(--border))] shadow-sm backdrop-blur-sm bg-opacity-95">
+    <div className="sticky top-[73px] z-40 bg-white/60 backdrop-blur-xl border-b border-gray-200/50 shadow-sm">
       <div className="px-4 lg:px-8 py-4">
         <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
           {/* Left: Title and Date Range */}
           <div className="flex items-center gap-4 flex-1">
             <div>
-              <h1 className="text-2xl font-bold text-[hsl(var(--foreground))]">
+              <h2 className="text-lg font-semibold text-gray-900">
                 Engagement Analytics
-              </h1>
+              </h2>
               {lastUpdated && (
-                <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
-                  Last updated: {lastUpdated.toLocaleTimeString()}
-                </p>
+                <div className="flex items-center gap-1.5 mt-1">
+                  <Clock className="h-3 w-3 text-gray-400" />
+                  <p className="text-xs text-gray-500">
+                    Last updated: {lastUpdated.toLocaleTimeString()}
+                  </p>
+                </div>
               )}
             </div>
             <Select
               value={filters.dateRange.label}
               onValueChange={handleDateRangeChange}
             >
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-[180px] border-gray-200 hover:border-purple-300 focus:border-purple-500 focus:ring-2 focus:ring-purple-500 focus:ring-offset-0 rounded-lg bg-white transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="rounded-lg border-gray-200 shadow-lg bg-white z-50">
                 {dateRangeOptions.map((option) => (
-                  <SelectItem key={option.label} value={option.label}>
+                  <SelectItem 
+                    key={option.label} 
+                    value={option.label}
+                    className="hover:bg-purple-50 focus:bg-purple-50 cursor-pointer rounded-md transition-colors duration-150"
+                  >
                     {option.label}
                   </SelectItem>
                 ))}
@@ -122,30 +129,29 @@ export function FilterBar({
           </div>
 
           {/* Right: Filters and Actions */}
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-3 flex-wrap">
             {/* Active Filter Chips */}
             {activeFilters.length > 0 && (
               <div className="flex items-center gap-2 flex-wrap">
                 {activeFilters.map((filter) => (
                   <Badge
                     key={filter.key}
-                    variant="secondary"
-                    className="flex items-center gap-1"
+                    className="bg-purple-100 text-purple-700 border-0 hover:bg-purple-200 transition-colors flex items-center gap-1.5 px-3 py-1 rounded-full"
                   >
                     {filter.label}: {filter.value}
                     <button
-                    onClick={() => removeFilter(filter.key)}
-                    className="ml-1 hover:bg-gray-300 rounded-full p-0.5"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
+                      onClick={() => removeFilter(filter.key)}
+                      className="ml-1 hover:bg-purple-300 rounded-full p-0.5 transition-colors"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
                   </Badge>
                 ))}
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={clearAllFilters}
-                  className="text-xs"
+                  className="text-xs text-gray-600 hover:text-purple-600 hover:bg-purple-50 rounded-lg cursor-pointer"
                 >
                   Clear all
                 </Button>
@@ -154,12 +160,22 @@ export function FilterBar({
 
             {/* Action Buttons */}
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={onRefresh}>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={onRefresh}
+                className="border-gray-200 text-gray-700 hover:bg-purple-50 hover:border-purple-300 hover:text-purple-700 transition-all duration-200 rounded-lg cursor-pointer"
+              >
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Refresh
               </Button>
               {onExport && (
-                <Button variant="outline" size="sm" onClick={onExport}>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={onExport}
+                  className="border-gray-200 text-gray-700 hover:bg-purple-50 hover:border-purple-300 hover:text-purple-700 transition-all duration-200 rounded-lg cursor-pointer"
+                >
                   <Download className="h-4 w-4 mr-2" />
                   Export
                 </Button>
@@ -171,4 +187,3 @@ export function FilterBar({
     </div>
   )
 }
-

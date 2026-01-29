@@ -30,7 +30,8 @@ if (typeof console !== 'undefined') {
 // CRITICAL: Check Supabase at runtime, not module load time
 // In Vercel, env vars might not be available during build but are at runtime
 function checkSupabase(): boolean {
-  return !!(process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY);
+  // Check for either ANON_KEY or SERVICE_ROLE_KEY (both work)
+  return !!(process.env.SUPABASE_URL && (process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY));
 }
 
 // Initial check for logging
@@ -211,21 +212,66 @@ export async function insertEvent(data: {
   }
 }
 
+// Get existing name for an anonymous_id (from any event that has a name)
+export async function getNameForAnonymousId(anonymousId: string): Promise<string | null> {
+  const runtimeUseSupabase = checkSupabase();
+  const client = runtimeUseSupabase ? getSupabaseClient() : null;
+  
+  if (runtimeUseSupabase && client) {
+    // Get the most recent event with a name for this anonymous_id
+    const { data, error } = await client
+      .from('events')
+      .select('name')
+      .eq('anonymous_id', anonymousId)
+      .not('name', 'is', null)
+      .order('timestamp', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+      console.error('[getNameForAnonymousId] Supabase query error:', error);
+      return null;
+    }
+    
+    return data?.name || null;
+  } else {
+    // Local DB fallback
+    const db = await getLocalDb();
+    const stmt = db.prepare(`
+      SELECT name FROM events 
+      WHERE anonymous_id = ? AND name IS NOT NULL AND name != ''
+      ORDER BY timestamp DESC
+      LIMIT 1
+    `);
+    const result = stmt.get(anonymousId) as { name: string } | undefined;
+    return result?.name || null;
+  }
+}
+
 export async function updateNameForAnonymousId(anonymousId: string, name: string) {
   const runtimeUseSupabase = checkSupabase();
   const client = runtimeUseSupabase ? getSupabaseClient() : null;
   
   if (runtimeUseSupabase && client) {
-    const { error } = await (client
-      .from('events') as any)
+    // Update all events for this anonymous_id to have the name
+    // Update all events (not just null ones) to ensure consistency
+    console.log(`[updateNameForAnonymousId] Updating events for ${anonymousId} with name: "${name}"`)
+    
+    // Update all events for this anonymous_id
+    const { data, error } = await client
+      .from('events')
       .update({ name })
       .eq('anonymous_id', anonymousId)
-      .is('name', null);
+      .select('id');
 
     if (error) {
-      console.error('Supabase update error:', error);
+      console.error('[updateNameForAnonymousId] Supabase update error:', error);
       throw error;
     }
+    
+    const updatedCount = data?.length || 0
+    console.log(`[updateNameForAnonymousId] Successfully updated ${updatedCount} events`)
+    return { updated: updatedCount }
   } else {
     // Check at runtime
     const runtimeIsVercel = !!(
@@ -240,10 +286,11 @@ export async function updateNameForAnonymousId(anonymousId: string, name: string
       throw new Error('Local database not available in Vercel. Please configure Supabase (SUPABASE_URL and SUPABASE_ANON_KEY).');
     }
     const db = await getLocalDb();
+    // Update all events for this anonymous_id where name is NULL or empty
     const stmt = db.prepare(`
       UPDATE events 
       SET name = ? 
-      WHERE anonymous_id = ? AND name IS NULL
+      WHERE anonymous_id = ? AND (name IS NULL OR name = '')
     `);
     
     stmt.run(name, anonymousId);

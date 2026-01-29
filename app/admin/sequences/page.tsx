@@ -146,7 +146,7 @@ function SequencesPageContent() {
   }
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="admin-font h-screen flex flex-col">
       {/* Error Banner */}
       {error && (
         <div className="bg-red-50 border-b border-red-200 p-4 flex items-center justify-between">

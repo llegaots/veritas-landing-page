@@ -100,7 +100,11 @@ function processEventsIntoStats(events: any[]) {
 
   eventsByUser.forEach((userEvents, anonymousId) => {
     const pageViews = userEvents.filter(e => e.event === 'page_view');
-    const returnVisits = new Set(pageViews.map(e => Math.floor(e.timestamp / (24 * 60 * 60 * 1000)))).size - 1;
+    
+    // Calculate return visits: Simple logic - if there are 2+ page_view events, count as returns
+    // Each additional page_view after the first represents a return visit
+    // Example: 2 page_views = 1 return visit, 3 page_views = 2 return visits, etc.
+    const returnVisits = Math.max(0, pageViews.length - 1);
     
     const scroll25 = userEvents.filter(e => e.event === 'scroll_25').length;
     const scroll50 = userEvents.filter(e => e.event === 'scroll_50').length;

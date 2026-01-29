@@ -131,10 +131,10 @@ export function DataTable<T extends { [key: string]: any }>({
   }
 
   return (
-    <Card className={cn("bg-white border-0 shadow-lg rounded-xl overflow-hidden", className)}>
-      <CardHeader className="bg-gradient-to-r from-slate-50 to-gray-50 border-b border-gray-200">
+    <Card className={cn("bg-white border-0 shadow-sm rounded-xl overflow-hidden", className)}>
+      <CardHeader className="bg-gray-50 border-b border-gray-200">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-gray-800 font-semibold">
+          <CardTitle className="text-gray-900 font-semibold">
             {processedData.length} {processedData.length === 1 ? 'result' : 'results'}
           </CardTitle>
           <div className="flex items-center gap-2">
@@ -147,25 +147,26 @@ export function DataTable<T extends { [key: string]: any }>({
                   onChange={(e) =>
                     setTableState((prev) => ({ ...prev, search: e.target.value, page: 1 }))
                   }
-                  className="pl-8 w-64"
+                  className="pl-8 w-64 border-gray-200 hover:border-gray-300 focus:border-gray-400 focus:ring-2 focus:ring-gray-400 focus:ring-offset-0 rounded-lg transition-all duration-200 text-gray-900"
                 />
               </div>
             )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" className="border-gray-200 hover:border-gray-300 hover:bg-gray-50 cursor-pointer transition-all duration-200 text-gray-900">
                   <Columns className="h-4 w-4 mr-2" />
                   Columns
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
+              <DropdownMenuContent align="end" className="w-48 rounded-lg border-gray-200 shadow-lg bg-white z-50">
+                <DropdownMenuLabel className="text-gray-900">Toggle columns</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 {columns.map((column) => (
                   <DropdownMenuCheckboxItem
                     key={column.id}
                     checked={tableState.visibleColumns.has(column.id)}
                     onCheckedChange={() => toggleColumnVisibility(column.id)}
+                    className="hover:bg-gray-50 focus:bg-gray-50 cursor-pointer rounded-md transition-colors duration-150 text-gray-900"
                   >
                     {column.header}
                   </DropdownMenuCheckboxItem>
@@ -174,12 +175,12 @@ export function DataTable<T extends { [key: string]: any }>({
             </DropdownMenu>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" className="border-gray-200 hover:border-gray-300 hover:bg-gray-50 cursor-pointer transition-all duration-200 text-gray-900">
                   <GripVertical className="h-4 w-4 mr-2" />
                   {tableState.density === 'compact' ? 'Compact' : 'Comfortable'}
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+              <DropdownMenuContent align="end" className="rounded-lg border-gray-200 shadow-lg bg-white z-50">
                 <DropdownMenuCheckboxItem
                   checked={tableState.density === 'compact'}
                   onCheckedChange={(checked) =>
@@ -188,6 +189,7 @@ export function DataTable<T extends { [key: string]: any }>({
                       density: checked ? 'compact' : 'comfortable',
                     }))
                   }
+                  className="hover:bg-gray-50 focus:bg-gray-50 cursor-pointer rounded-md transition-colors duration-150 text-gray-900"
                 >
                   Compact
                 </DropdownMenuCheckboxItem>
@@ -199,6 +201,7 @@ export function DataTable<T extends { [key: string]: any }>({
                       density: checked ? 'comfortable' : 'compact',
                     }))
                   }
+                  className="hover:bg-gray-50 focus:bg-gray-50 cursor-pointer rounded-md transition-colors duration-150 text-gray-900"
                 >
                   Comfortable
                 </DropdownMenuCheckboxItem>
@@ -211,13 +214,13 @@ export function DataTable<T extends { [key: string]: any }>({
         <div className="rounded-lg overflow-hidden border-0 shadow-sm">
           <Table>
             <TableHeader>
-              <TableRow className="bg-gradient-to-r from-slate-100 to-gray-100 hover:from-slate-100 hover:to-gray-100 border-b-2 border-gray-200">
+              <TableRow className="bg-gray-100 hover:bg-gray-100 border-b-2 border-gray-300">
                 {visibleColumns.map((column) => (
                   <TableHead
                     key={column.id}
                     className={cn(
-                      'font-semibold text-gray-700',
-                      column.sortable !== false && 'cursor-pointer hover:bg-gray-200/50',
+                      'font-semibold text-gray-900',
+                      column.sortable !== false && 'cursor-pointer hover:bg-gray-200 transition-colors duration-200',
                       tableState.density === 'compact' ? 'py-3' : 'py-4'
                     )}
                     style={{ width: column.width }}
@@ -228,7 +231,7 @@ export function DataTable<T extends { [key: string]: any }>({
                     <div className="flex items-center gap-2">
                       {column.header}
                       {column.sortable !== false && (
-                        <ArrowUpDown className="h-3.5 w-3.5 text-gray-500" />
+                        <ArrowUpDown className="h-3.5 w-3.5 text-gray-700" />
                       )}
                     </div>
                   </TableHead>
@@ -252,7 +255,7 @@ export function DataTable<T extends { [key: string]: any }>({
                     className={cn(
                       'border-b border-gray-100',
                       index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50',
-                      onRowClick && 'cursor-pointer transition-all hover:bg-blue-50 hover:shadow-sm',
+                      onRowClick && 'cursor-pointer transition-all duration-200 hover:bg-gray-100 hover:shadow-sm',
                       tableState.density === 'compact' ? 'py-2' : 'py-4'
                     )}
                     onClick={() => onRowClick?.(row)}
@@ -286,6 +289,7 @@ export function DataTable<T extends { [key: string]: any }>({
                   }))
                 }
                 disabled={tableState.page === 1}
+                className="border-gray-300 hover:bg-gray-50 hover:border-gray-400 disabled:opacity-50 cursor-pointer transition-all duration-200 text-gray-900"
               >
                 <ChevronLeft className="h-4 w-4" />
                 Previous
@@ -300,6 +304,7 @@ export function DataTable<T extends { [key: string]: any }>({
                   }))
                 }
                 disabled={tableState.page === totalPages}
+                className="border-gray-300 hover:bg-gray-50 hover:border-gray-400 disabled:opacity-50 cursor-pointer transition-all duration-200 text-gray-900"
               >
                 Next
                 <ChevronRight className="h-4 w-4" />

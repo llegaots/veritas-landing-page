@@ -1,8 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 import { triggerSmsSequenceForInvestor } from '@/lib/sequences/integration';
 
 // Force Node.js runtime (not Edge)
 export const runtime = 'nodejs';
+
+// Runtime env validation - only check inside request handlers
+function getSupabaseEnv() {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error('Missing required Supabase environment variables: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY');
+  }
+  
+  return { supabaseUrl, supabaseServiceKey };
+}
 
 /**
  * Webhook endpoint to receive new investor data
@@ -60,29 +73,165 @@ export async function POST(request: NextRequest) {
     console.log('[investor-created] Raw status:', JSON.stringify(rawStatus));
     console.log('[investor-created] Extracted status:', extractedStatus);
 
-    const investorData = {
-      id: investor.id || investor.airtable_id || investor.investor_id,
-      investor_name: extractString(investor.investor_name || investor.name || investor['Investor Name']),
-      phone_number: extractString(investor.phone_number || investor.phone || investor['Phone Number']),
-      email_address: extractString(investor.email_address || investor.email || investor['Email Address']),
-      status: extractedStatus,
-      property_name: extractString(investor.property_name || investor['Property Name'] || investor.deal),
+    // Get Supabase client
+    const { supabaseUrl, supabaseServiceKey } = getSupabaseEnv();
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Field mapping from Airtable to Supabase
+    const fieldMappings: Record<string, string> = {
+      'Investor Name': 'investor_name',
+      'Email Address': 'email_address',
+      'Phone Number': 'phone_number',
+      'Status': 'status',
+      'Investor Type': 'investor_type',
+      'Liquid Ready': 'liquid_ready',
+      'Ready for Follow Up': 'ready_for_follow_up',
+      'Amount ($)': 'amount_dollars',
+      'Amount$': 'amount_dollars',
+      'Deal': 'deal',
+      'Source': 'source',
+      'Investor Notes': 'investor_notes',
+      'Created Time': 'created_time',
+      'Property Name': 'property_name',
     };
 
-    // Validate required fields
-    if (!investorData.id) {
+    // Helper to extract value from Airtable fields
+    const extractValue = (value: any, isDate = false, isNumber = false): any => {
+      if (!value) return null;
+      if (typeof value === 'string') {
+        if (isDate) return new Date(value).toISOString();
+        if (isNumber) {
+          const cleaned = value.replace(/[$,]/g, '');
+          return parseFloat(cleaned) || 0;
+        }
+        return value;
+      }
+      if (Array.isArray(value) && value.length > 0) {
+        const first = value[0];
+        if (typeof first === 'object' && first.name) return first.name;
+        return typeof first === 'string' ? first : String(first);
+      }
+      if (typeof value === 'object' && value.name) {
+        return value.name;
+      }
+      if (isNumber && typeof value === 'number') return value;
+      return String(value);
+    };
+
+    // Map Airtable fields to Supabase format
+    const airtableId = investor.id || investor.airtable_id || investor.investor_id;
+    if (!airtableId) {
       return NextResponse.json(
-        { error: 'Missing required field: id' },
+        { error: 'Missing required field: id or airtable_id' },
         { status: 400 }
       );
     }
 
-    if (!investorData.phone_number) {
+    const mappedRecord: any = {
+      airtable_id: airtableId,
+    };
+
+    // Map all fields from Airtable format
+    Object.entries(fieldMappings).forEach(([airtableField, supabaseColumn]) => {
+      const value = investor[airtableField];
+      if (value !== undefined && value !== null) {
+        if (supabaseColumn === 'created_time') {
+          mappedRecord[supabaseColumn] = extractValue(value, true);
+        } else if (supabaseColumn === 'amount_dollars') {
+          mappedRecord[supabaseColumn] = extractValue(value, false, true);
+        } else {
+          mappedRecord[supabaseColumn] = extractValue(value);
+        }
+      }
+    });
+
+    // Also try direct field names (for non-Airtable formats)
+    if (!mappedRecord.investor_name) {
+      mappedRecord.investor_name = extractString(investor.investor_name || investor.name || investor['Investor Name']);
+    }
+    if (!mappedRecord.phone_number) {
+      mappedRecord.phone_number = extractString(investor.phone_number || investor.phone || investor['Phone Number']);
+    }
+    if (!mappedRecord.email_address) {
+      mappedRecord.email_address = extractString(investor.email_address || investor.email || investor['Email Address']);
+    }
+    if (!mappedRecord.status) {
+      mappedRecord.status = extractedStatus;
+    }
+    if (!mappedRecord.source) {
+      mappedRecord.source = extractString(investor.source || investor['Source']);
+    }
+
+    // Validate required fields
+    if (!mappedRecord.phone_number) {
       return NextResponse.json(
         { error: 'Missing required field: phone_number' },
         { status: 400 }
       );
     }
+
+    // Check if investor already exists
+    const { data: existing } = await supabase
+      .from('investors')
+      .select('id, status')
+      .eq('airtable_id', airtableId)
+      .single();
+
+    let investorId: number;
+    const wasNewRecord = !existing;
+
+    if (existing) {
+      // Update existing record
+      const { id, ...updateData } = mappedRecord;
+      const { data: updated, error: updateError } = await supabase
+        .from('investors')
+        .update({
+          ...updateData,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existing.id)
+        .select('id')
+        .single();
+
+      if (updateError) {
+        console.error('[investor-created] Error updating investor:', updateError);
+        return NextResponse.json(
+          { error: `Failed to update investor: ${updateError.message}` },
+          { status: 500 }
+        );
+      }
+
+      investorId = updated.id;
+      console.log('[investor-created] Updated existing investor:', investorId);
+    } else {
+      // Insert new record
+      const { data: inserted, error: insertError } = await supabase
+        .from('investors')
+        .insert(mappedRecord)
+        .select('id')
+        .single();
+
+      if (insertError) {
+        console.error('[investor-created] Error inserting investor:', insertError);
+        return NextResponse.json(
+          { error: `Failed to insert investor: ${insertError.message}` },
+          { status: 500 }
+        );
+      }
+
+      investorId = inserted.id;
+      console.log('[investor-created] Created new investor:', investorId);
+    }
+
+    // Prepare investor data for SMS trigger
+    const investorData = {
+      id: investorId.toString(),
+      investor_name: mappedRecord.investor_name,
+      phone_number: mappedRecord.phone_number,
+      email_address: mappedRecord.email_address,
+      status: mappedRecord.status,
+      property_name: mappedRecord.property_name || mappedRecord.deal,
+    };
 
     // Only trigger SMS for investors with status "New Lead"
     const status = investorData.status?.toLowerCase().trim();
@@ -91,6 +240,8 @@ export async function POST(request: NextRequest) {
         success: true,
         message: `Investor status is "${investorData.status}", not "New Lead". SMS sequence not triggered.`,
         skipped: true,
+        investor_id: investorId,
+        was_new_record: wasNewRecord,
       });
     }
 
@@ -138,8 +289,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: 'SMS sequence triggered successfully',
-      investor_id: investorData.id,
+      message: 'Investor synced and SMS sequence triggered successfully',
+      investor_id: investorId,
+      was_new_record: wasNewRecord,
       runs_created: result.runs_created || 0,
     });
   } catch (error) {
@@ -152,5 +304,31 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+/**
+ * GET handler for testing the webhook endpoint
+ */
+export async function GET(request: NextRequest) {
+  return NextResponse.json({
+    message: 'Investor created webhook endpoint is active',
+    method: 'POST',
+    url: '/api/webhooks/investor-created',
+    headers_required: {
+      'Content-Type': 'application/json',
+      'x-webhook-secret': 'veritas2024admin',
+    },
+    body_format: {
+      fields: {
+        id: 'Airtable record ID',
+        'Investor Name': 'Investor name',
+        'Phone Number': 'Phone number (required)',
+        'Email Address': 'Email address',
+        'Status': 'Status (e.g., "New Lead")',
+        'Source': 'Source',
+        // ... other fields
+      },
+    },
+  });
 }
 

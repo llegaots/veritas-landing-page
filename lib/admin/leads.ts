@@ -11,7 +11,28 @@ export function filterLeads(
   leads: VisitorProfile[],
   filter: LeadFilter
 ): VisitorProfile[] {
+  // If no filters are active, return all leads
+  const activeFilters = [
+    filter.intentScoreMin !== undefined,
+    filter.bookedDemo !== undefined,
+    filter.returnVisits !== undefined,
+    filter.hasName !== undefined,
+  ].filter(Boolean)
+
+  if (activeFilters.length === 0) {
+    return leads
+  }
+
+  // Helper function to check if lead has an actual name (not "Visitor XYZ" format)
+  const hasActualName = (lead: VisitorProfile): boolean => {
+    if (!lead.name) return false
+    // Check if name starts with "Visitor" followed by space and alphanumeric (Visitor XYZ format)
+    return !lead.name.match(/^Visitor\s+anon[_\-]?/i)
+  }
+
+  // AND logic: show leads that match ALL of the selected filters
   return leads.filter((lead) => {
+    // All active filters must match (AND logic)
     if (filter.intentScoreMin !== undefined && lead.intent_score < filter.intentScoreMin) {
       return false
     }
@@ -21,7 +42,7 @@ export function filterLeads(
     if (filter.returnVisits !== undefined && (lead.return_visits > 0) !== filter.returnVisits) {
       return false
     }
-    if (filter.hasName !== undefined && !!lead.name !== filter.hasName) {
+    if (filter.hasName !== undefined && hasActualName(lead) !== filter.hasName) {
       return false
     }
     return true

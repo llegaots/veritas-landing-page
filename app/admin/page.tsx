@@ -34,6 +34,7 @@ import {
 } from '@/lib/admin/format'
 import { Event, VisitorProfile, TableColumn, KPITrend } from '@/lib/admin/types'
 import Link from 'next/link'
+import { BarChart3, Users, Activity, TrendingUp, ArrowRight, Sparkles } from 'lucide-react'
 
 interface Stats {
   summary: {
@@ -330,10 +331,10 @@ function AdminDashboardContent() {
     const demoBooked = stats.events_by_type['demo_booked'] || 0
 
     return [
-      { label: 'Page Views', value: pageViews, color: '#3b82f6' },
-      { label: '75% Scroll', value: scroll75, color: '#10b981' },
-      { label: 'CTA Clicks', value: ctaClicks, color: '#f59e0b' },
-      { label: 'Demo Booked', value: demoBooked, color: '#8b5cf6' },
+      { label: 'Page Views', value: pageViews, color: '#8b5cf6' },
+      { label: '75% Scroll', value: scroll75, color: '#a855f7' },
+      { label: 'CTA Clicks', value: ctaClicks, color: '#c084fc' },
+      { label: 'Demo Booked', value: demoBooked, color: '#d8b4fe' },
     ]
   }, [stats])
 
@@ -382,7 +383,6 @@ function AdminDashboardContent() {
       title: 'Contact lead',
       description: `Opening contact options for ${lead.name || lead.anonymous_id.substring(0, 8)}`,
     })
-    // TODO: Implement contact functionality
   }
 
   const handleTag = (lead: VisitorProfile) => {
@@ -390,7 +390,6 @@ function AdminDashboardContent() {
       title: 'Tag lead',
       description: `Tagging ${lead.name || lead.anonymous_id.substring(0, 8)}`,
     })
-    // TODO: Implement tagging functionality
   }
 
   // Convert per_user_stats to VisitorProfile format for LeadsDashboard
@@ -408,7 +407,7 @@ function AdminDashboardContent() {
       id: 'name',
       header: 'Name / ID',
       accessor: (row) => (
-        <span className={row.name ? 'font-semibold' : 'font-mono text-sm'}>
+        <span className={row.name ? 'font-semibold text-gray-900' : 'font-mono text-sm text-gray-600'}>
           {row.name || `${row.anonymous_id.substring(0, 20)}...`}
         </span>
       ),
@@ -417,32 +416,32 @@ function AdminDashboardContent() {
     {
       id: 'page_views',
       header: 'Views',
-      accessor: (row) => <span className="font-medium">{row.page_views}</span>,
+      accessor: (row) => <span className="font-medium text-gray-700">{row.page_views}</span>,
       sortable: true,
     },
     {
       id: 'return_visits',
       header: 'Returns',
-      accessor: (row) => row.return_visits,
+      accessor: (row) => <span className="text-gray-600">{row.return_visits}</span>,
       sortable: true,
     },
     {
       id: 'scroll',
       header: 'Scroll',
       accessor: (row) => (
-        <div className="flex gap-1">
+        <div className="flex gap-1.5">
           {row.scroll_25 > 0 && (
-            <Badge variant="outline" className="bg-blue-50 text-blue-800 text-xs">
+            <Badge className="bg-purple-100 text-purple-700 border-0 text-xs font-medium px-2 py-0.5">
               25
             </Badge>
           )}
           {row.scroll_50 > 0 && (
-            <Badge variant="outline" className="bg-orange-50 text-orange-800 text-xs">
+            <Badge className="bg-purple-200 text-purple-800 border-0 text-xs font-medium px-2 py-0.5">
               50
             </Badge>
           )}
           {row.scroll_75 > 0 && (
-            <Badge variant="outline" className="bg-green-50 text-green-800 text-xs">
+            <Badge className="bg-purple-500 text-white border-0 text-xs font-medium px-2 py-0.5">
               75
             </Badge>
           )}
@@ -452,7 +451,7 @@ function AdminDashboardContent() {
     {
       id: 'cta_clicks',
       header: 'CTA',
-      accessor: (row) => row.cta_clicks,
+      accessor: (row) => <span className="text-gray-600">{row.cta_clicks}</span>,
       sortable: true,
     },
     {
@@ -460,25 +459,25 @@ function AdminDashboardContent() {
       header: 'Demo',
       accessor: (row) =>
         row.demo_booked > 0 ? (
-          <Badge variant="outline" className="bg-green-100 text-green-800">
+          <Badge className="bg-green-100 text-green-700 border-0 font-medium">
             ✓
           </Badge>
         ) : (
-          <span className="text-[hsl(var(--muted-foreground))]">-</span>
+          <span className="text-gray-400">-</span>
         ),
       sortable: true,
     },
     {
       id: 'avg_time_on_page',
       header: 'Avg Time',
-      accessor: (row) => formatTime(row.avg_time_on_page),
+      accessor: (row) => <span className="text-gray-600">{formatTime(row.avg_time_on_page)}</span>,
       sortable: true,
     },
     {
       id: 'intent_score',
       header: 'Intent',
       accessor: (row) => (
-        <span className={row.intent_score >= 0 ? 'text-green-600 font-bold' : 'text-red-600 font-bold'}>
+        <span className={row.intent_score >= 0 ? 'text-purple-600 font-bold' : 'text-red-500 font-bold'}>
           {row.intent_score}
         </span>
       ),
@@ -488,12 +487,19 @@ function AdminDashboardContent() {
 
   if (!authenticated) {
     return (
-      <div className="admin-theme min-h-screen bg-[hsl(var(--background))] flex items-center justify-center p-4">
-        <div className="bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-lg shadow-xl p-8 max-w-md w-full">
-          <h1 className="text-2xl font-bold text-[hsl(var(--foreground))] mb-6">Admin Dashboard</h1>
+      <div className="admin-font min-h-screen bg-gradient-to-br from-purple-50 via-white to-purple-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full border border-purple-100">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center">
+              <Sparkles className="h-5 w-5 text-white" />
+            </div>
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-purple-800 bg-clip-text text-transparent">
+              Admin Dashboard
+            </h1>
+          </div>
           <form onSubmit={handleLogin}>
             <div className="mb-4">
-              <label htmlFor="password" className="block text-sm font-medium text-[hsl(var(--foreground))] mb-2">
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
                 Password
               </label>
               <Input
@@ -503,40 +509,66 @@ function AdminDashboardContent() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter admin password"
                 required
-                className="bg-[hsl(var(--input))] border-[hsl(var(--border))] text-[hsl(var(--foreground))]"
+                className="border-gray-200 focus:border-purple-500 focus:ring-purple-500 rounded-lg"
               />
             </div>
-            <Button type="submit" className="w-full bg-[hsl(var(--primary))] hover:opacity-90 text-[hsl(var(--primary-foreground))]">
+            <Button 
+              type="submit" 
+              className="w-full bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white font-medium rounded-lg shadow-md hover:shadow-lg transition-all duration-200 cursor-pointer"
+            >
               Access Dashboard
             </Button>
           </form>
-          {error && <p className="mt-4 text-sm text-red-400">{error}</p>}
+          {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
         </div>
       </div>
     )
   }
 
   return (
-    <div className="admin-theme min-h-screen bg-[hsl(var(--background))]">
+    <div className="admin-font min-h-screen bg-gradient-to-br from-gray-50 via-white to-purple-50/30">
       <Toaster />
-      {/* Navigation Bar */}
-      <div className="bg-[hsl(var(--card))] border-b border-[hsl(var(--border))] sticky top-0 z-10 backdrop-blur-sm bg-opacity-95">
-        <div className="px-4 lg:px-8 py-3 max-w-7xl mx-auto">
+      
+      {/* Modern Header with Purple Gradient */}
+      <div className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-gray-200/50 shadow-sm">
+        <div className="px-4 lg:px-8 py-4 max-w-7xl mx-auto">
           <div className="flex items-center justify-between">
-            <h1 className="text-xl font-semibold text-[hsl(var(--foreground))]">Engagement Analytics</h1>
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center shadow-md">
+                <BarChart3 className="h-5 w-5 text-white" />
+              </div>
+              <h1 className="text-xl font-bold bg-gradient-to-r from-purple-600 to-purple-800 bg-clip-text text-transparent">
+                Engagement Analytics
+              </h1>
+            </div>
             <div className="flex gap-2">
               <Link href={`/admin/investors?key=${encodeURIComponent(password)}`}>
-                <Button variant="outline" size="sm" className="border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--accent))]">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="border-gray-200 text-gray-700 hover:bg-purple-50 hover:border-purple-300 hover:text-purple-700 transition-all duration-200 rounded-lg cursor-pointer"
+                >
+                  <Users className="h-4 w-4 mr-2" />
                   View Investors
                 </Button>
               </Link>
               <Link href={`/admin/sequences?key=${encodeURIComponent(password)}`}>
-                <Button variant="outline" size="sm" className="border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--accent))]">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="border-gray-200 text-gray-700 hover:bg-purple-50 hover:border-purple-300 hover:text-purple-700 transition-all duration-200 rounded-lg cursor-pointer"
+                >
+                  <Activity className="h-4 w-4 mr-2" />
                   SMS Sequences
                 </Button>
               </Link>
               <Link href={`/admin/sms-veritas?key=${encodeURIComponent(password)}`}>
-                <Button variant="outline" size="sm" className="border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--accent))]">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="border-gray-200 text-gray-700 hover:bg-purple-50 hover:border-purple-300 hover:text-purple-700 transition-all duration-200 rounded-lg cursor-pointer"
+                >
+                  <TrendingUp className="h-4 w-4 mr-2" />
                   Veritas Sequence
                 </Button>
               </Link>
@@ -544,6 +576,7 @@ function AdminDashboardContent() {
           </div>
         </div>
       </div>
+
       <FilterBar
         filters={filters}
         onFiltersChange={setFilters}
@@ -556,30 +589,44 @@ function AdminDashboardContent() {
         {loading && (
           <div className="space-y-4">
             {[...Array(8)].map((_, i) => (
-              <Skeleton key={i} className="h-24 w-full" />
+              <Skeleton key={i} className="h-24 w-full rounded-xl" />
             ))}
           </div>
         )}
 
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
             <p className="text-red-800">{error}</p>
           </div>
         )}
 
         {stats && !loading && (
           <>
-            {/* Primary Navigation Tabs */}
+            {/* Modern Tab Navigation */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
-              <TabsList className="grid w-full max-w-md grid-cols-3">
-                <TabsTrigger value="leads">Leads</TabsTrigger>
-                <TabsTrigger value="analytics">Analytics</TabsTrigger>
-                <TabsTrigger value="activity">Activity</TabsTrigger>
+              <TabsList className="bg-gray-100 p-1 rounded-xl border-0 w-full max-w-md grid grid-cols-3">
+                <TabsTrigger 
+                  value="leads" 
+                  className="data-[state=active]:bg-white data-[state=active]:text-purple-600 data-[state=active]:shadow-sm rounded-lg font-medium transition-all duration-200 cursor-pointer"
+                >
+                  Leads
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="analytics"
+                  className="data-[state=active]:bg-white data-[state=active]:text-purple-600 data-[state=active]:shadow-sm rounded-lg font-medium transition-all duration-200 cursor-pointer"
+                >
+                  Analytics
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="activity"
+                  className="data-[state=active]:bg-white data-[state=active]:text-purple-600 data-[state=active]:shadow-sm rounded-lg font-medium transition-all duration-200 cursor-pointer"
+                >
+                  Activity
+                </TabsTrigger>
               </TabsList>
 
-              {/* Leads Tab - Primary View */}
+              {/* Leads Tab */}
               <TabsContent value="leads" className="space-y-6 mt-6">
-                {/* Health Metrics (Collapsible) */}
                 <HealthMetrics
                   conversionRate={stats.summary.conversion_rate_percent}
                   conversionTrend={trends?.conversionRate}
@@ -595,13 +642,11 @@ function AdminDashboardContent() {
                   returnVisitorTrend={trends?.returnVisitorRate}
                 />
 
-                {/* Quick Insights (Collapsible) */}
                 <QuickInsights
                   insights={insights}
                   topDrivers={topDrivers}
                 />
 
-                {/* Leads Dashboard - Hero Section */}
                 <LeadsDashboard
                   leads={leads}
                   onLeadClick={handleLeadClick}
@@ -611,41 +656,53 @@ function AdminDashboardContent() {
                 />
               </TabsContent>
 
-              {/* Analytics Tab - Secondary View */}
+              {/* Analytics Tab */}
               <TabsContent value="analytics" className="space-y-6 mt-6">
-                {/* KPI Overview */}
+                {/* KPI Cards with Purple Theme */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <Card className="bg-[hsl(var(--card))] border-[hsl(var(--border))]">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium text-[hsl(var(--muted-foreground))]">Total Events</CardTitle>
+                  <Card className="bg-white border-0 shadow-sm hover:shadow-md transition-shadow duration-200 rounded-xl overflow-hidden group cursor-pointer">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                        Total Events
+                      </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold text-[hsl(var(--foreground))]">{stats.summary.total_events}</div>
+                      <div className="text-3xl font-bold text-gray-900">{stats.summary.total_events}</div>
                     </CardContent>
+                    <div className="h-1 bg-gradient-to-r from-purple-500 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                   </Card>
-                  <Card className="bg-[hsl(var(--card))] border-[hsl(var(--border))]">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium text-[hsl(var(--muted-foreground))]">Unique Visitors</CardTitle>
+                  <Card className="bg-white border-0 shadow-sm hover:shadow-md transition-shadow duration-200 rounded-xl overflow-hidden group cursor-pointer">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                        Unique Visitors
+                      </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold text-[hsl(var(--foreground))]">{stats.summary.unique_visitors}</div>
+                      <div className="text-3xl font-bold text-purple-600">{stats.summary.unique_visitors}</div>
                     </CardContent>
+                    <div className="h-1 bg-gradient-to-r from-purple-500 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                   </Card>
-                  <Card className="bg-[hsl(var(--card))] border-[hsl(var(--border))]">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium text-[hsl(var(--muted-foreground))]">Return Visitors</CardTitle>
+                  <Card className="bg-white border-0 shadow-sm hover:shadow-md transition-shadow duration-200 rounded-xl overflow-hidden group cursor-pointer">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                        Return Visitors
+                      </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold text-[hsl(var(--foreground))]">{stats.summary.return_visitors}</div>
+                      <div className="text-3xl font-bold text-purple-700">{stats.summary.return_visitors}</div>
                     </CardContent>
+                    <div className="h-1 bg-gradient-to-r from-purple-500 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                   </Card>
-                  <Card className="bg-[hsl(var(--card))] border-[hsl(var(--border))]">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium text-[hsl(var(--muted-foreground))]">Avg Time</CardTitle>
+                  <Card className="bg-white border-0 shadow-sm hover:shadow-md transition-shadow duration-200 rounded-xl overflow-hidden group cursor-pointer">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                        Avg Time
+                      </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold text-[hsl(var(--foreground))]">{stats.summary.avg_time_on_page_seconds}s</div>
+                      <div className="text-3xl font-bold text-gray-900">{stats.summary.avg_time_on_page_seconds}s</div>
                     </CardContent>
+                    <div className="h-1 bg-gradient-to-r from-purple-500 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                   </Card>
                 </div>
 
@@ -655,44 +712,47 @@ function AdminDashboardContent() {
                 )}
 
                 {/* Engagement Section */}
-                <Tabs defaultValue="scroll">
-                  <TabsList>
-                    <TabsTrigger value="scroll">Scroll Depth</TabsTrigger>
-                    <TabsTrigger value="time">Time Distribution</TabsTrigger>
+                <Tabs defaultValue="scroll" className="bg-white rounded-xl shadow-sm border-0 p-6">
+                  <TabsList className="bg-gray-100 p-1 rounded-lg mb-6">
+                    <TabsTrigger 
+                      value="scroll"
+                      className="data-[state=active]:bg-white data-[state=active]:text-purple-600 rounded-md font-medium cursor-pointer"
+                    >
+                      Scroll Depth
+                    </TabsTrigger>
+                    <TabsTrigger 
+                      value="time"
+                      className="data-[state=active]:bg-white data-[state=active]:text-purple-600 rounded-md font-medium cursor-pointer"
+                    >
+                      Time Distribution
+                    </TabsTrigger>
                   </TabsList>
-                  <TabsContent value="scroll">
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Scroll Depth Distribution</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="grid grid-cols-3 gap-4">
-                          <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-200">
-                            <p className="text-3xl font-bold text-blue-700">
-                              {stats.scroll_depth.scroll_25}
-                            </p>
-                            <p className="text-sm font-medium text-blue-600 mt-1">25% Scroll</p>
-                            <p className="text-xs text-gray-500 mt-1">+1 Intent Score</p>
-                          </div>
-                          <div className="text-center p-4 bg-orange-50 rounded-lg border border-orange-200">
-                            <p className="text-3xl font-bold text-orange-700">
-                              {stats.scroll_depth.scroll_50}
-                            </p>
-                            <p className="text-sm font-medium text-orange-600 mt-1">50% Scroll</p>
-                            <p className="text-xs text-gray-500 mt-1">+2 Intent Score</p>
-                          </div>
-                          <div className="text-center p-4 bg-green-50 rounded-lg border border-green-200">
-                            <p className="text-3xl font-bold text-green-700">
-                              {stats.scroll_depth.scroll_75}
-                            </p>
-                            <p className="text-sm font-medium text-green-600 mt-1">75% Scroll</p>
-                            <p className="text-xs text-gray-500 mt-1">+3 Intent Score</p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
+                  <TabsContent value="scroll" className="mt-0">
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="text-center p-6 bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl border border-purple-200 hover:shadow-md transition-shadow">
+                        <p className="text-4xl font-bold text-purple-700">
+                          {stats.scroll_depth.scroll_25}
+                        </p>
+                        <p className="text-sm font-semibold text-purple-600 mt-2">25% Scroll</p>
+                        <p className="text-xs text-gray-500 mt-1">+1 Intent Score</p>
+                      </div>
+                      <div className="text-center p-6 bg-gradient-to-br from-purple-100 to-purple-200 rounded-xl border border-purple-300 hover:shadow-md transition-shadow">
+                        <p className="text-4xl font-bold text-purple-800">
+                          {stats.scroll_depth.scroll_50}
+                        </p>
+                        <p className="text-sm font-semibold text-purple-700 mt-2">50% Scroll</p>
+                        <p className="text-xs text-gray-500 mt-1">+2 Intent Score</p>
+                      </div>
+                      <div className="text-center p-6 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl border-0 hover:shadow-lg transition-shadow text-white">
+                        <p className="text-4xl font-bold text-white">
+                          {stats.scroll_depth.scroll_75}
+                        </p>
+                        <p className="text-sm font-semibold text-purple-100 mt-2">75% Scroll</p>
+                        <p className="text-xs text-purple-200 mt-1">+3 Intent Score</p>
+                      </div>
+                    </div>
                   </TabsContent>
-                  <TabsContent value="time">
+                  <TabsContent value="time" className="mt-0">
                     <TimeDistributionChart
                       timeEvents={
                         stats.recent_events
@@ -719,33 +779,39 @@ function AdminDashboardContent() {
                 )}
               </TabsContent>
 
-              {/* Activity Tab - Tertiary View */}
+              {/* Activity Tab */}
               <TabsContent value="activity" className="space-y-6 mt-6">
-                <Card>
+                <Card className="bg-white border-0 shadow-sm rounded-xl">
                   <CardHeader>
-                    <CardTitle>Recent Events</CardTitle>
+                    <CardTitle className="text-lg font-semibold text-gray-900">Recent Events</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
-                      {stats.recent_events.slice(0, 50).map((event, idx) => (
-                        <div
-                          key={idx}
-                          className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors"
-                        >
-                          <div className="flex items-center gap-3">
-                            <Badge variant="outline">{event.event}</Badge>
-                            <span className="text-sm text-gray-600 font-mono">
-                              {event.anonymous_id.substring(0, 15)}...
+                      {stats.recent_events.slice(0, 50).map((event, idx) => {
+                        // Get visitor name from profile if event doesn't have name
+                        const visitorProfile = stats.per_user_stats.find(u => u.anonymous_id === event.anonymous_id)
+                        const displayName = event.name || visitorProfile?.name || null
+                        
+                        return (
+                          <div
+                            key={idx}
+                            className="flex items-center justify-between p-4 rounded-lg border border-gray-100 hover:bg-purple-50 hover:border-purple-200 transition-all duration-200 cursor-pointer group"
+                          >
+                            <div className="flex items-center gap-3">
+                              <Badge className="bg-purple-100 text-purple-700 border-0 font-medium">{event.event}</Badge>
+                              <span className="text-sm text-gray-600 font-mono">
+                                {event.anonymous_id.substring(0, 15)}...
+                              </span>
+                              {displayName && (
+                                <span className="text-sm font-medium text-gray-900">{displayName}</span>
+                              )}
+                            </div>
+                            <span className="text-xs text-gray-500 group-hover:text-purple-600 transition-colors">
+                              {formatDateTime(event.timestamp)}
                             </span>
-                            {event.name && (
-                              <span className="text-sm font-medium text-gray-900">{event.name}</span>
-                            )}
                           </div>
-                          <span className="text-xs text-gray-500">
-                            {formatDateTime(event.timestamp)}
-                          </span>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   </CardContent>
                 </Card>

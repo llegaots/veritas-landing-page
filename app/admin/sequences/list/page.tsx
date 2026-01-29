@@ -85,7 +85,7 @@ function SequencesListContent() {
   }
 
   return (
-    <div className="container mx-auto p-8">
+    <div className="admin-font container mx-auto p-8">
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">SMS Sequences</h1>

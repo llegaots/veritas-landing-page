@@ -596,7 +596,7 @@ function VeritasSequencePageContent() {
   }
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="admin-font h-screen flex flex-col">
       {/* Toolbar */}
       <div className="border-b p-4 flex items-center justify-between">
         <div>

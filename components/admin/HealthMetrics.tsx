@@ -32,15 +32,15 @@ export function HealthMetrics({
   const [expanded, setExpanded] = useState(false)
 
   return (
-    <Card className="bg-[hsl(var(--card))] border-[hsl(var(--border))]">
-      <CardHeader>
+    <Card className="bg-white border-0 shadow-sm hover:shadow-md transition-shadow duration-200 rounded-xl">
+      <CardHeader className="pb-4">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-[hsl(var(--foreground))]">Health Metrics</CardTitle>
+          <CardTitle className="text-lg font-semibold text-gray-900">Health Metrics</CardTitle>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setExpanded(!expanded)}
-            className="text-xs"
+            className="text-xs text-gray-600 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-all duration-200 cursor-pointer"
           >
             {expanded ? 'Show Less' : 'Show More'}
             {expanded ? (
@@ -77,7 +77,7 @@ export function HealthMetrics({
               />
               <KPIStatCard
                 title="Return Visitor Rate"
-                value={`${returnVisitorRate}%`}
+                value={`${returnVisitorRate.toFixed(1)}%`}
                 formatValue={(v) => `${v}%`}
                 trend={returnVisitorTrend}
               />
@@ -88,4 +88,3 @@ export function HealthMetrics({
     </Card>
   )
 }
-
