@@ -20,12 +20,11 @@ export function KPIStatCard({
   title,
   value,
   trend,
-  formatValue = formatNumber,
+  formatValue = (val: number | string) => typeof val === 'number' ? formatNumber(val) : String(val),
   description,
   className,
 }: KPIStatCardProps) {
-  const displayValue =
-    typeof value === 'string' ? value : typeof value === 'number' ? formatValue(value) : String(value)
+  const displayValue = formatValue(value)
 
   const trendIcon =
     trend?.trend === 'up' ? (
