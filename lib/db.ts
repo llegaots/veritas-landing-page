@@ -262,9 +262,10 @@ export async function updateNameForAnonymousId(anonymousId: string, name: string
     console.log(`[updateNameForAnonymousId] Updating events for ${anonymousId} with name: "${name}"`)
     
     // Update all events for this anonymous_id
+    // Type assertion needed because Database types aren't generated yet
     const { data, error } = await client
       .from('events')
-      .update({ name })
+      .update({ name } as any)
       .eq('anonymous_id', anonymousId)
       .select('id');
 
