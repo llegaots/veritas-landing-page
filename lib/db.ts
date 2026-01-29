@@ -250,9 +250,13 @@ export async function getNameForAnonymousId(anonymousId: string): Promise<string
 
 export async function updateNameForAnonymousId(anonymousId: string, name: string) {
   const runtimeUseSupabase = checkSupabase();
-  const client = runtimeUseSupabase ? getSupabaseClient() : null;
   
-  if (runtimeUseSupabase && client) {
+  if (runtimeUseSupabase) {
+    const client = getSupabaseClient();
+    if (!client) {
+      throw new Error('Supabase client not initialized');
+    }
+    
     // Update all events for this anonymous_id to have the name
     // Update all events (not just null ones) to ensure consistency
     console.log(`[updateNameForAnonymousId] Updating events for ${anonymousId} with name: "${name}"`)
