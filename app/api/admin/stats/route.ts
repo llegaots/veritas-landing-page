@@ -136,7 +136,6 @@ function processEventsIntoStats(events: any[]) {
       scroll_75: scroll75,
       cta_clicks: ctaClicks,
       demo_booked: demoBooked,
-      total_time_on_page: totalTime,
       avg_time_on_page: Math.round(avgTime),
       quick_exits: quickExits,
       intent_score: intentScore,
