@@ -263,9 +263,9 @@ export async function updateNameForAnonymousId(anonymousId: string, name: string
     
     // Update all events for this anonymous_id
     // Type assertion needed because Database types aren't generated yet
-    const { data, error } = await client
-      .from('events')
-      .update({ name } as any)
+    const { data, error } = await (client
+      .from('events') as any)
+      .update({ name })
       .eq('anonymous_id', anonymousId)
       .select('id');
 
