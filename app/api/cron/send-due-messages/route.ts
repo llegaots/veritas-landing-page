@@ -60,14 +60,19 @@ export async function GET(request: NextRequest) {
     const { data: jobs, error: fetchError } = await supabase
       .from('message_jobs')
       .select('*')
-      .eq('sent_at', null) // Not yet sent
+      .is('sent_at', null) // Not yet sent (use .is() for null checks)
       .lte('scheduled_for', now) // Due now or past
       .limit(100); // Process in batches
 
     if (fetchError) {
       console.error('Error fetching due jobs:', fetchError);
+      console.error('Error details:', JSON.stringify(fetchError, null, 2));
       return NextResponse.json(
-        { error: 'Failed to fetch jobs' },
+        { 
+          error: 'Failed to fetch jobs',
+          details: fetchError.message || String(fetchError),
+          code: fetchError.code,
+        },
         { status: 500 }
       );
     }
@@ -94,7 +99,7 @@ export async function GET(request: NextRequest) {
           .from('message_jobs')
           .update({ sent_at: new Date().toISOString() })
           .eq('id', job.id)
-          .eq('sent_at', null); // Only if still unsent
+          .is('sent_at', null); // Only if still unsent (use .is() for null checks)
 
         if (lockError) {
           // Another worker got it first
