@@ -233,7 +233,7 @@ export async function getNameForAnonymousId(anonymousId: string): Promise<string
       return null;
     }
     
-    return data?.name || null;
+    return (data as { name: string | null } | null)?.name || null;
   } else {
     // Local DB fallback
     const db = await getLocalDb();
