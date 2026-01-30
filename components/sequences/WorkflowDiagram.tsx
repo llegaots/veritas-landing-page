@@ -65,7 +65,7 @@ export function WorkflowDiagram() {
       // Map positions from original node IDs to step IDs
       if (spec.ui?.positions) {
         const mappedPositions: Record<string, { x: number; y: number }> = {};
-        migrated.steps.forEach(step => {
+        migrated.steps.forEach((step: any) => {
           // Step IDs are like "step_send_sms_123" for node "send_sms_123"
           if (step.id.startsWith('step_')) {
             const originalNodeId = step.id.replace(/^step_/, '');
