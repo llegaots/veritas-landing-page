@@ -395,11 +395,11 @@ export function WorkflowDiagram() {
       },
     };
     
-    setEdges((eds) => {
+    setEdges(((eds: Edge[]) => {
       // Remove any existing edges from the same source first
       const filtered = eds.filter(e => e.source !== connection.source);
-      return [...filtered, newEdge] as Edge[];
-    });
+      return [...filtered, newEdge];
+    }) as any);
     
     // If source already has an outgoing edge, remove it first (replace connection)
     // This allows disconnecting from one node and connecting to another
@@ -430,7 +430,6 @@ export function WorkflowDiagram() {
       value: {
         from: sourceNodeId,
         to: targetNodeId,
-        ...(connection.label && { label: connection.label }),
       },
     });
     
