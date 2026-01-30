@@ -393,7 +393,6 @@ export function WorkflowDiagram() {
         strokeWidth: 2.5,
         cursor: 'pointer',
       },
-      ...(connection.label && { label: connection.label }),
     };
     
     setEdges((eds) => {
