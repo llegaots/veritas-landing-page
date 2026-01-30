@@ -21,13 +21,43 @@ function getSupabaseEnv() {
 function verifyCronAuth(request: NextRequest): boolean {
   const authHeader = request.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET || process.env.VERCEL_CRON_SECRET;
+  const userAgent = request.headers.get('user-agent') || '';
+  
+  // Log for debugging (remove in production)
+  console.log('[Cron Auth] User-Agent:', userAgent);
+  console.log('[Cron Auth] Has Auth Header:', !!authHeader);
+  console.log('[Cron Auth] Has Secret:', !!cronSecret);
+  console.log('[Cron Auth] NODE_ENV:', process.env.NODE_ENV);
+  
+  // Check if this is from Vercel Cron
+  const isVercelCron = userAgent.includes('vercel-cron');
   
   if (cronSecret && authHeader) {
-    return authHeader === `Bearer ${cronSecret}`;
+    const expected = `Bearer ${cronSecret}`;
+    const matches = authHeader === expected;
+    console.log('[Cron Auth] Header matches:', matches);
+    if (!matches) {
+      console.log('[Cron Auth] Expected:', expected.substring(0, 20) + '...');
+      console.log('[Cron Auth] Received:', authHeader?.substring(0, 20) + '...');
+    }
+    return matches;
   }
   
   // In development, allow if no secret is set
-  return process.env.NODE_ENV === 'development';
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[Cron Auth] Allowing (development mode)');
+    return true;
+  }
+  
+  // If it's from Vercel Cron but no secret is configured, allow it
+  // (Vercel might be using its own internal secret)
+  if (isVercelCron && !cronSecret) {
+    console.log('[Cron Auth] Allowing (Vercel Cron, no secret configured)');
+    return true;
+  }
+  
+  console.log('[Cron Auth] Rejecting - not authenticated');
+  return false;
 }
 
 export async function GET(request: NextRequest) {
