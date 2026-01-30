@@ -46,17 +46,22 @@ async function sendViaTwilio(options: SmsSendOptions): Promise<SmsSendResult> {
     };
   }
 
-  // TEST MODE: Only send SMS to test phone number (4385017336)
+  // TEST MODE: Only send SMS to test phone number (if enabled)
+  // Set SMS_TEST_MODE=false in production to allow all numbers
+  const testMode = process.env.SMS_TEST_MODE !== 'false'; // Default to true for safety
   const TEST_PHONE = '4385017336';
-  const phoneDigits = options.to.replace(/\D/g, '');
-  const isTestPhone = phoneDigits.includes(TEST_PHONE);
   
-  if (!isTestPhone) {
-    console.log(`[SMS] Skipping SMS to ${options.to} - only sending to test number ${TEST_PHONE} during testing`);
-    return {
-      success: false,
-      error: `SMS blocked: Only test phone number (${TEST_PHONE}) allowed during testing`,
-    };
+  if (testMode) {
+    const phoneDigits = options.to.replace(/\D/g, '');
+    const isTestPhone = phoneDigits.includes(TEST_PHONE);
+    
+    if (!isTestPhone) {
+      console.log(`[SMS] Skipping SMS to ${options.to} - only sending to test number ${TEST_PHONE} during testing`);
+      return {
+        success: false,
+        error: `SMS blocked: Only test phone number (${TEST_PHONE}) allowed during testing. Set SMS_TEST_MODE=false to allow all numbers.`,
+      };
+    }
   }
 
   try {
@@ -64,10 +69,23 @@ async function sendViaTwilio(options: SmsSendOptions): Promise<SmsSendResult> {
     const twilio = await import('twilio');
     const client = twilio.default(accountSid, authToken);
 
+    console.log('[Twilio] Sending SMS:', {
+      to: options.to,
+      from: fromNumber,
+      bodyLength: options.body.length,
+    });
+
     const message = await client.messages.create({
       body: options.body,
       from: fromNumber,
       to: options.to,
+    });
+
+    console.log('[Twilio] Message created:', {
+      sid: message.sid,
+      status: message.status,
+      to: message.to,
+      from: message.from,
     });
 
     return {
@@ -76,6 +94,7 @@ async function sendViaTwilio(options: SmsSendOptions): Promise<SmsSendResult> {
       messageId: message.sid,
     };
   } catch (error) {
+    console.error('[Twilio] Error sending SMS:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown Twilio error',
