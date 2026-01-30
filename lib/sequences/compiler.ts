@@ -47,11 +47,32 @@ function evaluateCondition(
 }
 
 /**
- * Parse duration string (e.g., "1 hour", "2 days", "30 minutes") to milliseconds
+ * Parse duration string (e.g., "Day 1", "1 hour", "2 days", "30 minutes") to milliseconds
+ * Supports formats like "Day 1", "Day 2", "1 hour", "2 days", "30 minutes"
  * For testing: converts hours/days to minutes for test phone number (4385017336)
  */
 function parseDuration(duration: string, phoneNumber?: string): number {
   const normalized = duration.toLowerCase().trim();
+  
+  // Handle "Day 1", "Day 2", etc. - treat as immediate (0 delay) for first message
+  // Subsequent days are calculated from the start
+  const dayMatch = normalized.match(/^day\s+(\d+)$/);
+  if (dayMatch) {
+    const dayNumber = parseInt(dayMatch[1], 10);
+    if (dayNumber === 1) {
+      return 0; // Day 1 = immediate
+    }
+    // For Day 2+, calculate as (dayNumber - 1) days
+    const days = dayNumber - 1;
+    const TEST_PHONE = '4385017336';
+    const isTestPhone = phoneNumber && (
+      phoneNumber.includes(TEST_PHONE) || 
+      phoneNumber.replace(/\D/g, '').includes(TEST_PHONE)
+    );
+    return days * (isTestPhone ? 60 * 1000 : 24 * 60 * 60 * 1000);
+  }
+  
+  // Handle standard duration formats
   const match = normalized.match(/^(\d+)\s*(hour|hours|day|days|minute|minutes|min|mins|h|d|m)$/);
   
   if (!match) {
@@ -136,14 +157,34 @@ function walkGraph(
     const smsNode = node as SendSmsNode;
     const renderedContent = renderSmsContent(smsNode.content || '', context);
     
+    // Schedule this message at the current time
+    const scheduledTime = new Date(currentTime);
+    console.log(`[Compiler] Processing SMS node ${currentNodeId}:`);
+    console.log(`  - Current time: ${currentTime.toISOString()}`);
+    console.log(`  - Timing property: ${smsNode.timing || '(none)'}`);
+    console.log(`  - Message: ${renderedContent.substring(0, 50)}...`);
+    
     jobs.push({
       run_id: context.run_id as string,
       node_id: currentNodeId,
       phone_number: context.phone,
       message_text: renderedContent,
-      scheduled_for: currentTime.toISOString(),
+      scheduled_for: scheduledTime.toISOString(),
     });
+    
+    // Apply timing from SMS node (if specified) BEFORE moving to next node
+    // This ensures the next message is scheduled with the proper delay
+    if (smsNode.timing) {
+      const waitMs = parseDuration(smsNode.timing, context.phone);
+      const oldTime = new Date(currentTime);
+      currentTime = new Date(currentTime.getTime() + waitMs);
+      console.log(`  - Timing delay: ${waitMs}ms (${waitMs / 1000 / 60} minutes)`);
+      console.log(`  - Updated currentTime: ${oldTime.toISOString()} -> ${currentTime.toISOString()}`);
+    } else {
+      console.log(`  - No timing specified, currentTime unchanged`);
+    }
   } else if (node.type === 'wait') {
+    // Keep wait node support for backward compatibility, but prefer SMS timing
     const waitNode = node as WaitNode;
     const waitMs = parseDuration(waitNode.duration || '1 hour', context.phone);
     currentTime = new Date(currentTime.getTime() + waitMs);
@@ -164,8 +205,20 @@ function walkGraph(
   // Continue to next nodes via edges
   // (condition nodes already handled their edges above, so this only runs for other types)
   const outgoingEdges = getOutgoingEdges(spec, currentNodeId);
+  
+  if (outgoingEdges.length > 0) {
+    console.log(`[Compiler] Node ${currentNodeId} has ${outgoingEdges.length} outgoing edge(s), currentTime: ${currentTime.toISOString()}`);
+  }
+  
+  // Process edges sequentially, passing updated currentTime to each
+  // This ensures timing delays are properly accumulated
   for (const edge of outgoingEdges) {
+    console.log(`[Compiler] Processing edge ${currentNodeId} -> ${edge.to} with currentTime: ${currentTime.toISOString()}`);
+    // Use the updated currentTime from the previous iteration
+    // This ensures sequential nodes get properly delayed times
+    const timeBeforeRecursion = new Date(currentTime);
     currentTime = walkGraph(spec, edge.to, currentTime, context, visited, jobs);
+    console.log(`[Compiler] After processing edge ${currentNodeId} -> ${edge.to}: currentTime ${timeBeforeRecursion.toISOString()} -> ${currentTime.toISOString()}`);
   }
 
   return currentTime;

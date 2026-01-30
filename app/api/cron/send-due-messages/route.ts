@@ -52,16 +52,24 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
-  const now = new Date().toISOString();
+  const now = new Date();
+  const nowISO = now.toISOString();
 
   try {
     // Use FOR UPDATE SKIP LOCKED to prevent double-sends
     // Note: Supabase doesn't support SKIP LOCKED directly, so we'll use a transaction approach
+    // IMPORTANT: Only send messages that are actually due (scheduled_for <= now)
+    // This ensures messages with delays are sent at the correct time
+    // Add a small buffer (5 seconds) to account for clock skew and processing time
+    const bufferMs = 5000; // 5 seconds
+    const dueTime = new Date(now.getTime() + bufferMs).toISOString();
+    
     const { data: jobs, error: fetchError } = await supabase
       .from('message_jobs')
       .select('*')
       .is('sent_at', null) // Not yet sent (use .is() for null checks)
-      .lte('scheduled_for', now) // Due now or past
+      .lte('scheduled_for', dueTime) // Due now or past (with small buffer)
+      .order('scheduled_for', { ascending: true }) // Process in chronological order
       .limit(100); // Process in batches
 
     if (fetchError) {
@@ -94,6 +102,18 @@ export async function GET(request: NextRequest) {
     // Process each job
     for (const job of jobs) {
       try {
+        // Double-check that this job is actually due (defensive check)
+        const scheduledTime = new Date(job.scheduled_for);
+        const currentTime = new Date();
+        
+        // Skip if scheduled for the future (shouldn't happen due to query, but be safe)
+        // Allow a small buffer (5 seconds) for clock skew
+        const timeDiff = scheduledTime.getTime() - currentTime.getTime();
+        if (timeDiff > 5000) {
+          console.log(`[Cron] Skipping job ${job.id} - scheduled for future: ${job.scheduled_for} (${Math.round(timeDiff / 1000)}s ahead)`);
+          continue;
+        }
+        
         // Mark as processing (optimistic lock)
         const { error: lockError } = await supabase
           .from('message_jobs')
@@ -103,8 +123,11 @@ export async function GET(request: NextRequest) {
 
         if (lockError) {
           // Another worker got it first
+          console.log(`[Cron] Job ${job.id} already processed by another worker`);
           continue;
         }
+
+        console.log(`[Cron] Sending job ${job.id} scheduled for ${job.scheduled_for} (delay: ${Math.round((currentTime.getTime() - scheduledTime.getTime()) / 1000)}s)`);
 
         // Send SMS
         const sendResult = await sendSms({

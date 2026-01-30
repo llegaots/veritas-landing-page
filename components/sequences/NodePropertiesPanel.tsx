@@ -1,0 +1,516 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useSequenceStore } from '@/lib/store/sequence-store';
+import { SendSmsNode } from '@/lib/sequences/spec';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { MessageSquare, X, Play, Plus, ChevronDown, ChevronUp, Settings } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+
+export function NodePropertiesPanel() {
+  const { spec, selectedNodeId, setSelectedNodeId, applyOps } = useSequenceStore();
+  const [message, setMessage] = useState('');
+  const [timingValue, setTimingValue] = useState('');
+  const [timingUnit, setTimingUnit] = useState<'minutes' | 'hours' | 'days'>('hours');
+  const [triggerType, setTriggerType] = useState<'lead.created' | 'lead.demo_booked' | 'investor.matched' | 'manual'>('lead.created');
+  const [showVariableMapping, setShowVariableMapping] = useState(false);
+  const [newVariableName, setNewVariableName] = useState('');
+  const [selectedField, setSelectedField] = useState<string>('');
+
+  // Convert step ID to node ID if needed
+  // Step IDs are like "step_send_sms_123" for node "send_sms_123"
+  const actualNodeId = selectedNodeId?.startsWith('step_') 
+    ? selectedNodeId.replace(/^step_/, '')
+    : selectedNodeId;
+  
+  // Find selected node (using actual node ID)
+  const selectedNode = spec?.nodes.find(n => n.id === actualNodeId);
+  const isSmsNode = selectedNode?.type === 'send_sms';
+  const isTriggerNode = selectedNodeId === 'trigger' || selectedNode?.type === 'trigger';
+  
+  // Debug logging
+  if (selectedNodeId) {
+    console.log('[NodePropertiesPanel] Selected node ID:', selectedNodeId);
+    console.log('[NodePropertiesPanel] Actual node ID:', actualNodeId);
+    console.log('[NodePropertiesPanel] Found node:', selectedNode);
+    console.log('[NodePropertiesPanel] Is SMS node:', isSmsNode);
+  }
+
+  // Load node data when selection changes
+  useEffect(() => {
+    if (selectedNode && isSmsNode) {
+      const smsNode = selectedNode as SendSmsNode;
+      setMessage(smsNode.content || '');
+      
+      // Parse timing string (e.g., "2 hours", "30 minutes", "1 day")
+      if (smsNode.timing) {
+        const match = smsNode.timing.match(/^(\d+)\s*(minutes?|hours?|days?)$/i);
+        if (match) {
+          setTimingValue(match[1]);
+          const unit = match[2].toLowerCase();
+          if (unit.startsWith('minute')) setTimingUnit('minutes');
+          else if (unit.startsWith('hour')) setTimingUnit('hours');
+          else if (unit.startsWith('day')) setTimingUnit('days');
+        } else {
+          setTimingValue('');
+        }
+      } else {
+        setTimingValue('');
+      }
+    } else if (isTriggerNode && spec) {
+      // Load trigger type
+      setTriggerType(spec.trigger?.type || 'lead.created');
+    }
+  }, [selectedNode, isSmsNode, isTriggerNode, spec]);
+
+  // Don't render anything if no node is selected - parent will handle visibility
+  if (!selectedNodeId) {
+    return null;
+  }
+
+  // Handle trigger node
+  if (isTriggerNode) {
+    const handleTriggerSave = () => {
+      if (!spec) return;
+      
+      const patches = [{
+        op: 'replace' as const,
+        path: '/trigger/type',
+        value: triggerType,
+      }];
+      
+      console.log('[NodePropertiesPanel] Saving trigger type:', triggerType);
+      applyOps(patches);
+    };
+
+    return (
+      <div className="w-80 border-l border-gray-200 bg-white/50 backdrop-blur-sm flex flex-col">
+        <Card className="border-0 shadow-none rounded-none h-full flex flex-col">
+          <CardHeader className="bg-gradient-to-r from-purple-50 to-purple-100/50 px-4 py-3 border-b border-purple-100">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                <Play className="h-4 w-4 text-purple-600" />
+                Edit Trigger
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0 cursor-pointer"
+                onClick={() => setSelectedNodeId(null)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="p-4 flex-1 overflow-y-auto">
+            <div className="space-y-4">
+              <div>
+                <Label className="text-sm font-medium text-gray-700 mb-2 block">
+                  When to Trigger
+                </Label>
+                <Select value={triggerType} onValueChange={(value: any) => setTriggerType(value)}>
+                  <SelectTrigger className="w-full border-gray-200 hover:border-gray-300 focus:border-purple-500 focus:ring-2 focus:ring-purple-500 focus:ring-offset-0 rounded-lg bg-white transition-all duration-200 cursor-pointer text-gray-900">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="lead.created">New Lead Created</SelectItem>
+                    <SelectItem value="lead.demo_booked">Demo Booked</SelectItem>
+                    <SelectItem value="investor.matched">Investor Matched</SelectItem>
+                    <SelectItem value="manual">Manual</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Choose when this sequence should start
+                </p>
+              </div>
+              <Button
+                onClick={handleTriggerSave}
+                className="w-full bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white shadow-md hover:shadow-lg transition-all duration-200 rounded-lg cursor-pointer"
+              >
+                Save Changes
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Handle SMS node (existing code)
+  if (!isSmsNode) {
+    return (
+      <div className="w-80 border-l border-gray-200 bg-white/50 backdrop-blur-sm p-4">
+        <div className="text-center py-12">
+          <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-purple-100 to-purple-200 flex items-center justify-center mx-auto mb-3">
+            <MessageSquare className="h-6 w-6 text-purple-600" />
+          </div>
+          <p className="text-sm text-gray-600">
+            Select an SMS node to edit its properties
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const handleSave = () => {
+    if (!spec || !selectedNode) {
+      console.error('[NodePropertiesPanel] Cannot save: no spec or selectedNode');
+      return;
+    }
+
+    // Use actualNodeId to find the node in spec
+    const nodeIndex = spec.nodes.findIndex(n => n.id === actualNodeId);
+    if (nodeIndex === -1) {
+      console.error('[NodePropertiesPanel] Cannot find node with ID:', actualNodeId);
+      console.log('[NodePropertiesPanel] Available node IDs:', spec.nodes.map(n => n.id));
+      return;
+    }
+
+    const currentNode = spec.nodes[nodeIndex] as SendSmsNode;
+    const patches = [];
+
+    // Update message - check if content exists, use 'add' if it doesn't, 'replace' if it does
+    const currentContent = currentNode.content;
+    if (currentContent !== undefined) {
+      if (currentContent !== message) {
+        patches.push({
+          op: 'replace' as const,
+          path: `/nodes/${nodeIndex}/content`,
+          value: message,
+        });
+      }
+    } else {
+      patches.push({
+        op: 'add' as const,
+        path: `/nodes/${nodeIndex}/content`,
+        value: message,
+      });
+    }
+
+    // Update timing
+    const currentTiming = currentNode.timing;
+    if (timingValue && timingValue.trim() !== '') {
+      const timingString = `${timingValue} ${timingUnit}`;
+      if (currentTiming !== timingString) {
+        if (currentTiming !== undefined) {
+          patches.push({
+            op: 'replace' as const,
+            path: `/nodes/${nodeIndex}/timing`,
+            value: timingString,
+          });
+        } else {
+          patches.push({
+            op: 'add' as const,
+            path: `/nodes/${nodeIndex}/timing`,
+            value: timingString,
+          });
+        }
+      }
+    } else {
+      // Remove timing if empty and it exists
+      if (currentTiming !== undefined) {
+        patches.push({
+          op: 'remove' as const,
+          path: `/nodes/${nodeIndex}/timing`,
+        });
+      }
+    }
+
+    if (patches.length > 0) {
+      console.log('[NodePropertiesPanel] Saving changes to node:', {
+        selectedNodeId,
+        actualNodeId,
+        nodeIndex,
+        currentNodeId: currentNode.id,
+        patches,
+      });
+      applyOps(patches);
+      // DON'T call commitOpsToServer - user will click main "Save" button to persist
+      console.log('[NodePropertiesPanel] Changes applied locally. Click main "Save" button to persist.');
+    } else {
+      console.log('[NodePropertiesPanel] No changes to save');
+    }
+  };
+
+  return (
+    <div className="w-80 border-l border-gray-200 bg-white/50 backdrop-blur-sm flex flex-col">
+      <Card className="border-0 shadow-none rounded-none h-full flex flex-col">
+        <CardHeader className="bg-gradient-to-r from-purple-50 to-purple-100/50 px-4 py-3 border-b border-purple-100">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+              <MessageSquare className="h-4 w-4 text-purple-600" />
+              Edit SMS Node
+            </CardTitle>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 w-6 p-0 cursor-pointer"
+              onClick={() => setSelectedNodeId(null)}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="p-4 flex-1 overflow-y-auto">
+          <div className="space-y-4">
+            {/* Available Variables */}
+            {spec?.variables && Object.keys(spec.variables).length > 0 && (
+              <div>
+                <Label className="text-xs font-medium text-gray-700 mb-2 block">
+                  Available Variables (Click to Add)
+                </Label>
+                <div className="flex flex-wrap gap-2 p-2 bg-gray-50 rounded-lg border border-gray-200">
+                  {Object.keys(spec.variables).map((varName) => {
+                    const fieldId = spec.variables[varName];
+                    const INVESTOR_FIELDS: Record<string, string> = {
+                      investor_name: 'Investor Name',
+                      email_address: 'Email',
+                      phone_number: 'Phone',
+                      status: 'Status',
+                      investor_type: 'Type',
+                      amount_dollars: 'Amount',
+                      deal: 'Deal',
+                      source: 'Source',
+                      investor_notes: 'Notes',
+                    };
+                    const fieldLabel = INVESTOR_FIELDS[fieldId] || fieldId;
+                    
+                    return (
+                      <Button
+                        key={varName}
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const variableText = `{{${varName}}}`;
+                          setMessage(prev => prev + variableText);
+                        }}
+                        className="text-xs cursor-pointer border-purple-200 hover:bg-purple-50 hover:border-purple-300 hover:text-purple-700 transition-all"
+                      >
+                        <Plus className="h-3 w-3 mr-1" />
+                        {`{{${varName}}}`}
+                        <span className="ml-1 text-gray-400 text-[10px]">({fieldLabel})</span>
+                      </Button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Click a variable to insert it into your message
+                </p>
+              </div>
+            )}
+
+            {/* Message Content */}
+            <div>
+              <Label htmlFor="message" className="text-sm font-medium text-gray-700 mb-2 block">
+                Message Content
+              </Label>
+              <Textarea
+                id="message"
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder="Enter your SMS message here. Use {{FirstName}}, {{PropertyName}}, {{CalendarLink}} for personalization."
+                className="min-h-[120px] border-gray-200 hover:border-gray-300 focus:border-purple-500 focus:ring-2 focus:ring-purple-500 focus:ring-offset-0 rounded-lg transition-all duration-200 text-gray-900 resize-none"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                {message.length} characters
+              </p>
+            </div>
+
+            {/* Timing */}
+            <div>
+              <Label className="text-sm font-medium text-gray-700 mb-2 block">
+                Send After
+              </Label>
+              <div className="flex gap-2">
+                <Input
+                  type="number"
+                  min="1"
+                  value={timingValue}
+                  onChange={(e) => setTimingValue(e.target.value)}
+                  placeholder="e.g., 2"
+                  className="flex-1 border-gray-200 hover:border-gray-300 focus:border-purple-500 focus:ring-2 focus:ring-purple-500 focus:ring-offset-0 rounded-lg transition-all duration-200 text-gray-900"
+                />
+                <Select value={timingUnit} onValueChange={(value: any) => setTimingUnit(value)}>
+                  <SelectTrigger className="w-32 border-gray-200 hover:border-gray-300 focus:border-purple-500 focus:ring-2 focus:ring-purple-500 focus:ring-offset-0 rounded-lg bg-white transition-all duration-200 cursor-pointer text-gray-900">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="minutes">Minutes</SelectItem>
+                    <SelectItem value="hours">Hours</SelectItem>
+                    <SelectItem value="days">Days</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                When to send this message after the previous step
+              </p>
+            </div>
+
+            {/* Variable Mapping Section */}
+            <div className="border-t border-gray-200 pt-4">
+              <Button
+                variant="ghost"
+                onClick={() => setShowVariableMapping(!showVariableMapping)}
+                className="w-full justify-between p-2 hover:bg-gray-50 cursor-pointer"
+              >
+                <div className="flex items-center gap-2">
+                  <Settings className="h-4 w-4 text-gray-600" />
+                  <span className="text-sm font-medium text-gray-700">Map Variables</span>
+                </div>
+                {showVariableMapping ? (
+                  <ChevronUp className="h-4 w-4 text-gray-600" />
+                ) : (
+                  <ChevronDown className="h-4 w-4 text-gray-600" />
+                )}
+              </Button>
+              
+              {showVariableMapping && (
+                <div className="mt-3 space-y-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                  {/* Current Mappings */}
+                  {spec?.variables && Object.keys(spec.variables).length > 0 && (
+                    <div>
+                      <Label className="text-xs font-medium text-gray-700 mb-2 block">
+                        Current Mappings
+                      </Label>
+                      <div className="space-y-1">
+                        {Object.entries(spec.variables).map(([varName, fieldId]) => {
+                          const INVESTOR_FIELDS: Record<string, string> = {
+                            investor_name: 'Investor Name',
+                            email_address: 'Email',
+                            phone_number: 'Phone',
+                            status: 'Status',
+                            investor_type: 'Type',
+                            amount_dollars: 'Amount',
+                            deal: 'Deal',
+                            source: 'Source',
+                            investor_notes: 'Notes',
+                          };
+                          const fieldLabel = INVESTOR_FIELDS[fieldId] || fieldId;
+                          
+                          return (
+                            <div
+                              key={varName}
+                              className="flex items-center justify-between p-2 bg-white rounded border border-gray-200 text-xs"
+                            >
+                              <div>
+                                <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 mr-2">
+                                  {`{{${varName}}}`}
+                                </Badge>
+                                <span className="text-gray-600">→ {fieldLabel}</span>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  const newMappings = { ...spec.variables };
+                                  delete newMappings[varName];
+                                  applyOps([{
+                                    op: 'replace' as const,
+                                    path: '/variables',
+                                    value: newMappings,
+                                  }]);
+                                }}
+                                className="h-5 w-5 p-0 cursor-pointer hover:bg-red-50 hover:text-red-600"
+                              >
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Add New Mapping */}
+                  <div>
+                    <Label className="text-xs font-medium text-gray-700 mb-2 block">
+                      Add New Variable
+                    </Label>
+                    <div className="space-y-2">
+                      <Input
+                        value={newVariableName}
+                        onChange={(e) => setNewVariableName(e.target.value)}
+                        placeholder="Variable name (e.g., FirstName)"
+                        className="text-xs border-gray-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-500 focus:ring-offset-0 text-gray-900"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && newVariableName && selectedField) {
+                            handleAddVariable();
+                          }
+                        }}
+                      />
+                      <Select value={selectedField} onValueChange={setSelectedField}>
+                        <SelectTrigger className="text-xs border-gray-200 focus:border-purple-500 focus:ring-2 focus:ring-purple-500 focus:ring-offset-0 cursor-pointer text-gray-900">
+                          <SelectValue placeholder="Select investor field" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="investor_name">Investor Name</SelectItem>
+                          <SelectItem value="email_address">Email Address</SelectItem>
+                          <SelectItem value="phone_number">Phone Number</SelectItem>
+                          <SelectItem value="status">Status</SelectItem>
+                          <SelectItem value="investor_type">Investor Type</SelectItem>
+                          <SelectItem value="amount_dollars">Amount ($)</SelectItem>
+                          <SelectItem value="deal">Deal</SelectItem>
+                          <SelectItem value="source">Source</SelectItem>
+                          <SelectItem value="investor_notes">Investor Notes</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        onClick={handleAddVariable}
+                        disabled={!newVariableName.trim() || !selectedField}
+                        size="sm"
+                        className="w-full bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white cursor-pointer text-xs"
+                      >
+                        <Plus className="h-3 w-3 mr-1" />
+                        Add Variable
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Save Button */}
+            <Button
+              onClick={handleSave}
+              className="w-full bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white shadow-md hover:shadow-lg transition-all duration-200 rounded-lg cursor-pointer"
+            >
+              Save Changes
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+
+  function handleAddVariable() {
+    if (!newVariableName.trim() || !selectedField || !spec) return;
+
+    const variableName = newVariableName.trim();
+    
+    // Validate variable name
+    if (!/^[A-Za-z][A-Za-z0-9]*$/.test(variableName)) {
+      alert('Variable name must start with a letter and contain only letters and numbers');
+      return;
+    }
+
+    const newMappings = {
+      ...(spec.variables || {}),
+      [variableName]: selectedField,
+    };
+
+    applyOps([{
+      op: 'replace' as const,
+      path: '/variables',
+      value: newMappings,
+    }]);
+
+    setNewVariableName('');
+    setSelectedField('');
+  }
+}
+

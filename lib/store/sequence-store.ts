@@ -1,6 +1,6 @@
 // Zustand store for sequence state management
 import { create } from 'zustand';
-import { SequenceSpec } from '../sequences/spec';
+import { SequenceSpec, SendSmsNode } from '../sequences/spec';
 import { JSONPatchOperation, applyPatchesToSpec } from '../sequences/patches';
 
 export interface ChatMessage {
@@ -34,6 +34,7 @@ interface SequenceStore {
   setError: (error: string | null) => void;
   clearError: () => void;
   reset: () => void;
+  addSendSmsNode: (afterNodeId?: string) => string | null; // Returns new node ID or null
   
   // Legacy aliases for backward compatibility
   currentSpec: SequenceSpec | null;
@@ -125,26 +126,105 @@ export const useSequenceStore = create<SequenceStore>((set, get) => ({
     }
     
     try {
+      console.log('[Store] applyOps: Applying', ops.length, 'patches to spec with', spec.nodes.length, 'nodes');
+      console.log('[Store] applyOps: Patches:', JSON.stringify(ops, null, 2));
+      
       // Client-side validation
-      const updatedSpec = applyPatchesToSpec(spec, ops);
+      let updatedSpec = applyPatchesToSpec(spec, ops);
+      
+      console.log('[Store] applyOps: After patch application, nodes:', updatedSpec.nodes.length, 'edges:', updatedSpec.edges.length);
+      
+      // Ensure all required fields exist
+      if (!updatedSpec.variables) {
+        updatedSpec = { ...updatedSpec, variables: {} };
+      }
+      if (!updatedSpec.ui) {
+        updatedSpec = { ...updatedSpec, ui: { positions: {}, zoom: 1 } };
+      }
+      if (!updatedSpec.ui.positions) {
+        updatedSpec = { ...updatedSpec, ui: { ...updatedSpec.ui, positions: {} } };
+      }
+      if (typeof updatedSpec.ui.zoom !== 'number') {
+        updatedSpec = { ...updatedSpec, ui: { ...updatedSpec.ui, zoom: 1 } };
+      }
+      if (!updatedSpec.metadata) {
+        const existingName = (updatedSpec as any).metadata?.name;
+        updatedSpec = {
+          ...updatedSpec,
+          metadata: {
+            name: existingName || 'New Sequence',
+            status: 'draft',
+            version: 1,
+            createdBy: 'user',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+        };
+      }
+      
+      // Ensure there's always an end node
+      const hasEndNode = updatedSpec.nodes.some(n => n.type === 'end');
+      if (!hasEndNode) {
+        const endNode = { id: 'end', type: 'end' as const };
+        updatedSpec = {
+          ...updatedSpec,
+          nodes: [...updatedSpec.nodes, endNode],
+          ui: {
+            ...updatedSpec.ui,
+            positions: {
+              ...updatedSpec.ui.positions,
+              end: updatedSpec.ui.positions?.end || { x: 500, y: 100 },
+            },
+          },
+        };
+        // Add edge to end if there are nodes without connections
+        const nodesWithOutgoing = new Set(updatedSpec.edges.map(e => e.from));
+        const nodesNeedingEnd = updatedSpec.nodes
+          .filter(n => n.type !== 'end' && n.type !== 'trigger' && !nodesWithOutgoing.has(n.id));
+        if (nodesNeedingEnd.length > 0) {
+          updatedSpec = {
+            ...updatedSpec,
+            edges: [...updatedSpec.edges, { from: nodesNeedingEnd[0].id, to: 'end' }],
+          };
+        } else if (updatedSpec.edges.length === 0) {
+          // If no edges, connect trigger to end
+          const triggerNode = updatedSpec.nodes.find(n => n.type === 'trigger');
+          if (triggerNode) {
+            updatedSpec = {
+              ...updatedSpec,
+              edges: [{ from: triggerNode.id, to: 'end' }],
+            };
+          }
+        }
+      }
+      
       // Validate the updated spec
       const { validateSequenceSpec } = require('../sequences/validation');
       const validation = validateSequenceSpec(updatedSpec);
       
+      console.log('[Store] applyOps: Validation result:', {
+        valid: validation.valid,
+        errors: validation.errors,
+        finalNodes: updatedSpec.nodes.length,
+        finalEdges: updatedSpec.edges.length,
+      });
+      
       if (!validation.valid) {
-        // If validation fails, force reload from server
-        const { sequenceId, password } = get();
-        if (sequenceId && password) {
-          get().loadSpec(sequenceId, password);
-        }
+        console.error('[Store] applyOps: Validation failed, errors:', validation.errors);
+        // Don't reload from server - that would overwrite changes
+        // Just show the error but keep the spec
         set({
           error: `Validation failed: ${validation.errors.join(', ')}`,
+          spec: updatedSpec, // Still set the spec even if validation fails
+          pendingOps: [],
         });
         return;
       }
       
+      console.log('[Store] applyOps: Setting updated spec with', updatedSpec.nodes.length, 'nodes');
       set({ spec: updatedSpec, pendingOps: [] });
     } catch (error) {
+      console.error('[Store] applyOps: Error applying patches:', error);
       set({
         error: error instanceof Error ? error.message : 'Failed to apply patches',
       });
@@ -372,6 +452,107 @@ export const useSequenceStore = create<SequenceStore>((set, get) => ({
       conversationHistory: [],
       sequenceId: null,
     });
+  },
+
+  addSendSmsNode: (afterNodeId?: string) => {
+    const { spec } = get();
+    if (!spec) {
+      console.error('[Store] Cannot add node: no spec');
+      return null;
+    }
+
+    const endNode = spec.nodes.find(n => n.type === 'end');
+    if (!endNode) {
+      console.error('[Store] Cannot add node: no end node');
+      return null;
+    }
+
+    // Create new node
+    const newId = `send_sms_${Date.now()}`;
+    const newNode: SendSmsNode = {
+      id: newId,
+      type: 'send_sms',
+      content: '',
+      timing: '',
+    };
+
+    // Place new node in the center of the canvas (same position for all new nodes)
+    // User can drag it to wherever they want
+    const newPosition = { 
+      x: 400, // Center horizontally
+      y: 300  // Center vertically
+    };
+
+    // Build atomic patches: add node + position ONLY (NO automatic connections)
+    const patches: JSONPatchOperation[] = [];
+
+    // 1. Add node
+    patches.push({
+      op: 'add',
+      path: '/nodes/-',
+      value: newNode,
+    });
+
+    // 2. Add position - ensure ui and positions exist
+    if (!spec.ui) {
+      patches.push({
+        op: 'add',
+        path: '/ui',
+        value: { positions: {}, zoom: 1 },
+      });
+    }
+    if (!spec.ui?.positions) {
+      patches.push({
+        op: 'add',
+        path: '/ui/positions',
+        value: {},
+      });
+    }
+    patches.push({
+      op: 'add',
+      path: `/ui/positions/${newId}`,
+      value: newPosition,
+    });
+
+    // DON'T add any edges - node appears disconnected, user connects manually
+
+    console.log('[Store] Adding SMS node (disconnected):', {
+      newId,
+      position: newPosition,
+      patches: patches.length,
+      specNodesBefore: spec.nodes.length,
+    });
+
+    // Apply patches
+    get().applyOps(patches);
+    
+    // Verify the node was added
+    const updatedSpec = get().spec;
+    if (updatedSpec) {
+      const nodeExists = updatedSpec.nodes.some(n => n.id === newId);
+      const positionExists = updatedSpec.ui.positions?.[newId];
+      const allNodeIds = updatedSpec.nodes.map(n => `${n.type}:${n.id}`);
+      const allEdges = updatedSpec.edges.map(e => `${e.from}→${e.to}`);
+      console.log('[Store] After adding node:', {
+        nodeExists,
+        positionExists,
+        totalNodes: updatedSpec.nodes.length,
+        totalEdges: updatedSpec.edges.length,
+        allNodeIds,
+        allEdges,
+        newNodePosition: updatedSpec.ui.positions?.[newId],
+      });
+    } else {
+      console.error('[Store] Spec is null after applying patches!');
+    }
+
+    // DON'T commit to server here - user will click "Save" button to persist
+    // commitOpsToServer goes through /api/copilot which is for AI assistant, not manual edits
+
+    // Select the new node
+    set({ selectedNodeId: newId });
+
+    return newId;
   },
 }));
 

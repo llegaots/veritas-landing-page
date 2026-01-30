@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { triggerSmsSequenceForInvestor } from '@/lib/sequences/integration';
 
 const supabaseUrl = process.env.SUPABASE_URL!;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -93,3 +94,104 @@ export async function GET(request: NextRequest) {
   }
 }
 
+/**
+ * Admin API endpoint to create a new investor
+ * Automatically triggers SMS sequence if status is "New Lead"
+ */
+export async function POST(request: NextRequest) {
+  if (!checkAuth(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+  try {
+    const body = await request.json();
+    
+    // Validate required fields
+    if (!body.phone_number) {
+      return NextResponse.json(
+        { error: 'Phone number is required' },
+        { status: 400 }
+      );
+    }
+
+    // Prepare investor data
+    const investorData = {
+      investor_name: body.investor_name || null,
+      email_address: body.email_address || null,
+      phone_number: body.phone_number,
+      status: body.status || 'New Lead',
+      investor_type: body.investor_type || null,
+      liquid_ready: body.liquid_ready || null,
+      ready_for_follow_up: body.ready_for_follow_up || null,
+      amount_dollars: body.amount_dollars || null,
+      deal: body.deal || null,
+      source: body.source || null,
+      investor_notes: body.investor_notes || null,
+      airtable_id: body.airtable_id || null,
+    };
+
+    // Insert investor
+    const { data: inserted, error: insertError } = await supabase
+      .from('investors')
+      .insert(investorData)
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error('Error creating investor:', insertError);
+      return NextResponse.json(
+        { error: `Failed to create investor: ${insertError.message}` },
+        { status: 500 }
+      );
+    }
+
+    console.log('[admin/investors] Created investor:', inserted.id);
+
+    // Automatically trigger SMS sequence if status is "New Lead"
+    const status = investorData.status?.toLowerCase().trim();
+    if (status === 'new lead' && investorData.phone_number) {
+      console.log('[admin/investors] Triggering SMS sequence for new investor:', {
+        id: inserted.id,
+        name: investorData.investor_name,
+        phone: investorData.phone_number,
+      });
+
+      try {
+        const smsResult = await triggerSmsSequenceForInvestor({
+          id: inserted.id.toString(),
+          investor_name: investorData.investor_name,
+          phone_number: investorData.phone_number,
+          email_address: investorData.email_address,
+          property_name: investorData.deal,
+          status: investorData.status,
+        }, {
+          onlyIfStatus: 'New Lead',
+        });
+
+        if (smsResult.success && smsResult.runs_created && smsResult.runs_created > 0) {
+          console.log('[admin/investors] SMS sequence triggered successfully:', smsResult.runs_created, 'runs created');
+        } else if (smsResult.skipped) {
+          console.log('[admin/investors] SMS sequence skipped:', smsResult.error);
+        } else {
+          console.error('[admin/investors] SMS sequence failed:', smsResult.error);
+        }
+      } catch (smsError) {
+        // Don't fail the investor creation if SMS fails
+        console.error('[admin/investors] Error triggering SMS sequence:', smsError);
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      investor: inserted,
+    });
+  } catch (error) {
+    console.error('Error in POST /api/admin/investors:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
