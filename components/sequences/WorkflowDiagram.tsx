@@ -398,7 +398,7 @@ export function WorkflowDiagram() {
     setEdges((eds) => {
       // Remove any existing edges from the same source first
       const filtered = eds.filter(e => e.source !== connection.source);
-      return [...filtered, newEdge];
+      return [...filtered, newEdge] as Edge[];
     });
     
     // If source already has an outgoing edge, remove it first (replace connection)
