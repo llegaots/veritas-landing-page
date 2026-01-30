@@ -233,11 +233,13 @@ function walkGraph(
     // This ensures sequential nodes get properly delayed times
     // Check if the target node is the first SMS node (no SMS jobs scheduled yet)
     const targetNode = spec.nodes.find(n => n.id === edge.to);
+    // Count only SMS jobs (not wait nodes, etc.)
     const smsJobsCount = jobs.filter(j => {
       const jobNode = spec.nodes.find(n => n.id === j.node_id);
       return jobNode?.type === 'send_sms';
     }).length;
     const willBeFirstSms = targetNode?.type === 'send_sms' && smsJobsCount === 0;
+    console.log(`[Compiler] Edge ${currentNodeId} -> ${edge.to}: smsJobsCount=${smsJobsCount}, willBeFirstSms=${willBeFirstSms}`);
     const timeBeforeRecursion = new Date(currentTime);
     currentTime = walkGraph(spec, edge.to, currentTime, context, visited, jobs, willBeFirstSms);
     console.log(`[Compiler] After processing edge ${currentNodeId} -> ${edge.to}: currentTime ${timeBeforeRecursion.toISOString()} -> ${currentTime.toISOString()}`);
