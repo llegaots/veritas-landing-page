@@ -139,8 +139,7 @@ function walkGraph(
   currentTime: Date,
   context: JobContext & { run_id: string },
   visited: Set<string>,
-  jobs: MessageJob[],
-  isFirstSmsNode: boolean = false
+  jobs: MessageJob[]
 ): Date {
   if (visited.has(currentNodeId)) {
     // Cycle detected - stop
@@ -159,26 +158,17 @@ function walkGraph(
     const renderedContent = renderSmsContent(smsNode.content || '', context);
     
     // Calculate scheduled time: apply timing delay AFTER currentTime
-    // The timing is the delay before sending THIS message (after the previous message)
-    // For the FIRST SMS node in the sequence, ignore timing and schedule immediately
+    // The timing is the delay before sending THIS message (after the previous step)
+    // ALL SMS nodes respect their timing - the timing is the delay after the previous step
     let scheduledTime = new Date(currentTime);
     if (smsNode.timing) {
-      if (isFirstSmsNode) {
-        // First message: ignore timing, send immediately
-        console.log(`[Compiler] Processing SMS node ${currentNodeId} (FIRST SMS):`);
-        console.log(`  - Current time: ${currentTime.toISOString()}`);
-        console.log(`  - Timing property: ${smsNode.timing} (ignored for first message)`);
-        console.log(`  - Scheduling immediately at: ${scheduledTime.toISOString()}`);
-      } else {
-        // Subsequent messages: apply timing delay
-        const waitMs = parseDuration(smsNode.timing, context.phone);
-        scheduledTime = new Date(currentTime.getTime() + waitMs);
-        console.log(`[Compiler] Processing SMS node ${currentNodeId}:`);
-        console.log(`  - Current time: ${currentTime.toISOString()}`);
-        console.log(`  - Timing property: ${smsNode.timing}`);
-        console.log(`  - Timing delay: ${waitMs}ms (${waitMs / 1000 / 60} minutes)`);
-        console.log(`  - Scheduled time: ${scheduledTime.toISOString()}`);
-      }
+      const waitMs = parseDuration(smsNode.timing, context.phone);
+      scheduledTime = new Date(currentTime.getTime() + waitMs);
+      console.log(`[Compiler] Processing SMS node ${currentNodeId}:`);
+      console.log(`  - Current time: ${currentTime.toISOString()}`);
+      console.log(`  - Timing property: ${smsNode.timing}`);
+      console.log(`  - Timing delay: ${waitMs}ms (${waitMs / 1000 / 60} minutes)`);
+      console.log(`  - Scheduled time: ${scheduledTime.toISOString()}`);
     } else {
       console.log(`[Compiler] Processing SMS node ${currentNodeId}:`);
       console.log(`  - Current time: ${currentTime.toISOString()}`);
@@ -231,17 +221,8 @@ function walkGraph(
     console.log(`[Compiler] Processing edge ${currentNodeId} -> ${edge.to} with currentTime: ${currentTime.toISOString()}`);
     // Use the updated currentTime from the previous iteration
     // This ensures sequential nodes get properly delayed times
-    // Check if the target node is the first SMS node (no SMS jobs scheduled yet)
-    const targetNode = spec.nodes.find(n => n.id === edge.to);
-    // Count only SMS jobs (not wait nodes, etc.)
-    const smsJobsCount = jobs.filter(j => {
-      const jobNode = spec.nodes.find(n => n.id === j.node_id);
-      return jobNode?.type === 'send_sms';
-    }).length;
-    const willBeFirstSms = targetNode?.type === 'send_sms' && smsJobsCount === 0;
-    console.log(`[Compiler] Edge ${currentNodeId} -> ${edge.to}: smsJobsCount=${smsJobsCount}, willBeFirstSms=${willBeFirstSms}`);
     const timeBeforeRecursion = new Date(currentTime);
-    currentTime = walkGraph(spec, edge.to, currentTime, context, visited, jobs, willBeFirstSms);
+    currentTime = walkGraph(spec, edge.to, currentTime, context, visited, jobs);
     console.log(`[Compiler] After processing edge ${currentNodeId} -> ${edge.to}: currentTime ${timeBeforeRecursion.toISOString()} -> ${currentTime.toISOString()}`);
   }
 
@@ -270,7 +251,7 @@ export function compileSequenceToJobs(
   }
 
   // Walk the graph starting from trigger
-  walkGraph(spec, triggerNode.id, startTime, fullContext, visited, jobs, false);
+  walkGraph(spec, triggerNode.id, startTime, fullContext, visited, jobs);
 
   return jobs;
 }
