@@ -60,7 +60,7 @@ export function WorkflowDiagram() {
       const { sequenceSpecToWorkflow } = require('@/lib/sequences/adapters');
       const migrated = sequenceSpecToWorkflow(spec);
       console.log('[WorkflowDiagram] Migrated to V2, steps:', migrated.steps.length);
-      console.log('[WorkflowDiagram] Step IDs:', migrated.steps.map(s => `${s.type}:${s.id}`));
+      console.log('[WorkflowDiagram] Step IDs:', migrated.steps.map((s: any) => `${s.type}:${s.id}`));
       
       // Map positions from original node IDs to step IDs
       if (spec.ui?.positions) {
