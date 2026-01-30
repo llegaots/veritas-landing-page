@@ -162,14 +162,23 @@ function walkGraph(
     // The timing is the delay before sending THIS message (after the previous message)
     // For the FIRST SMS node in the sequence, ignore timing and schedule immediately
     let scheduledTime = new Date(currentTime);
-    if (smsNode.timing && !isFirstSmsNode) {
-      const waitMs = parseDuration(smsNode.timing, context.phone);
-      scheduledTime = new Date(currentTime.getTime() + waitMs);
-      console.log(`[Compiler] Processing SMS node ${currentNodeId}:`);
-      console.log(`  - Current time: ${currentTime.toISOString()}`);
-      console.log(`  - Timing property: ${smsNode.timing}`);
-      console.log(`  - Timing delay: ${waitMs}ms (${waitMs / 1000 / 60} minutes)`);
-      console.log(`  - Scheduled time: ${scheduledTime.toISOString()}`);
+    if (smsNode.timing) {
+      if (isFirstSmsNode) {
+        // First message: ignore timing, send immediately
+        console.log(`[Compiler] Processing SMS node ${currentNodeId} (FIRST SMS):`);
+        console.log(`  - Current time: ${currentTime.toISOString()}`);
+        console.log(`  - Timing property: ${smsNode.timing} (ignored for first message)`);
+        console.log(`  - Scheduling immediately at: ${scheduledTime.toISOString()}`);
+      } else {
+        // Subsequent messages: apply timing delay
+        const waitMs = parseDuration(smsNode.timing, context.phone);
+        scheduledTime = new Date(currentTime.getTime() + waitMs);
+        console.log(`[Compiler] Processing SMS node ${currentNodeId}:`);
+        console.log(`  - Current time: ${currentTime.toISOString()}`);
+        console.log(`  - Timing property: ${smsNode.timing}`);
+        console.log(`  - Timing delay: ${waitMs}ms (${waitMs / 1000 / 60} minutes)`);
+        console.log(`  - Scheduled time: ${scheduledTime.toISOString()}`);
+      }
     } else {
       console.log(`[Compiler] Processing SMS node ${currentNodeId}:`);
       console.log(`  - Current time: ${currentTime.toISOString()}`);
@@ -224,7 +233,11 @@ function walkGraph(
     // This ensures sequential nodes get properly delayed times
     // Check if the target node is the first SMS node (no SMS jobs scheduled yet)
     const targetNode = spec.nodes.find(n => n.id === edge.to);
-    const willBeFirstSms = targetNode?.type === 'send_sms' && jobs.length === 0;
+    const smsJobsCount = jobs.filter(j => {
+      const jobNode = spec.nodes.find(n => n.id === j.node_id);
+      return jobNode?.type === 'send_sms';
+    }).length;
+    const willBeFirstSms = targetNode?.type === 'send_sms' && smsJobsCount === 0;
     const timeBeforeRecursion = new Date(currentTime);
     currentTime = walkGraph(spec, edge.to, currentTime, context, visited, jobs, willBeFirstSms);
     console.log(`[Compiler] After processing edge ${currentNodeId} -> ${edge.to}: currentTime ${timeBeforeRecursion.toISOString()} -> ${currentTime.toISOString()}`);
