@@ -157,11 +157,22 @@ function walkGraph(
     const smsNode = node as SendSmsNode;
     const renderedContent = renderSmsContent(smsNode.content || '', context);
     
-    // Schedule this message at the current time
-    const scheduledTime = new Date(currentTime);
-    console.log(`[Compiler] Processing SMS node ${currentNodeId}:`);
-    console.log(`  - Current time: ${currentTime.toISOString()}`);
-    console.log(`  - Timing property: ${smsNode.timing || '(none)'}`);
+    // Apply timing from SMS node (if specified) BEFORE scheduling this message
+    // The timing is the delay before sending THIS message (after the previous one)
+    let scheduledTime = new Date(currentTime);
+    if (smsNode.timing) {
+      const waitMs = parseDuration(smsNode.timing, context.phone);
+      scheduledTime = new Date(currentTime.getTime() + waitMs);
+      console.log(`[Compiler] Processing SMS node ${currentNodeId}:`);
+      console.log(`  - Current time: ${currentTime.toISOString()}`);
+      console.log(`  - Timing property: ${smsNode.timing}`);
+      console.log(`  - Timing delay: ${waitMs}ms (${waitMs / 1000 / 60} minutes)`);
+      console.log(`  - Scheduled time: ${scheduledTime.toISOString()}`);
+    } else {
+      console.log(`[Compiler] Processing SMS node ${currentNodeId}:`);
+      console.log(`  - Current time: ${currentTime.toISOString()}`);
+      console.log(`  - No timing specified, scheduling immediately`);
+    }
     console.log(`  - Message: ${renderedContent.substring(0, 50)}...`);
     
     jobs.push({
@@ -172,17 +183,10 @@ function walkGraph(
       scheduled_for: scheduledTime.toISOString(),
     });
     
-    // Apply timing from SMS node (if specified) BEFORE moving to next node
-    // This ensures the next message is scheduled with the proper delay
-    if (smsNode.timing) {
-      const waitMs = parseDuration(smsNode.timing, context.phone);
-      const oldTime = new Date(currentTime);
-      currentTime = new Date(currentTime.getTime() + waitMs);
-      console.log(`  - Timing delay: ${waitMs}ms (${waitMs / 1000 / 60} minutes)`);
-      console.log(`  - Updated currentTime: ${oldTime.toISOString()} -> ${currentTime.toISOString()}`);
-    } else {
-      console.log(`  - No timing specified, currentTime unchanged`);
-    }
+    // Update currentTime to the scheduled time of this message
+    // This ensures the next message's timing is calculated from when THIS message is sent
+    currentTime = new Date(scheduledTime);
+    console.log(`  - Updated currentTime to scheduled time: ${currentTime.toISOString()}`);
   } else if (node.type === 'wait') {
     // Keep wait node support for backward compatibility, but prefer SMS timing
     const waitNode = node as WaitNode;
