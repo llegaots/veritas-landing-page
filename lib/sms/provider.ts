@@ -46,20 +46,20 @@ async function sendViaTwilio(options: SmsSendOptions): Promise<SmsSendResult> {
     };
   }
 
-  // TEST MODE: Only send SMS to test phone number (if enabled)
+  // TEST MODE: Only send SMS to test phone numbers (if enabled)
   // Set SMS_TEST_MODE=false in production to allow all numbers
   const testMode = process.env.SMS_TEST_MODE !== 'false'; // Default to true for safety
-  const TEST_PHONE = '4385017336';
+  const TEST_PHONES = ['4385017336', '4388828831']; // Allowed test phone numbers
   
   if (testMode) {
     const phoneDigits = options.to.replace(/\D/g, '');
-    const isTestPhone = phoneDigits.includes(TEST_PHONE);
+    const isTestPhone = TEST_PHONES.some(testPhone => phoneDigits.includes(testPhone));
     
     if (!isTestPhone) {
-      console.log(`[SMS] Skipping SMS to ${options.to} - only sending to test number ${TEST_PHONE} during testing`);
+      console.log(`[SMS] Skipping SMS to ${options.to} - only sending to test numbers ${TEST_PHONES.join(', ')} during testing`);
       return {
         success: false,
-        error: `SMS blocked: Only test phone number (${TEST_PHONE}) allowed during testing. Set SMS_TEST_MODE=false to allow all numbers.`,
+        error: `SMS blocked: Only test phone numbers (${TEST_PHONES.join(', ')}) allowed during testing. Set SMS_TEST_MODE=false to allow all numbers.`,
       };
     }
   }
