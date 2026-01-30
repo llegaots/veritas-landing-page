@@ -139,7 +139,8 @@ function walkGraph(
   currentTime: Date,
   context: JobContext & { run_id: string },
   visited: Set<string>,
-  jobs: MessageJob[]
+  jobs: MessageJob[],
+  isFirstSmsNode: boolean = false
 ): Date {
   if (visited.has(currentNodeId)) {
     // Cycle detected - stop
@@ -157,10 +158,11 @@ function walkGraph(
     const smsNode = node as SendSmsNode;
     const renderedContent = renderSmsContent(smsNode.content || '', context);
     
-    // Apply timing from SMS node (if specified) BEFORE scheduling this message
-    // The timing is the delay before sending THIS message (after the previous one)
+    // Calculate scheduled time: apply timing delay AFTER currentTime
+    // The timing is the delay before sending THIS message (after the previous message)
+    // For the FIRST SMS node in the sequence, ignore timing and schedule immediately
     let scheduledTime = new Date(currentTime);
-    if (smsNode.timing) {
+    if (smsNode.timing && !isFirstSmsNode) {
       const waitMs = parseDuration(smsNode.timing, context.phone);
       scheduledTime = new Date(currentTime.getTime() + waitMs);
       console.log(`[Compiler] Processing SMS node ${currentNodeId}:`);
@@ -220,8 +222,11 @@ function walkGraph(
     console.log(`[Compiler] Processing edge ${currentNodeId} -> ${edge.to} with currentTime: ${currentTime.toISOString()}`);
     // Use the updated currentTime from the previous iteration
     // This ensures sequential nodes get properly delayed times
+    // Check if the target node is the first SMS node (no SMS jobs scheduled yet)
+    const targetNode = spec.nodes.find(n => n.id === edge.to);
+    const willBeFirstSms = targetNode?.type === 'send_sms' && jobs.length === 0;
     const timeBeforeRecursion = new Date(currentTime);
-    currentTime = walkGraph(spec, edge.to, currentTime, context, visited, jobs);
+    currentTime = walkGraph(spec, edge.to, currentTime, context, visited, jobs, willBeFirstSms);
     console.log(`[Compiler] After processing edge ${currentNodeId} -> ${edge.to}: currentTime ${timeBeforeRecursion.toISOString()} -> ${currentTime.toISOString()}`);
   }
 
@@ -250,7 +255,7 @@ export function compileSequenceToJobs(
   }
 
   // Walk the graph starting from trigger
-  walkGraph(spec, triggerNode.id, startTime, fullContext, visited, jobs);
+  walkGraph(spec, triggerNode.id, startTime, fullContext, visited, jobs, false);
 
   return jobs;
 }
