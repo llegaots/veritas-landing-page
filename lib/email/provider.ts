@@ -53,7 +53,9 @@ async function sendViaResend(options: EmailSendOptions): Promise<EmailSendResult
   }
 
   // TEST MODE: Only send emails to test email addresses (if enabled)
-  const testMode = process.env.EMAIL_TEST_MODE !== 'false'; // Default to true for safety
+  // Default to false in production (Vercel), true in development
+  const isProduction = process.env.VERCEL || process.env.NODE_ENV === 'production';
+  const testMode = process.env.EMAIL_TEST_MODE === 'true' || (!isProduction && process.env.EMAIL_TEST_MODE !== 'false');
   const TEST_EMAILS = (process.env.EMAIL_TEST_ADDRESSES || 'test@example.com').split(',').map(e => e.trim());
   
   if (testMode) {
@@ -164,7 +166,9 @@ async function sendViaSmtp(options: EmailSendOptions): Promise<EmailSendResult> 
         const fromEmail = options.from || process.env.EMAIL_FROM || smtpUser;
         
         // TEST MODE: Only send emails to test email addresses (if enabled)
-        const testMode = process.env.EMAIL_TEST_MODE !== 'false';
+        // Default to false in production (Vercel), true in development
+        const isProduction = process.env.VERCEL || process.env.NODE_ENV === 'production';
+        const testMode = process.env.EMAIL_TEST_MODE === 'true' || (!isProduction && process.env.EMAIL_TEST_MODE !== 'false');
         const TEST_EMAILS = (process.env.EMAIL_TEST_ADDRESSES || 'test@example.com').split(',').map(e => e.trim());
         
         if (testMode) {
@@ -254,7 +258,9 @@ async function sendViaSmtp(options: EmailSendOptions): Promise<EmailSendResult> 
     }
 
     // TEST MODE: Only send emails to test email addresses (if enabled)
-    const testMode = process.env.EMAIL_TEST_MODE !== 'false'; // Default to true for safety
+    // Default to false in production (Vercel), true in development
+    const isProduction = process.env.VERCEL || process.env.NODE_ENV === 'production';
+    const testMode = process.env.EMAIL_TEST_MODE === 'true' || (!isProduction && process.env.EMAIL_TEST_MODE !== 'false');
     const TEST_EMAILS = (process.env.EMAIL_TEST_ADDRESSES || 'test@example.com').split(',').map(e => e.trim());
     
     if (testMode) {
