@@ -227,15 +227,20 @@ export async function GET(request: NextRequest) {
           });
         }
 
-        // Update job with provider status
+        // Update job with provider status and messageId
+        // For Gmail API, messageId is the actual Gmail message ID (e.g., "19c165ea1506a4f8")
+        // For other providers, status might be "sent" or similar
+        const providerStatus = sendResult.messageId || sendResult.status || 'sent';
         await supabase
           .from('message_jobs')
           .update({
-            provider_status: sendResult.status,
+            provider_status: providerStatus,
             error: sendResult.error || null,
             // sent_at already set above
           })
           .eq('id', job.id);
+        
+        console.log(`[Cron] Updated job ${job.id} with provider_status: ${providerStatus}`);
 
         if (sendResult.success) {
           results.sent++;
