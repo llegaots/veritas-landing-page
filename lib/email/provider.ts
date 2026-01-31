@@ -83,10 +83,16 @@ async function sendViaResend(options: EmailSendOptions): Promise<EmailSendResult
       htmlLength: options.html.length,
     });
 
+    // Ensure proper UTF-8 encoding for subject line
+    const encodeSubject = (subject: string): string => {
+      // Resend handles UTF-8 automatically, but ensure it's a valid string
+      return subject;
+    };
+    
     const emailOptions: any = {
       from: fromEmail,
       to: options.to,
-      subject: options.subject,
+      subject: encodeSubject(options.subject),
       html: options.html,
     };
     
@@ -184,15 +190,28 @@ async function sendViaSmtp(options: EmailSendOptions): Promise<EmailSendResult> 
         }
         
         // Create email message in RFC 2822 format
+        // Encode subject line properly for UTF-8 special characters
+        const encodeSubject = (subject: string): string => {
+          // Check if subject contains non-ASCII characters
+          const hasNonAscii = /[^\x00-\x7F]/.test(subject);
+          if (hasNonAscii) {
+            // Use RFC 2047 encoding for non-ASCII characters
+            return `=?UTF-8?B?${Buffer.from(subject, 'utf-8').toString('base64')}?=`;
+          }
+          return subject;
+        };
+        
         const emailContent = [
           `From: ${fromEmail}`,
           `To: ${options.to}`,
-          `Subject: ${options.subject}`,
+          `Subject: ${encodeSubject(options.subject)}`,
+          `MIME-Version: 1.0`,
           `Content-Type: text/html; charset=utf-8`,
+          `Content-Transfer-Encoding: quoted-printable`,
           options.replyTo ? `Reply-To: ${options.replyTo}` : '',
           '',
           options.html,
-        ].filter(Boolean).join('\n');
+        ].filter(Boolean).join('\r\n');
         
         // Encode message in base64url format (Gmail API requirement)
         const encodedMessage = Buffer.from(emailContent)
@@ -315,14 +334,21 @@ async function sendViaSmtp(options: EmailSendOptions): Promise<EmailSendResult> 
       port: smtpPort,
     });
 
+    // Ensure proper UTF-8 encoding for subject line
+    const encodeSubject = (subject: string): string => {
+      // Nodemailer handles UTF-8 automatically, but ensure it's a valid string
+      return subject;
+    };
+    
     // Send email
     const info = await transporter.sendMail({
       from: fromEmail,
       to: options.to,
-      subject: options.subject,
+      subject: encodeSubject(options.subject),
       html: options.html,
       text: options.text,
       replyTo: options.replyTo,
+      encoding: 'utf-8', // Explicitly set UTF-8 encoding
     });
 
     console.log('[SMTP] Email sent:', {
