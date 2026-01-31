@@ -270,13 +270,26 @@ ${htmlContent}
         
         // Verify email content length before encoding
         console.log(`[Gmail API] Full email content length: ${emailContent.length} chars`);
-        console.log(`[Gmail API] Email content starts with: ${emailContent.substring(0, 150)}`);
-        console.log(`[Gmail API] Email content ends with: ${emailContent.substring(Math.max(0, emailContent.length - 150))}`);
+        console.log(`[Gmail API] Email content starts with: ${emailContent.substring(0, 200)}`);
+        console.log(`[Gmail API] Email content ends with: ${emailContent.substring(Math.max(0, emailContent.length - 200))}`);
+        
+        // Check for any null bytes or invalid characters that might cause issues
+        const hasNullBytes = emailContent.includes('\0');
+        const hasInvalidChars = /[\x00-\x08\x0B-\x0C\x0E-\x1F]/.test(emailContent);
+        if (hasNullBytes || hasInvalidChars) {
+          console.warn(`[Gmail API] WARNING: Email content contains invalid characters!`);
+        }
         
         // Encode message in base64url format (Gmail API requirement)
         // Use UTF-8 encoding to preserve all characters
         const emailBuffer = Buffer.from(emailContent, 'utf-8');
         console.log(`[Gmail API] Email buffer length: ${emailBuffer.length} bytes`);
+        
+        // Check if buffer is too large (Gmail API has a 35MB limit for the entire message)
+        const maxSize = 35 * 1024 * 1024; // 35MB
+        if (emailBuffer.length > maxSize) {
+          console.error(`[Gmail API] ERROR: Email content exceeds Gmail API size limit (${emailBuffer.length} bytes > ${maxSize} bytes)`);
+        }
         
         const encodedMessage = emailBuffer
           .toString('base64')
@@ -292,6 +305,13 @@ ${htmlContent}
           console.log(`[Gmail API] Decode test: original=${emailContent.length} chars, decoded=${decodedTest.length} chars, match=${emailContent === decodedTest}`);
           if (emailContent !== decodedTest) {
             console.error(`[Gmail API] WARNING: Encoded message does not decode correctly!`);
+            // Find where they differ
+            for (let i = 0; i < Math.min(emailContent.length, decodedTest.length); i++) {
+              if (emailContent[i] !== decodedTest[i]) {
+                console.error(`[Gmail API] First difference at position ${i}: original="${emailContent.substring(i, i + 50)}" vs decoded="${decodedTest.substring(i, i + 50)}"`);
+                break;
+              }
+            }
           }
         } catch (e) {
           console.error(`[Gmail API] Error testing decode:`, e);
