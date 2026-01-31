@@ -460,19 +460,24 @@ export function WorkflowDiagram() {
     if (!workflow || !spec) return;
     
     // Convert step ID back to node ID for spec
-    const nodeId = node.id.startsWith('step_') 
-      ? node.id.replace(/^step_/, '')
-      : node.id;
+    let nodeId = node.id;
+    if (node.id.startsWith('step_')) {
+      nodeId = node.id.replace(/^step_/, '');
+    }
+    
+    // Check if position path exists, use 'add' if not, 'replace' if it does
+    const existingPosition = spec.ui?.positions?.[nodeId];
+    const op = existingPosition ? 'replace' : 'add';
     
     // Update position in spec
     const patches = [{
-      op: 'replace' as const,
+      op: op as 'replace' | 'add',
       path: `/ui/positions/${nodeId}`,
       value: node.position,
     }];
     
     applyOps(patches);
-    console.log('[WorkflowDiagram] Saved position for node:', nodeId, node.position);
+    console.log('[WorkflowDiagram] Saved position for node:', nodeId, node.position, 'op:', op);
   }, [workflow, spec, applyOps]);
 
   if (!workflow || !graphSpec) {

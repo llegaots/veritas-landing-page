@@ -5,11 +5,15 @@ import { X, MessageSquare } from 'lucide-react';
 import { useSequenceStore } from '@/lib/store/sequence-store';
 import { SendSmsStep } from '@/lib/sequences/workflow-v2';
 import { timingToString } from '@/lib/sequences/adapters';
+import { calculateTimeline } from '@/lib/sequences/timeline';
 
 export function WorkflowSendSmsNode(props: NodeProps) {
-  const { selectedNodeId, setSelectedNodeId } = useSequenceStore();
+  const { selectedNodeId, setSelectedNodeId, spec } = useSequenceStore();
   const step = props.data as SendSmsStep;
   const isSelected = selectedNodeId === props.id;
+
+  // Calculate timeline label
+  const timelineInfo = spec ? calculateTimeline(spec, props.id) : null;
 
   // Truncate message for display (2-4 lines)
   const message = step.message || '';
@@ -20,13 +24,20 @@ export function WorkflowSendSmsNode(props: NodeProps) {
 
   return (
     <div
-      className={`w-80 bg-white rounded-xl border-2 shadow-md transition-all duration-200 cursor-pointer ${
+      className={`w-80 bg-white rounded-xl border-2 shadow-md transition-all duration-200 cursor-pointer relative ${
         isSelected 
           ? 'border-purple-500 shadow-lg ring-2 ring-purple-200' 
           : 'border-gray-200 hover:border-purple-300 hover:shadow-lg'
       }`}
       onClick={() => setSelectedNodeId(props.id)}
     >
+      {/* Timeline label - top right */}
+      {timelineInfo && timelineInfo.label !== 'START' && (
+        <div className="absolute -top-3 -right-3 bg-gradient-to-br from-purple-600 to-purple-700 text-white text-xs font-bold px-3 py-1 rounded-full shadow-lg border-2 border-white z-10">
+          {timelineInfo.label}
+        </div>
+      )}
+      
       <Handle 
         type="target" 
         position={Position.Left} 
@@ -48,7 +59,7 @@ export function WorkflowSendSmsNode(props: NodeProps) {
             <div className="font-semibold text-sm text-gray-900">Send SMS</div>
             {step.timing && (
               <div className="text-xs text-purple-600 font-medium mt-0.5">
-                {timingToString(step.timing)}
+                After {timingToString(step.timing)}
               </div>
             )}
           </div>

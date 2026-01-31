@@ -43,7 +43,7 @@ EMAIL_FROM=lucas@neptaai.com
 
 # Test mode
 EMAIL_TEST_MODE=true
-EMAIL_TEST_ADDRESSES=your-test-email@example.com
+EMAIL_TEST_ADDRESSES=lucaslegatos123@gmail.com
 ```
 
 ## Option 2: Use Gmail "Send Mail As" Feature

@@ -9,6 +9,14 @@ https://veritas-landing-page.vercel.app/api/auth/google/callback
 
 ## Step-by-Step Fix
 
+### Environment Variables (Set in Vercel)
+
+```
+GMAIL_REFRESH_TOKEN=your_refresh_token_here
+EMAIL_PROVIDER=gmail
+EMAIL_FROM=lucas@neptaai.com
+```
+
 ### 1. Verify in Google Cloud Console
 
 1. Go to: https://console.cloud.google.com/apis/credentials

@@ -67,27 +67,49 @@ export async function calculateElkLayout(graph: GraphSpec): Promise<Record<strin
   
   // Calculate positions
   const positions: Record<string, { x: number; y: number }> = {};
-  const HORIZONTAL_SPACING = 400;
+  const HORIZONTAL_SPACING = 450; // Increased spacing to prevent overlap
   const VERTICAL_SPACING = 200;
+  const START_X = 100; // Start position for trigger
+  const START_Y = 200; // Vertical center for trigger
   
+  // Special handling for trigger and end nodes
+  const endNode = graph.nodes.find(n => n.id === 'end');
+  const maxLayer = layers.length > 0 ? layers.length - 1 : 0;
+  
+  // Position trigger at the start
+  if (triggerNode) {
+    positions['trigger'] = { x: START_X, y: START_Y };
+  }
+  
+  // Position other nodes in layers
   layers.forEach((nodeIds, layerIndex) => {
-    const x = layerIndex * HORIZONTAL_SPACING;
+    const x = START_X + (layerIndex + 1) * HORIZONTAL_SPACING; // Offset by 1 to leave space for trigger
     nodeIds.forEach((nodeId, indexInLayer) => {
-      const y = indexInLayer * VERTICAL_SPACING + 100;
+      // Skip trigger (already positioned) and end (positioned separately)
+      if (nodeId === 'trigger' || nodeId === 'end') return;
+      
+      const y = START_Y + (indexInLayer - (nodeIds.length - 1) / 2) * VERTICAL_SPACING;
       positions[nodeId] = { x, y };
     });
   });
+  
+  // Position end node at the far right, same Y as trigger to prevent overlap
+  if (endNode) {
+    positions['end'] = {
+      x: START_X + (maxLayer + 2) * HORIZONTAL_SPACING, // Always on the right
+      y: START_Y, // Same Y as trigger to keep it aligned
+    };
+  }
   
   // Ensure ALL nodes have positions (even if not reachable via edges)
   graph.nodes.forEach(node => {
     if (!positions[node.id]) {
       console.log('[ELK Layout] Node missing from layers, assigning default position:', node.id);
       // Assign to a default layer (after all processed layers)
-      const maxLayer = layers.length > 0 ? layers.length - 1 : 0;
       const nodesInMaxLayer = layers[maxLayer]?.length || 0;
       positions[node.id] = {
-        x: (maxLayer + 1) * HORIZONTAL_SPACING,
-        y: nodesInMaxLayer * VERTICAL_SPACING + 100,
+        x: START_X + (maxLayer + 1) * HORIZONTAL_SPACING,
+        y: START_Y + nodesInMaxLayer * VERTICAL_SPACING,
       };
     }
   });

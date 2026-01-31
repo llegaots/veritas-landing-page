@@ -46,13 +46,11 @@ Add to your `.env.local`:
 
 ```bash
 # Google OAuth2 Credentials
-GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=your-client-secret
-
+GOOGLE_CLIENT_ID=90502316218-irg6oc09ultlh9huqpu34o33bpd4o87v.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=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
 # Redirect URI (should match what you set in Google Cloud)
 GOOGLE_REDIRECT_URI=http://localhost:3000/api/auth/google/callback
-# For production:
-# GOOGLE_REDIRECT_URI=https://yourdomain.com/api/auth/google/callback
+
 
 # Base URL
 NEXT_PUBLIC_BASE_URL=http://localhost:3000
