@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import {
   Table,
   TableBody,
@@ -28,6 +28,7 @@ import {
   Search,
   GripVertical,
   Minus,
+  GripVertical as ResizeIcon,
 } from 'lucide-react'
 import { TableColumn, TableState } from '@/lib/admin/types'
 import { cn } from '@/lib/utils'
@@ -60,6 +61,51 @@ export function DataTable<T extends { [key: string]: any }>({
     visibleColumns: new Set(columns.map((col) => col.id)),
     density: 'comfortable',
   })
+
+  // Load column widths from localStorage
+  const getStoredWidths = (): Record<string, number> => {
+    if (typeof window === 'undefined') return {}
+    try {
+      const stored = localStorage.getItem(`table-column-widths-${columns.map(c => c.id).join('-')}`)
+      if (stored) {
+        return JSON.parse(stored)
+      }
+    } catch (e) {
+      console.error('Error loading column widths:', e)
+    }
+    return {}
+  }
+
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => {
+    const stored = getStoredWidths()
+    const widths: Record<string, number> = {}
+    columns.forEach((col) => {
+      if (stored[col.id]) {
+        widths[col.id] = stored[col.id]
+      } else if (col.width) {
+        widths[col.id] = typeof col.width === 'number' ? col.width : 150
+      } else {
+        widths[col.id] = 150 // Default width
+      }
+    })
+    return widths
+  })
+
+  // Save column widths to localStorage
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(
+          `table-column-widths-${columns.map(c => c.id).join('-')}`,
+          JSON.stringify(columnWidths)
+        )
+      } catch (e) {
+        console.error('Error saving column widths:', e)
+      }
+    }
+  }, [columnWidths, columns])
+
+  const [resizingColumn, setResizingColumn] = useState<string | null>(null)
 
   // Filter and sort data
   const processedData = useMemo(() => {
@@ -215,25 +261,60 @@ export function DataTable<T extends { [key: string]: any }>({
           <Table>
             <TableHeader>
               <TableRow className="bg-gray-100 hover:bg-gray-100 border-b-2 border-gray-300">
-                {visibleColumns.map((column) => (
+                {visibleColumns.map((column, index) => (
                   <TableHead
                     key={column.id}
                     className={cn(
-                      'font-semibold text-gray-900',
+                      'font-semibold text-gray-900 relative group',
                       column.sortable !== false && 'cursor-pointer hover:bg-gray-200 transition-colors duration-200',
                       tableState.density === 'compact' ? 'py-3' : 'py-4'
                     )}
-                    style={{ width: column.width }}
+                    style={{ 
+                      width: `${columnWidths[column.id]}px`,
+                      minWidth: `${columnWidths[column.id]}px`,
+                      maxWidth: `${columnWidths[column.id]}px`,
+                    }}
                     onClick={() =>
                       column.sortable !== false && handleSort(column.id)
                     }
                   >
-                    <div className="flex items-center gap-2">
-                      {column.header}
+                    <div className="flex items-center gap-2 pr-4">
+                      <div className="flex-1 min-w-0">
+                        {column.header}
+                      </div>
                       {column.sortable !== false && (
-                        <ArrowUpDown className="h-3.5 w-3.5 text-gray-700" />
+                        <ArrowUpDown className="h-3.5 w-3.5 text-gray-700 flex-shrink-0" />
                       )}
                     </div>
+                    {/* Resize handle */}
+                    <div
+                      className="absolute right-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-purple-400 bg-transparent transition-colors group-hover:bg-purple-200"
+                      onMouseDown={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        setResizingColumn(column.id)
+                        const startX = e.clientX
+                        const startWidth = columnWidths[column.id]
+
+                        const handleMouseMove = (e: MouseEvent) => {
+                          const diff = e.clientX - startX
+                          const newWidth = Math.max(50, startWidth + diff)
+                          setColumnWidths((prev) => ({
+                            ...prev,
+                            [column.id]: newWidth,
+                          }))
+                        }
+
+                        const handleMouseUp = () => {
+                          setResizingColumn(null)
+                          document.removeEventListener('mousemove', handleMouseMove)
+                          document.removeEventListener('mouseup', handleMouseUp)
+                        }
+
+                        document.addEventListener('mousemove', handleMouseMove)
+                        document.addEventListener('mouseup', handleMouseUp)
+                      }}
+                    />
                   </TableHead>
                 ))}
               </TableRow>
@@ -261,8 +342,18 @@ export function DataTable<T extends { [key: string]: any }>({
                     onClick={() => onRowClick?.(row)}
                   >
                     {visibleColumns.map((column) => (
-                      <TableCell key={column.id} className="font-medium">
-                        {column.accessor(row)}
+                      <TableCell 
+                        key={column.id} 
+                        className="font-medium overflow-hidden"
+                        style={{ 
+                          width: `${columnWidths[column.id]}px`,
+                          minWidth: `${columnWidths[column.id]}px`,
+                          maxWidth: `${columnWidths[column.id]}px`,
+                        }}
+                      >
+                        <div className="truncate">
+                          {column.accessor(row)}
+                        </div>
                       </TableCell>
                     ))}
                   </TableRow>

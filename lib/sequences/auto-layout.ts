@@ -4,10 +4,11 @@ import { Node, Edge } from '@xyflow/react';
 import { SequenceSpec } from './spec';
 import { JSONPatchOperation } from './patches';
 
-const NODE_WIDTH = 200;
-const NODE_HEIGHT = 100;
-const HORIZONTAL_SPACING = 250;
-const VERTICAL_SPACING = 150;
+// Dynamic node sizing based on content
+const NODE_WIDTH = 280; // Increased for better readability
+const NODE_HEIGHT = 120; // Increased for SMS nodes with content
+const HORIZONTAL_SPACING = 400; // More space between nodes to prevent overlaps
+const VERTICAL_SPACING = 250; // More vertical space for branches
 
 /**
  * Calculate auto-layout positions for nodes using dagre
@@ -15,11 +16,34 @@ const VERTICAL_SPACING = 150;
 export function calculateAutoLayout(spec: SequenceSpec): Record<string, { x: number; y: number }> {
   const graph = new dagre.graphlib.Graph();
   graph.setDefaultEdgeLabel(() => ({}));
-  graph.setGraph({ rankdir: 'TB', nodesep: HORIZONTAL_SPACING, ranksep: VERTICAL_SPACING });
+  
+  // Use horizontal layout (left-to-right) instead of top-to-bottom
+  // This prevents long vertical scrolling
+  graph.setGraph({ 
+    rankdir: 'LR', // Left to Right instead of TB (Top to Bottom)
+    nodesep: VERTICAL_SPACING, // Vertical spacing between nodes at same level
+    ranksep: HORIZONTAL_SPACING, // Horizontal spacing between levels
+    align: 'UL', // Align nodes to upper left
+  });
 
-  // Add nodes
+  // Add nodes with dynamic sizing
   for (const node of spec.nodes) {
-    graph.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
+    let width = NODE_WIDTH;
+    let height = NODE_HEIGHT;
+    
+    // Adjust size based on node type and content
+    if (node.type === 'send_sms') {
+      const content = (node as any).content || '';
+      // Estimate height based on content length
+      const lines = Math.max(1, Math.ceil(content.length / 40));
+      height = Math.max(120, Math.min(200, 80 + lines * 25));
+    } else if (node.type === 'condition') {
+      height = 140; // Conditions need more space
+    } else if (node.type === 'wait') {
+      height = 100; // Wait nodes are smaller
+    }
+    
+    graph.setNode(node.id, { width, height });
   }
 
   // Add edges
@@ -34,8 +58,8 @@ export function calculateAutoLayout(spec: SequenceSpec): Record<string, { x: num
   graph.nodes().forEach((nodeId) => {
     const node = graph.node(nodeId);
     positions[nodeId] = {
-      x: node.x - NODE_WIDTH / 2,
-      y: node.y - NODE_HEIGHT / 2,
+      x: node.x - node.width / 2,
+      y: node.y - node.height / 2,
     };
   });
 

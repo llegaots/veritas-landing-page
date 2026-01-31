@@ -102,6 +102,30 @@ export function BookingSection() {
                   event_uri: parsedPayload.event_uri || parsedPayload.event?.event_uri,
                   payload: parsedPayload,
                 })
+
+                // Also notify backend to pause sequences
+                try {
+                  await fetch('/api/webhooks/calendly', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      event: 'calendly.event_scheduled',
+                      payload: {
+                        invitee: {
+                          email: email,
+                          name: name,
+                          uri: inviteeUri,
+                        },
+                        event_uri: parsedPayload.event_uri || parsedPayload.event?.event_uri,
+                        event: parsedPayload.event || {},
+                      },
+                    }),
+                  })
+                } catch (error) {
+                  console.error('[Calendly] Error notifying backend:', error)
+                }
               } else {
                 console.warn('[Calendly] ⚠️ Failed to fetch invitee details:', inviteeData)
                 

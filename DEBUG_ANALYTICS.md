@@ -58,3 +58,4 @@ Make sure `.env.local` has:
 
 The service_role key bypasses RLS, so if RLS is the issue, using service_role should fix it.
 
+

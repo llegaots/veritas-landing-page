@@ -56,3 +56,4 @@ If you had data before, it might be in a different Supabase project or database.
 2. **Missing table**: The `events` table needs to exist
 3. **No data**: If the table is empty, you need visitor activity to generate analytics
 
+

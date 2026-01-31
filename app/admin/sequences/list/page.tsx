@@ -4,8 +4,9 @@ import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, ArrowLeft, Edit, Trash2 } from 'lucide-react';
+import { Loader2, ArrowLeft, Edit, Trash2, MessageSquare, BarChart3, Activity } from 'lucide-react';
 import Link from 'next/link';
+import { AdminSidebar } from '@/components/admin/AdminSidebar';
 
 interface Sequence {
   id: string;
@@ -64,85 +65,107 @@ function SequencesListContent() {
 
   if (loading) {
     return (
-      <div className="container mx-auto p-8">
-        <Card className="p-8 text-center">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading sequences...</p>
-        </Card>
+      <div className="admin-font min-h-screen bg-gradient-to-br from-gray-50 via-white to-purple-50/30 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center mx-auto mb-4 shadow-md">
+            <Loader2 className="h-6 w-6 text-white animate-spin" />
+          </div>
+          <p className="text-gray-600">Loading sequences...</p>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="container mx-auto p-8">
-        <Card className="p-8 text-center">
-          <p className="text-red-600 mb-4">{error}</p>
-          <Button onClick={fetchSequences}>Retry</Button>
+      <div className="admin-font min-h-screen bg-gradient-to-br from-gray-50 via-white to-purple-50/30 flex items-center justify-center p-4">
+        <Card className="bg-white border-0 shadow-xl rounded-xl p-8 max-w-md w-full">
+          <CardContent className="text-center">
+            <p className="text-red-600 mb-4">{error}</p>
+            <Button 
+              onClick={fetchSequences}
+              className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white shadow-md hover:shadow-lg transition-all duration-200 rounded-lg cursor-pointer"
+            >
+              Retry
+            </Button>
+          </CardContent>
         </Card>
       </div>
     );
   }
 
   return (
-    <div className="admin-font container mx-auto p-8">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">SMS Sequences</h1>
-          <p className="text-muted-foreground mt-2">
-            Manage your automated SMS sequences
-          </p>
+    <div className="admin-font min-h-screen bg-gradient-to-br from-gray-50 via-white to-purple-50/30 flex">
+      <AdminSidebar password={password} />
+      
+      <div className="flex-1 ml-64 transition-all duration-300">
+        {/* Modern Header matching Analytics page */}
+        <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-gray-200/50 shadow-sm">
+          <div className="px-4 lg:px-8 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center shadow-md">
+                  <MessageSquare className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold bg-gradient-to-r from-purple-600 to-purple-800 bg-clip-text text-transparent">
+                    SMS Sequences
+                  </h1>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {sequences.length} {sequences.length === 1 ? 'sequence' : 'sequences'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <Link href={`/admin/sequences?key=${encodeURIComponent(password)}`}>
-            <Button variant="outline">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Builder
-            </Button>
-          </Link>
-          <Link href={`/admin/sequences/jobs?key=${encodeURIComponent(password)}`}>
-            <Button variant="outline">
-              View Jobs
-            </Button>
-          </Link>
-          <Link href={`/admin/sms-veritas?key=${encodeURIComponent(password)}`}>
-            <Button>
-              Veritas Sequence
-            </Button>
-          </Link>
-        </div>
-      </div>
 
+        <div className="px-4 lg:px-8 py-6">
       {sequences.length === 0 ? (
-        <Card>
+        <Card className="bg-white border-0 shadow-sm rounded-xl">
           <CardContent className="p-8 text-center">
-            <p className="text-muted-foreground mb-4">No sequences found.</p>
-            <Link href={`/admin/sequences?key=${encodeURIComponent(password)}`}>
-              <Button>Create Your First Sequence</Button>
+            <p className="text-gray-600 mb-4">No sequences found.</p>
+            <Link href={`/admin/sequences?key=${encodeURIComponent(password)}`} className="cursor-pointer">
+              <Button className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white shadow-md hover:shadow-lg transition-all duration-200 rounded-lg cursor-pointer">
+                Create Your First Sequence
+              </Button>
             </Link>
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-4">
           {sequences.map((sequence) => (
-            <Card key={sequence.id} className="hover:shadow-lg transition-shadow">
-              <CardHeader>
+            <Card 
+              key={sequence.id} 
+              className="bg-white border-0 shadow-sm rounded-xl hover:shadow-md transition-all duration-200 cursor-pointer"
+              onDoubleClick={() => {
+                window.location.href = `/admin/sequences?key=${encodeURIComponent(password)}&id=${sequence.id}`;
+              }}
+            >
+              <CardHeader className="bg-gray-50 px-6 py-4 border-b border-gray-200">
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle>{sequence.name}</CardTitle>
-                    <p className="text-sm text-muted-foreground mt-1">
+                    <CardTitle className="text-lg font-semibold text-gray-900">{sequence.name}</CardTitle>
+                    <p className="text-sm text-gray-500 mt-1">
                       Created: {new Date(sequence.created_at).toLocaleDateString()}
                       {sequence.updated_at && (
                         <> • Updated: {new Date(sequence.updated_at).toLocaleDateString()}</>
                       )}
                     </p>
                     {sequence.active_version_id && (
-                      <p className="text-xs text-green-600 mt-1">✓ Active Version</p>
+                      <p className="text-xs text-green-600 mt-1 font-medium">✓ Active Version</p>
                     )}
                   </div>
-                  <div className="flex gap-2">
-                    <Link href={`/admin/sequences?key=${encodeURIComponent(password)}&id=${sequence.id}`}>
-                      <Button variant="outline" size="sm">
+                  <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+                    <Link 
+                      href={`/admin/sequences?key=${encodeURIComponent(password)}&id=${sequence.id}`}
+                      className="cursor-pointer"
+                    >
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        className="border-gray-200 text-gray-700 hover:bg-purple-50 hover:border-purple-300 hover:text-purple-700 transition-all duration-200 rounded-lg cursor-pointer"
+                      >
                         <Edit className="h-4 w-4 mr-2" />
                         Edit
                       </Button>
@@ -150,8 +173,11 @@ function SequencesListContent() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleDelete(sequence.id)}
-                      className="text-red-600 hover:text-red-700"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(sequence.id);
+                      }}
+                      className="border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 hover:text-red-700 transition-all duration-200 rounded-lg cursor-pointer"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -162,15 +188,7 @@ function SequencesListContent() {
           ))}
         </div>
       )}
-
-      <div className="mt-8 p-4 bg-muted rounded-lg">
-        <h3 className="font-semibold mb-2">💡 How to Verify in Supabase:</h3>
-        <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground">
-          <li>Open Supabase Dashboard → Table Editor</li>
-          <li>Check the <code className="bg-background px-1 rounded">sequences</code> table - you should see your sequence</li>
-          <li>Check the <code className="bg-background px-1 rounded">sequence_versions</code> table - you should see the version with the full spec</li>
-          <li>The <code className="bg-background px-1 rounded">spec_jsonb</code> column contains the full sequence definition</li>
-        </ol>
+        </div>
       </div>
     </div>
   );
@@ -179,10 +197,13 @@ function SequencesListContent() {
 export default function SequencesListPage() {
   return (
     <Suspense fallback={
-      <div className="container mx-auto p-8">
-        <Card className="p-8 text-center">
-          <p className="text-muted-foreground">Loading...</p>
-        </Card>
+      <div className="admin-font min-h-screen bg-gradient-to-br from-gray-50 via-white to-purple-50/30 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center mx-auto mb-4 shadow-md">
+            <MessageSquare className="h-6 w-6 text-white animate-pulse" />
+          </div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
       </div>
     }>
       <SequencesListContent />

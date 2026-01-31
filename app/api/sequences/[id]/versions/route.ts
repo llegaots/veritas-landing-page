@@ -100,6 +100,10 @@ export async function POST(
       });
     }
 
+    console.log('[API] Saving version for sequence:', id);
+    console.log('[API] Spec has', spec.nodes?.length || 0, 'nodes,', spec.edges?.length || 0, 'edges');
+    console.log('[API] Node IDs:', spec.nodes?.map((n: any) => `${n.type}:${n.id}`));
+
     // Verify sequence exists
     const sequence = await getSequence(id);
     if (!sequence) {
@@ -110,6 +114,11 @@ export async function POST(
     }
 
     const version = await createSequenceVersion(id, spec as SequenceSpec, created_by);
+    
+    console.log('[API] Version created:', version.id);
+    console.log('[API] Saved spec has', version.spec_jsonb?.nodes?.length || 0, 'nodes');
+    console.log('[API] Saved node IDs:', version.spec_jsonb?.nodes?.map((n: any) => `${n.type}:${n.id}`));
+    
     return new Response(
       JSON.stringify({
         id: version.id,

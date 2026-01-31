@@ -45,6 +45,15 @@ export interface SendSmsNode extends BaseNode {
   timing?: string; // Optional timing override (e.g., "2 hours", "Day 1")
 }
 
+export interface SendEmailNode extends BaseNode {
+  type: 'send_email';
+  subject: string; // Email subject line with variable placeholders
+  html_content: string; // HTML email content with variable placeholders
+  text_content?: string; // Plain text fallback (optional)
+  variables?: Record<string, string>; // Variable definitions for this node
+  timing?: string; // Optional timing override (e.g., "2 hours", "Day 1")
+}
+
 export interface WaitNode extends BaseNode {
   type: 'wait';
   duration: string; // e.g., "2 hours", "Day 1", "1 week", "3 days"
@@ -65,7 +74,7 @@ export interface EndNode extends BaseNode {
   type: 'end';
 }
 
-export type SequenceNode = TriggerNode | SendSmsNode | WaitNode | ConditionNode | EndNode;
+export type SequenceNode = TriggerNode | SendSmsNode | SendEmailNode | WaitNode | ConditionNode | EndNode;
 
 export interface SequenceEdge {
   from: string; // source nodeId

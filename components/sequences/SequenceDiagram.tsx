@@ -26,8 +26,14 @@ export function SequenceDiagram() {
   const { spec, applyOps, commitOpsToServer, selectedNodeId, setSelectedNodeId } = useSequenceStore();
   const lastSpecRef = useRef<typeof spec>(null);
   const autoLayoutTriggered = useRef(false);
+  const isDraggingRef = useRef(false);
+  const isUpdatingFromSpecRef = useRef(false);
+  const lastNodeCountRef = useRef(0);
+  const lastEdgeCountRef = useRef(0);
+  const lastNodeIdsRef = useRef<string[]>([]);
+  const lastEdgeIdsRef = useRef<string[]>([]);
 
-  // Convert spec to React Flow format
+  // Convert spec to React Flow format - only when structure changes
   const { nodes: flowNodes, edges: flowEdges } = useMemo(() => {
     if (!spec) return { nodes: [], edges: [] };
     return specToReactFlow(spec);
@@ -36,52 +42,134 @@ export function SequenceDiagram() {
   const [nodes, setNodes, onNodesChange] = useNodesState(flowNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(flowEdges);
 
-  // Update React Flow when spec changes
+  // Initialize node/edge counts and IDs on first load
   useEffect(() => {
-    if (spec) {
+    if (spec && lastNodeCountRef.current === 0) {
+      lastNodeCountRef.current = spec.nodes.length;
+      lastEdgeCountRef.current = spec.edges.length;
+      lastNodeIdsRef.current = spec.nodes.map(n => n.id);
+      lastEdgeIdsRef.current = spec.edges.map(e => `${e.from}-${e.to}`);
+    }
+  }, [spec]);
+
+  // Track last positions to detect when they change from auto-layout
+  const lastPositionsRef = useRef<Record<string, { x: number; y: number }>>({});
+
+  // Update React Flow when spec changes - but only for structural changes
+  useEffect(() => {
+    if (!spec) return;
+    
+    // Don't update during drag
+    if (isDraggingRef.current) {
+      return;
+    }
+    
+    const nodeIds = spec.nodes.map(n => n.id).sort().join(',');
+    const edgeIds = spec.edges.map(e => `${e.from}-${e.to}`).sort().join(',');
+    
+    const nodeCountChanged = lastNodeCountRef.current !== spec.nodes.length;
+    const edgeCountChanged = lastEdgeCountRef.current !== spec.edges.length;
+    const nodeIdsChanged = lastNodeIdsRef.current.join(',') !== nodeIds;
+    const edgeIdsChanged = lastEdgeIdsRef.current.join(',') !== edgeIds;
+    const structuralChanged = nodeCountChanged || edgeCountChanged || nodeIdsChanged || edgeIdsChanged;
+    
+    // Check if positions changed (from auto-layout)
+    const positionsChanged = spec.nodes.some(node => {
+      const specPos = spec.ui.positions[node.id];
+      const lastPos = lastPositionsRef.current[node.id];
+      if (!specPos) return false;
+      if (!lastPos) return true;
+      return Math.abs(specPos.x - lastPos.x) > 1 || Math.abs(specPos.y - lastPos.y) > 1;
+    });
+    
+    // Update React Flow if structure changed OR positions changed (from auto-layout)
+    if (structuralChanged || (positionsChanged && !isUpdatingFromSpecRef.current)) {
+      isUpdatingFromSpecRef.current = true;
       const { nodes: newNodes, edges: newEdges } = specToReactFlow(spec);
       setNodes(newNodes);
       setEdges(newEdges);
       
-      // Trigger auto-layout on structural changes (nodes/edges count changed)
-      const structuralChanged = 
-        lastSpecRef.current === null ||
-        lastSpecRef.current.nodes.length !== spec.nodes.length ||
-        lastSpecRef.current.edges.length !== spec.edges.length;
+      // Update last positions
+      spec.nodes.forEach(node => {
+        const pos = spec.ui.positions[node.id];
+        if (pos) {
+          lastPositionsRef.current[node.id] = { ...pos };
+        }
+      });
       
-      if (structuralChanged && !autoLayoutTriggered.current) {
-        autoLayoutTriggered.current = true;
-        // Run auto-layout after a short delay to allow React Flow to update
-        setTimeout(() => {
-          if (spec) {
-            const layoutOps = generateAutoLayoutOps(spec);
-            if (layoutOps.length > 0) {
-              applyOps(layoutOps);
+      if (structuralChanged) {
+        lastNodeCountRef.current = spec.nodes.length;
+        lastEdgeCountRef.current = spec.edges.length;
+        lastNodeIdsRef.current = spec.nodes.map(n => n.id);
+        lastEdgeIdsRef.current = spec.edges.map(e => `${e.from}-${e.to}`);
+        
+        // Only run auto-layout if structure changed
+        if (!autoLayoutTriggered.current) {
+          autoLayoutTriggered.current = true;
+          
+          // Run auto-layout after a delay to allow React Flow to update
+          setTimeout(() => {
+            if (spec && !isDraggingRef.current) {
+              const layoutOps = generateAutoLayoutOps(spec);
+              if (layoutOps.length > 0) {
+                applyOps(layoutOps);
+              }
+              autoLayoutTriggered.current = false;
             }
-            autoLayoutTriggered.current = false;
-          }
-        }, 100);
+          }, 300);
+        }
       }
       
-      lastSpecRef.current = spec;
+      setTimeout(() => {
+        isUpdatingFromSpecRef.current = false;
+      }, 100);
     }
+    
+    lastSpecRef.current = spec;
   }, [spec, setNodes, setEdges, applyOps]);
 
-  // Handle node position changes
+  // Handle node drag start
+  const onNodeDragStart = useCallback(() => {
+    isDraggingRef.current = true;
+  }, []);
+
+  // Handle node position changes during drag
+  const onNodeDrag = useCallback((_: any, node: Node) => {
+    // Update local state immediately for smooth dragging
+    setNodes((nds) =>
+      nds.map((n) =>
+        n.id === node.id ? { ...n, position: node.position } : n
+      )
+    );
+  }, [setNodes]);
+
+  // Handle node position changes when drag stops
   const onNodeDragStop = useCallback(
     (_: any, node: Node) => {
       if (!spec) return;
       
+      // Update the position in spec immediately
       const ops = reactFlowChangeToOps(spec, {
         positionChanges: [{ nodeId: node.id, position: node.position }],
       });
       
       if (ops.length > 0) {
+        // Apply ops but don't trigger React Flow update
+        isUpdatingFromSpecRef.current = true;
         applyOps(ops);
+        
         // Commit to server after a debounce
         setTimeout(() => {
           commitOpsToServer(ops, `Moved node ${node.id}`);
         }, 500);
+        
+        // Reset flag after a delay to allow spec to update
+        setTimeout(() => {
+          isDraggingRef.current = false;
+          isUpdatingFromSpecRef.current = false;
+        }, 100);
+      } else {
+        isDraggingRef.current = false;
       }
     },
     [spec, applyOps, commitOpsToServer]
@@ -192,6 +280,8 @@ export function SequenceDiagram() {
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
+        onNodeDragStart={onNodeDragStart}
+        onNodeDrag={onNodeDrag}
         onNodeDragStop={onNodeDragStop}
         onConnect={onConnect}
         onNodeClick={onNodeClick}
@@ -211,12 +301,42 @@ export function SequenceDiagram() {
         }}
         nodeTypes={nodeTypes}
         fitView
+        fitViewOptions={{
+          padding: 0.2,
+          maxZoom: 1.5,
+        }}
         deleteKeyCode={['Delete', 'Backspace']}
         edgesFocusable={true}
+        // Use horizontal layout for better space utilization
+        defaultViewport={{ x: 0, y: 0, zoom: 0.8 }}
+        // Better edge styling
+        defaultEdgeOptions={{
+          type: 'smoothstep',
+          animated: false,
+          style: {
+            strokeWidth: 2.5,
+            stroke: '#9333ea', // Purple color
+          },
+        }}
       >
-        <Background />
-        <Controls />
-        <MiniMap />
+        <Background 
+          color="#e5e7eb" 
+          gap={20} 
+          size={1}
+        />
+        <Controls 
+          className="bg-white border border-gray-200 rounded-lg shadow-sm"
+        />
+        <MiniMap 
+          nodeColor={(node) => {
+            if (node.type === 'trigger') return '#9333ea';
+            if (node.type === 'send_sms') return '#9333ea';
+            if (node.type === 'wait') return '#3b82f6';
+            if (node.type === 'condition') return '#f97316';
+            return '#6b7280';
+          }}
+          className="bg-white border border-gray-200 rounded-lg shadow-sm"
+        />
       </ReactFlow>
     </div>
   );

@@ -73,6 +73,7 @@ export async function triggerSmsSequenceForLead(leadData: LeadData): Promise<{
       body: JSON.stringify({
         lead_id: leadData.lead_id,
         phone: leadData.phone,
+        email: leadData.email,
         attributes,
       }),
     });

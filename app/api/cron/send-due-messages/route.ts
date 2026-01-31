@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { sendSms } from '@/lib/sms/provider';
+import { sendEmail } from '@/lib/email/provider';
 
 // Force Node.js runtime (not Edge)
 export const runtime = 'nodejs';
@@ -86,9 +87,17 @@ export async function GET(request: NextRequest) {
     const bufferMs = 5000; // 5 seconds
     const dueTime = new Date(now.getTime() + bufferMs).toISOString();
     
+    // Get due jobs
     const { data: jobs, error: fetchError } = await supabase
       .from('message_jobs')
-      .select('*')
+      .select(`
+        *,
+        sequence_runs!inner(
+          id,
+          status,
+          investor_id
+        )
+      `)
       .is('sent_at', null) // Not yet sent (use .is() for null checks)
       .lte('scheduled_for', dueTime) // Due now or past (with small buffer)
       .order('scheduled_for', { ascending: true }) // Process in chronological order
@@ -124,6 +133,13 @@ export async function GET(request: NextRequest) {
     // Process each job
     for (const job of jobs) {
       try {
+        // Check if sequence run is paused - skip if paused
+        const run = Array.isArray(job.sequence_runs) ? job.sequence_runs[0] : job.sequence_runs;
+        if (run && run.status !== 'active') {
+          console.log(`[Cron] Skipping job ${job.id} - sequence run ${run.id} is ${run.status} (not active)`);
+          continue;
+        }
+        
         // Double-check that this job is actually due (defensive check)
         const scheduledTime = new Date(job.scheduled_for);
         const currentTime = new Date();
@@ -149,18 +165,45 @@ export async function GET(request: NextRequest) {
           continue;
         }
 
-        console.log(`[Cron] Sending job ${job.id} scheduled for ${job.scheduled_for} (delay: ${Math.round((currentTime.getTime() - scheduledTime.getTime()) / 1000)}s)`);
+        console.log(`[Cron] Sending job ${job.id} (type: ${job.job_type || 'sms'}) scheduled for ${job.scheduled_for} (delay: ${Math.round((currentTime.getTime() - scheduledTime.getTime()) / 1000)}s)`);
 
-        // Send SMS
-        const sendResult = await sendSms({
-          to: job.phone_number,
-          body: job.message_text,
-          metadata: {
-            job_id: job.id,
-            run_id: job.run_id,
-            node_id: job.node_id,
-          },
-        });
+        // Determine job type (default to 'sms' for backward compatibility)
+        const jobType = job.job_type || 'sms';
+        let sendResult;
+
+        if (jobType === 'email') {
+          // Send Email
+          if (!job.email_address || !job.email_subject || !job.email_html) {
+            throw new Error('Email job missing required fields: email_address, email_subject, or email_html');
+          }
+
+          sendResult = await sendEmail({
+            to: job.email_address,
+            subject: job.email_subject,
+            html: job.email_html,
+            text: job.email_text || undefined,
+            metadata: {
+              job_id: job.id,
+              run_id: job.run_id,
+              node_id: job.node_id,
+            },
+          });
+        } else {
+          // Send SMS (default)
+          if (!job.phone_number || !job.message_text) {
+            throw new Error('SMS job missing required fields: phone_number or message_text');
+          }
+
+          sendResult = await sendSms({
+            to: job.phone_number,
+            body: job.message_text,
+            metadata: {
+              job_id: job.id,
+              run_id: job.run_id,
+              node_id: job.node_id,
+            },
+          });
+        }
 
         // Update job with provider status
         await supabase

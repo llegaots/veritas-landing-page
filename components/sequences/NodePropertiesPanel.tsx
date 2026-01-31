@@ -2,19 +2,22 @@
 
 import { useState, useEffect } from 'react';
 import { useSequenceStore } from '@/lib/store/sequence-store';
-import { SendSmsNode } from '@/lib/sequences/spec';
+import { SendSmsNode, SendEmailNode } from '@/lib/sequences/spec';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { MessageSquare, X, Play, Plus, ChevronDown, ChevronUp, Settings } from 'lucide-react';
+import { MessageSquare, Mail, X, Play, Plus, ChevronDown, ChevronUp, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
 export function NodePropertiesPanel() {
   const { spec, selectedNodeId, setSelectedNodeId, applyOps } = useSequenceStore();
   const [message, setMessage] = useState('');
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailHtml, setEmailHtml] = useState('');
+  const [emailText, setEmailText] = useState('');
   const [timingValue, setTimingValue] = useState('');
   const [timingUnit, setTimingUnit] = useState<'minutes' | 'hours' | 'days'>('hours');
   const [triggerType, setTriggerType] = useState<'lead.created' | 'lead.demo_booked' | 'investor.matched' | 'manual'>('lead.created');
@@ -31,6 +34,7 @@ export function NodePropertiesPanel() {
   // Find selected node (using actual node ID)
   const selectedNode = spec?.nodes.find(n => n.id === actualNodeId);
   const isSmsNode = selectedNode?.type === 'send_sms';
+  const isEmailNode = selectedNode?.type === 'send_email';
   const isTriggerNode = selectedNodeId === 'trigger' || selectedNode?.type === 'trigger';
   
   // Debug logging
@@ -62,11 +66,32 @@ export function NodePropertiesPanel() {
       } else {
         setTimingValue('');
       }
+    } else if (selectedNode && isEmailNode) {
+      const emailNode = selectedNode as SendEmailNode;
+      setEmailSubject(emailNode.subject || '');
+      setEmailHtml(emailNode.html_content || '');
+      setEmailText(emailNode.text_content || '');
+      
+      // Parse timing string
+      if (emailNode.timing) {
+        const match = emailNode.timing.match(/^(\d+)\s*(minutes?|hours?|days?)$/i);
+        if (match) {
+          setTimingValue(match[1]);
+          const unit = match[2].toLowerCase();
+          if (unit.startsWith('minute')) setTimingUnit('minutes');
+          else if (unit.startsWith('hour')) setTimingUnit('hours');
+          else if (unit.startsWith('day')) setTimingUnit('days');
+        } else {
+          setTimingValue('');
+        }
+      } else {
+        setTimingValue('');
+      }
     } else if (isTriggerNode && spec) {
       // Load trigger type
       setTriggerType(spec.trigger?.type || 'lead.created');
     }
-  }, [selectedNode, isSmsNode, isTriggerNode, spec]);
+  }, [selectedNode, isSmsNode, isEmailNode, isTriggerNode, spec]);
 
   // Don't render anything if no node is selected - parent will handle visibility
   if (!selectedNodeId) {
@@ -141,6 +166,187 @@ export function NodePropertiesPanel() {
     );
   }
 
+  // Handle Email node
+  if (isEmailNode) {
+    const handleEmailSave = () => {
+      if (!spec || !selectedNode) {
+        console.error('[NodePropertiesPanel] Cannot save: no spec or selectedNode');
+        return;
+      }
+
+      const nodeIndex = spec.nodes.findIndex(n => n.id === actualNodeId);
+      if (nodeIndex === -1) {
+        console.error('[NodePropertiesPanel] Cannot find node with ID:', actualNodeId);
+        return;
+      }
+
+      const currentNode = spec.nodes[nodeIndex] as SendEmailNode;
+      const patches = [];
+
+      // Update subject
+      if (currentNode.subject !== emailSubject) {
+        patches.push({
+          op: (currentNode.subject !== undefined ? 'replace' : 'add') as 'replace' | 'add',
+          path: `/nodes/${nodeIndex}/subject`,
+          value: emailSubject,
+        });
+      }
+
+      // Update HTML content
+      if (currentNode.html_content !== emailHtml) {
+        patches.push({
+          op: (currentNode.html_content !== undefined ? 'replace' : 'add') as 'replace' | 'add',
+          path: `/nodes/${nodeIndex}/html_content`,
+          value: emailHtml,
+        });
+      }
+
+      // Update text content (optional)
+      if (emailText && emailText.trim() !== '') {
+        if (currentNode.text_content !== emailText) {
+          patches.push({
+            op: (currentNode.text_content !== undefined ? 'replace' : 'add') as 'replace' | 'add',
+            path: `/nodes/${nodeIndex}/text_content`,
+            value: emailText,
+          });
+        }
+      } else if (currentNode.text_content !== undefined) {
+        // Remove text_content if empty
+        patches.push({
+          op: 'remove' as const,
+          path: `/nodes/${nodeIndex}/text_content`,
+        });
+      }
+
+      // Update timing
+      const currentTiming = currentNode.timing;
+      if (timingValue && timingValue.trim() !== '') {
+        const timingString = `${timingValue} ${timingUnit}`;
+        if (currentTiming !== timingString) {
+          patches.push({
+            op: (currentTiming !== undefined ? 'replace' : 'add') as 'replace' | 'add',
+            path: `/nodes/${nodeIndex}/timing`,
+            value: timingString,
+          });
+        }
+      } else if (currentTiming !== undefined) {
+        patches.push({
+          op: 'remove' as const,
+          path: `/nodes/${nodeIndex}/timing`,
+        });
+      }
+
+      if (patches.length > 0) {
+        applyOps(patches);
+        console.log('[NodePropertiesPanel] Email changes applied locally');
+      }
+    };
+
+    return (
+      <div className="w-80 border-l border-gray-200 bg-white/50 backdrop-blur-sm flex flex-col">
+        <Card className="border-0 shadow-none rounded-none h-full flex flex-col">
+          <CardHeader className="bg-gradient-to-r from-blue-50 to-blue-100/50 px-4 py-3 border-b border-blue-100">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                <Mail className="h-4 w-4 text-blue-600" />
+                Edit Email Node
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0 cursor-pointer"
+                onClick={() => setSelectedNodeId(null)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="p-4 flex-1 overflow-y-auto">
+            <div className="space-y-4">
+              <div>
+                <Label className="text-sm font-medium text-gray-700 mb-2 block">
+                  Subject
+                </Label>
+                <Input
+                  value={emailSubject}
+                  onChange={(e) => setEmailSubject(e.target.value)}
+                  placeholder="Email subject line"
+                  className="w-full border-gray-200 hover:border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 rounded-lg transition-all duration-200 text-gray-900"
+                />
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium text-gray-700 mb-2 block">
+                  HTML Content
+                </Label>
+                <Textarea
+                  value={emailHtml}
+                  onChange={(e) => setEmailHtml(e.target.value)}
+                  placeholder="<html>...</html> or HTML content"
+                  className="w-full min-h-[300px] font-mono text-sm border-gray-200 hover:border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 rounded-lg transition-all duration-200 text-gray-900"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Enter HTML content. Variables like {'{{'}investor_name{'}}'} will be replaced.
+                </p>
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium text-gray-700 mb-2 block">
+                  Plain Text Content (Optional)
+                </Label>
+                <Textarea
+                  value={emailText}
+                  onChange={(e) => setEmailText(e.target.value)}
+                  placeholder="Plain text fallback (optional)"
+                  className="w-full min-h-[100px] border-gray-200 hover:border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 rounded-lg transition-all duration-200 text-gray-900"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Optional plain text version for email clients that don't support HTML
+                </p>
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium text-gray-700 mb-2 block">
+                  Wait Time
+                </Label>
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    min="0"
+                    value={timingValue}
+                    onChange={(e) => setTimingValue(e.target.value)}
+                    placeholder="0"
+                    className="w-20 border-gray-200 hover:border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 rounded-lg transition-all duration-200 text-gray-900"
+                  />
+                  <Select value={timingUnit} onValueChange={(value: any) => setTimingUnit(value)}>
+                    <SelectTrigger className="flex-1 border-gray-200 hover:border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 rounded-lg bg-white transition-all duration-200 cursor-pointer text-gray-900">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="minutes">Minutes</SelectItem>
+                      <SelectItem value="hours">Hours</SelectItem>
+                      <SelectItem value="days">Days</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Wait time before sending this email (after previous step)
+                </p>
+              </div>
+
+              <Button
+                onClick={handleEmailSave}
+                className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white shadow-md hover:shadow-lg transition-all duration-200 rounded-lg cursor-pointer"
+              >
+                Save Changes
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   // Handle SMS node (existing code)
   if (!isSmsNode) {
     return (
@@ -150,7 +356,7 @@ export function NodePropertiesPanel() {
             <MessageSquare className="h-6 w-6 text-purple-600" />
           </div>
           <p className="text-sm text-gray-600">
-            Select an SMS node to edit its properties
+            Select an SMS or Email node to edit its properties
           </p>
         </div>
       </div>

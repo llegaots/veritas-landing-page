@@ -8,7 +8,7 @@ import { SequenceDiagram } from '@/components/sequences/SequenceDiagram';
 import { PropertiesPanel } from '@/components/sequences/PropertiesPanel';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Save, Loader2 } from 'lucide-react';
+import { Save, Loader2, MessageSquare, BarChart3 } from 'lucide-react';
 import { SequenceSpec, createEmptySpec, SendSmsNode, WaitNode } from '@/lib/sequences/spec';
 import { applyPatchesToSpec } from '@/lib/sequences/patches';
 
@@ -17,15 +17,21 @@ function createVeritasSequence(): SequenceSpec {
   const spec = createEmptySpec('Veritas SMS Sequence', 'system');
   spec.trigger.type = 'lead.created';
   
+  // Set default variables
+  spec.variables = {
+    PropertyName: 'Horizontal Parks',
+    CalendarLink: 'https://calendly.com/alex-veritasequitypartners/15-minute-intro-call',
+  };
+  
   const patches = [
-    // SMS 1: Day 0 immediate (1-3 min)
+    // SMS 1: Day 0 – Immediate (1–3 min after form submit)
     {
       op: 'add' as const,
       path: '/nodes/-',
       value: {
         id: 'sms_1',
         type: 'send_sms',
-        content: 'Hi {{FirstName}}, this is Alex with Veritas Equity Partners. You just requested info on the {{PropertyName}} multifamily investment opportunity. I\'d love to walk you through the deal and see if it aligns with your investment goals. Are you available for a quick 15-min call this week?',
+        content: 'Hi {{FirstName}}, this is Alex with Veritas Equity Partners. You just requested info on the Horizontal Parks multifamily investment. If helpful, you can book a short Zoom to see if it\'s a fit (no obligation): {{CalendarLink}}\n\nIf you\'re no longer interested, all good — reply STOP anytime.',
       } as SendSmsNode,
     },
     {
@@ -60,14 +66,14 @@ function createVeritasSequence(): SequenceSpec {
       value: { from: 'sms_1', to: 'wait_1' },
     },
     
-    // SMS 2: Day 0 If no response (2 hours)
+    // SMS 2: Day 0 – If no response (≈2 hours later)
     {
       op: 'add' as const,
       path: '/nodes/-',
       value: {
         id: 'sms_2',
         type: 'send_sms',
-        content: 'For context, our strategy focuses on workforce-housing multifamily. Returns are driven by cash flow and operational improvements. If you\'re interested in learning more, I can send you the deal memo and we can schedule a call.',
+        content: 'For context, our strategy focuses on workforce-housing multifamily. Returns come from cash flow and operational improvements — not speculation. We don\'t guess, we do the math.',
       } as SendSmsNode,
     },
     {
@@ -102,14 +108,14 @@ function createVeritasSequence(): SequenceSpec {
       value: { from: 'sms_2', to: 'wait_2' },
     },
     
-    // SMS 3: Day 0 If no response (6 hours)
+    // SMS 3: Day 0 – If still no response (≈6 hours later)
     {
       op: 'add' as const,
       path: '/nodes/-',
       value: {
         id: 'sms_3',
         type: 'send_sms',
-        content: 'Quick note here, the Zoom isn\'t a pitch. It\'s just to walkthrough the deal, risks and see if it aligns with what you\'re looking for. If it\'s not a fit, no worries at all. Would a quick call work?',
+        content: 'Quick note — the Zoom isn\'t a pitch. It\'s just to walk through the deal, risks, and see if it aligns with what you\'re looking for. If useful, here\'s the link: {{CalendarLink}}',
       } as SendSmsNode,
     },
     {
@@ -151,7 +157,7 @@ function createVeritasSequence(): SequenceSpec {
       value: {
         id: 'sms_4',
         type: 'send_sms',
-        content: 'Most people book the call just to confirm whether this makes sense before spending time reviewing docs. If you want clarity first, happy to jump on a quick call. Does that work?',
+        content: 'Most people book the call just to confirm whether this makes sense before reviewing docs. If you want clarity first, you can grab a time here: {{CalendarLink}}',
       } as SendSmsNode,
     },
     {
@@ -193,7 +199,7 @@ function createVeritasSequence(): SequenceSpec {
       value: {
         id: 'sms_5',
         type: 'send_sms',
-        content: 'I want to be honest, there are real risks with this deal. If you want to understand each specifically and how I mitigate them, just book a call. No pressure, just transparency.',
+        content: 'I want to be honest — there are real risks with this deal. If you want to understand each one and how we mitigate them, a quick 10-min call is the best place to do that.',
       } as SendSmsNode,
     },
     {
@@ -235,7 +241,7 @@ function createVeritasSequence(): SequenceSpec {
       value: {
         id: 'sms_6',
         type: 'send_sms',
-        content: 'This investment is structured for long-term, passive capital, with an expected hold period in the 5-7 year range. If that sounds like what you\'re looking for, let\'s chat.',
+        content: 'This investment is structured for long-term, passive capital with a 5–7 year hold. If that fits what you\'re looking for, you can book here: {{CalendarLink}}',
       } as SendSmsNode,
     },
     {
@@ -277,7 +283,7 @@ function createVeritasSequence(): SequenceSpec {
       value: {
         id: 'sms_7',
         type: 'send_sms',
-        content: 'I can walk you through how deals like {{PropertyName}} are structured, who they\'re a fit for, and what to expect as a passive investor. Interested in a quick call?',
+        content: 'I can walk you through how deals like Horizontal Parks are structured, who they\'re a fit for, and what to expect as a passive investor. Is this something you\'d be interested in?',
       } as SendSmsNode,
     },
     {
@@ -319,7 +325,7 @@ function createVeritasSequence(): SequenceSpec {
       value: {
         id: 'sms_8',
         type: 'send_sms',
-        content: 'Hey {{FirstName}}, should I assume this opportunity isn\'t a fit for you right now or would it make sense for a quick chat? Here\'s my calendar if helpful: [link]',
+        content: 'Hey {{FirstName}}, should I assume this opportunity isn\'t a fit right now, or would it make sense for a quick chat? Here\'s my link if helpful: {{CalendarLink}}',
       } as SendSmsNode,
     },
     {
@@ -361,7 +367,7 @@ function createVeritasSequence(): SequenceSpec {
       value: {
         id: 'sms_9',
         type: 'send_sms',
-        content: 'Quick heads up, we typically stop taking calls once allocation starts filling. The deal is currently 86% subscribed. No pressure, just wanted to give you a heads up in case you wanted to chat before then.',
+        content: 'Quick heads up — we typically stop taking calls once allocation starts filling. The deal is currently ~86% subscribed. No pressure at all, just wanted to see if it makes sense to connect before it\'s fully allocated.',
       } as SendSmsNode,
     },
     {
@@ -396,14 +402,14 @@ function createVeritasSequence(): SequenceSpec {
       value: { from: 'sms_9', to: 'wait_day20' },
     },
     
-    // SMS 10: Day 20
+    // SMS 10: Day 20 (Final touch)
     {
       op: 'add' as const,
       path: '/nodes/-',
       value: {
         id: 'sms_10',
         type: 'send_sms',
-        content: 'Totally understand if now isn\'t the right time. Would it be okay if I kept you in the loop on future deals and events and checked in periodically?',
+        content: 'Totally understand if now isn\'t the right time. Would it be okay if I kept you in the loop on future deals and checked back later this year?',
       } as SendSmsNode,
     },
     {
@@ -557,29 +563,7 @@ function VeritasSequencePageContent() {
       console.error('Error saving sequence:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       
-      // Check if it's a missing table error
-      if (errorMessage.includes("Could not find the table") || 
-          errorMessage.includes("public.sequences") ||
-          errorMessage.includes("schema cache")) {
-        alert(
-          '❌ DATABASE TABLES NOT FOUND!\n\n' +
-          'You need to create the tables in Supabase first.\n\n' +
-          'QUICK SETUP:\n' +
-          '1. Open: https://supabase.com/dashboard\n' +
-          '2. Select your project\n' +
-          '3. Go to: SQL Editor (left sidebar)\n' +
-          '4. Click: "New Query"\n' +
-          '5. Open file: supabase-sequences-schema.sql (in project root)\n' +
-          '6. Copy ALL contents (Cmd+A, Cmd+C)\n' +
-          '7. Paste into Supabase SQL Editor\n' +
-          '8. Click "Run" (or Cmd+Enter)\n' +
-          '9. Wait for "Success"\n' +
-          '10. Refresh this page\n\n' +
-          'See SETUP_SEQUENCES.md for detailed instructions.'
-        );
-      } else {
-        alert(`Failed to save sequence: ${errorMessage.substring(0, 200)}`);
-      }
+      alert(`Failed to save sequence: ${errorMessage.substring(0, 200)}`);
     } finally {
       setSaving(false);
     }
@@ -587,43 +571,74 @@ function VeritasSequencePageContent() {
 
   if (!password) {
     return (
-      <div className="container mx-auto p-8">
-        <Card className="p-8 text-center">
-          <p className="text-muted-foreground">Please provide a password to access sequences.</p>
-        </Card>
+      <div className="admin-font min-h-screen bg-gradient-to-br from-purple-50 via-white to-purple-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full border border-purple-100">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center">
+              <MessageSquare className="h-5 w-5 text-white" />
+            </div>
+            <h1 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-purple-800 bg-clip-text text-transparent">
+              SMS Sequence
+            </h1>
+          </div>
+          <p className="text-gray-600 mb-6 text-center">
+            Please provide a password to access the SMS sequence editor.
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="admin-font h-screen flex flex-col">
-      {/* Toolbar */}
-      <div className="border-b p-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Veritas SMS Sequence</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            10-step automated SMS sequence for new leads. Click nodes to edit messages and timing.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Link href={`/admin/sequences/list?key=${encodeURIComponent(password || 'veritas2024admin')}`}>
-            <Button variant="outline" disabled={isLoading}>
-              View All Sequences
-            </Button>
-          </Link>
-          <Button onClick={handleSave} disabled={!spec || saving || isLoading}>
-            {saving ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Save Sequence
-              </>
-            ) : (
-              <>
-                <Save className="h-4 w-4 mr-2" />
-                Save Sequence
-              </>
-            )}
-          </Button>
+    <div className="admin-font min-h-screen bg-gradient-to-br from-gray-50 via-white to-purple-50/30">
+      {/* Modern Header matching Analytics page */}
+      <div className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-gray-200/50 shadow-sm">
+        <div className="px-4 lg:px-8 py-4 max-w-7xl mx-auto">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center shadow-md">
+                <MessageSquare className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold bg-gradient-to-r from-purple-600 to-purple-800 bg-clip-text text-transparent">
+                  Veritas SMS Sequence
+                </h1>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  10-message automated sequence for Horizontal Parks leads
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Link href={`/admin?key=${encodeURIComponent(password || 'veritas2024admin')}`}>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="border-gray-200 text-gray-700 hover:bg-purple-50 hover:border-purple-300 hover:text-purple-700 transition-all duration-200 rounded-lg cursor-pointer"
+                >
+                  <BarChart3 className="h-4 w-4 mr-2" />
+                  Back to Analytics
+                </Button>
+              </Link>
+              <Button 
+                onClick={handleSave} 
+                disabled={!spec || saving || isLoading}
+                size="sm"
+                className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white shadow-md hover:shadow-lg transition-all duration-200 rounded-lg cursor-pointer"
+              >
+                {saving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  <>
+                    <Save className="h-4 w-4 mr-2" />
+                    Save Sequence
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -644,10 +659,13 @@ function VeritasSequencePageContent() {
 export default function VeritasSequencePage() {
   return (
     <Suspense fallback={
-      <div className="container mx-auto p-8">
-        <Card className="p-8 text-center">
-          <p className="text-muted-foreground">Loading...</p>
-        </Card>
+      <div className="admin-font min-h-screen bg-gradient-to-br from-gray-50 via-white to-purple-50/30 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center mx-auto mb-4 shadow-md">
+            <MessageSquare className="h-6 w-6 text-white animate-pulse" />
+          </div>
+          <p className="text-gray-600">Loading sequence editor...</p>
+        </div>
       </div>
     }>
       <VeritasSequencePageContent />

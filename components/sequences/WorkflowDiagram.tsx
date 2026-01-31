@@ -21,11 +21,13 @@ import { calculateElkLayout } from '@/lib/sequences/elk-layout';
 import { WorkflowSpecV2 } from '@/lib/sequences/workflow-v2';
 import { WorkflowTriggerNode } from './nodes/WorkflowTriggerNode';
 import { WorkflowSendSmsNode } from './nodes/WorkflowSendSmsNode';
+import { WorkflowSendEmailNode } from './nodes/WorkflowSendEmailNode';
 import { WorkflowEndNode } from './nodes/WorkflowEndNode';
 
 const nodeTypes: NodeTypes = {
   trigger: WorkflowTriggerNode,
   send_sms: WorkflowSendSmsNode,
+  send_email: WorkflowSendEmailNode,
   wait: WorkflowSendSmsNode, // Reuse SMS node for wait
   end: WorkflowEndNode,
 };

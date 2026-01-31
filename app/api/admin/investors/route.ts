@@ -30,7 +30,6 @@ export async function GET(request: NextRequest) {
   const search = searchParams.get('search');
   const status = searchParams.get('status');
   const source = searchParams.get('source');
-  const readyForFollowUp = searchParams.get('ready_for_follow_up');
 
   try {
     // Build query
@@ -52,10 +51,6 @@ export async function GET(request: NextRequest) {
       query = query.eq('source', source);
     }
 
-    if (readyForFollowUp) {
-      query = query.eq('ready_for_follow_up', readyForFollowUp);
-    }
-
     const { data, error, count } = await query;
 
     if (error) {
@@ -69,7 +64,7 @@ export async function GET(request: NextRequest) {
     // Get unique statuses and sources for filters
     const { data: allInvestors } = await supabase
       .from('investors')
-      .select('status, source');
+      .select('status, source, intent_score');
 
     const statuses = [...new Set(allInvestors?.map(i => i.status).filter(Boolean) || [])];
     const sources = [...new Set(allInvestors?.map(i => i.source).filter(Boolean) || [])];
@@ -189,6 +184,76 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Error in POST /api/admin/investors:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * Admin API endpoint to update an investor
+ */
+export async function PATCH(request: NextRequest) {
+  if (!checkAuth(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+  try {
+    const body = await request.json();
+    const { id, ...updates } = body;
+
+    if (!id) {
+      return NextResponse.json(
+        { error: 'Investor ID is required' },
+        { status: 400 }
+      );
+    }
+
+    // Only allow specific fields to be updated
+    const allowedFields = [
+      'status',
+      'source',
+      'phone_number',
+      'amount_dollars',
+      'investor_name',
+      'email_address',
+    ];
+
+    const filteredUpdates: Record<string, any> = {
+      updated_at: new Date().toISOString(),
+    };
+
+    for (const field of allowedFields) {
+      if (field in updates) {
+        filteredUpdates[field] = updates[field];
+      }
+    }
+
+    // Update investor
+    const { data: updated, error: updateError } = await supabase
+      .from('investors')
+      .update(filteredUpdates)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (updateError) {
+      console.error('Error updating investor:', updateError);
+      return NextResponse.json(
+        { error: `Failed to update investor: ${updateError.message}` },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      investor: updated,
+    });
+  } catch (error) {
+    console.error('Error in PATCH /api/admin/investors:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

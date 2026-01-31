@@ -554,6 +554,14 @@ export async function createSequenceVersion(
     ? ((existingVersions as any[])[0].version_number as number) + 1
     : 1;
 
+  console.log('[DB] Creating sequence version:', {
+    sequenceId,
+    nextVersion,
+    specNodes: spec.nodes?.length || 0,
+    specEdges: spec.edges?.length || 0,
+    nodeIds: spec.nodes?.map((n: any) => `${n.type}:${n.id}`),
+  });
+
   const { data, error } = await (client
     .from('sequence_versions') as any)
     .insert({
@@ -566,9 +574,15 @@ export async function createSequenceVersion(
     .single();
 
   if (error) {
-    console.error('Error creating sequence version:', error);
+    console.error('[DB] Error creating sequence version:', error);
     throw error;
   }
+
+  console.log('[DB] Version created successfully:', {
+    versionId: (data as any).id,
+    savedNodes: (data as any).spec_jsonb?.nodes?.length || 0,
+    savedNodeIds: (data as any).spec_jsonb?.nodes?.map((n: any) => `${n.type}:${n.id}`),
+  });
 
   // Update sequence to point to this version
   const versionResult = data as any;

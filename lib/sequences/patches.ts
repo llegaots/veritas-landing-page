@@ -8,7 +8,21 @@ export type { Operation as JSONPatchOperation } from 'fast-json-patch';
 // Apply patches to a spec
 export function applyPatchesToSpec(spec: SequenceSpec, patches: JSONPatchOperation[]): SequenceSpec {
   try {
+    console.log('[Patches] Applying', patches.length, 'patches to spec with', spec.nodes.length, 'nodes');
+    console.log('[Patches] Spec before:', {
+      nodes: spec.nodes.length,
+      edges: spec.edges.length,
+      hasUI: !!spec.ui,
+      hasPositions: !!spec.ui?.positions,
+    });
+    
     const result = applyPatch(spec, patches, false, false);
+    
+    console.log('[Patches] applyPatch result:', {
+      resultLength: result?.length,
+      lastResult: result?.[result.length - 1],
+    });
+    
     if (!result || result.length === 0 || !result[result.length - 1]) {
       throw new Error('Failed to apply patches');
     }
@@ -16,11 +30,20 @@ export function applyPatchesToSpec(spec: SequenceSpec, patches: JSONPatchOperati
     const lastResult = result[result.length - 1];
     // The result can be either the document directly or an object with newDocument property
     const finalDoc = (lastResult as any).newDocument || lastResult;
+    
+    console.log('[Patches] Final doc:', {
+      hasNodes: !!finalDoc?.nodes,
+      nodeCount: finalDoc?.nodes?.length,
+      hasEdges: !!finalDoc?.edges,
+      edgeCount: finalDoc?.edges?.length,
+    });
+    
     if (!finalDoc || !finalDoc.nodes) {
       throw new Error('Patch application resulted in invalid spec structure');
     }
     return finalDoc as SequenceSpec;
   } catch (error) {
+    console.error('[Patches] Error applying patches:', error);
     throw new Error(`Patch application failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }

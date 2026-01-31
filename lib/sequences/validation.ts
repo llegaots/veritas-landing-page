@@ -37,7 +37,17 @@ export const TriggerNodeSchema = z.object({
 export const SendSmsNodeSchema = z.object({
   id: z.string(),
   type: z.literal('send_sms'),
-  content: z.string().min(1).max(1600), // SMS max length
+  content: z.string().min(0).max(1600), // Allow empty for draft nodes, SMS max length
+  variables: z.record(z.string(), z.string()).optional(),
+  timing: z.string().optional(),
+});
+
+export const SendEmailNodeSchema = z.object({
+  id: z.string(),
+  type: z.literal('send_email'),
+  subject: z.string().min(0).max(200), // Email subject max length
+  html_content: z.string().min(0), // HTML content (no max for HTML emails)
+  text_content: z.string().optional(), // Plain text fallback
   variables: z.record(z.string(), z.string()).optional(),
   timing: z.string().optional(),
 });
@@ -70,6 +80,7 @@ export const EndNodeSchema = z.object({
 export const SequenceNodeSchema = z.discriminatedUnion('type', [
   TriggerNodeSchema,
   SendSmsNodeSchema,
+  SendEmailNodeSchema,
   WaitNodeSchema,
   ConditionNodeSchema,
   EndNodeSchema,
@@ -140,7 +151,8 @@ export function validateBusinessRules(spec: SequenceSpec): ValidationResult {
     errors.push('Sequence must have exactly one end node');
   }
 
-  // All nodes must be reachable from trigger
+  // All nodes must be reachable from trigger (only enforce for active sequences)
+  // Allow disconnected nodes in draft sequences - user can connect them manually
   const triggerNode = triggerNodes[0];
   if (triggerNode) {
     const reachable = new Set<string>(['trigger']);
@@ -159,7 +171,12 @@ export function validateBusinessRules(spec: SequenceSpec): ValidationResult {
 
     const unreachable = spec.nodes.filter((n) => !reachable.has(n.id));
     if (unreachable.length > 0) {
-      errors.push(`Unreachable nodes: ${unreachable.map((n) => n.id).join(', ')}`);
+      // Only error for active sequences - allow disconnected nodes in drafts
+      if (spec.metadata.status === 'active') {
+        errors.push(`Unreachable nodes: ${unreachable.map((n) => n.id).join(', ')}`);
+      } else {
+        warnings.push(`Disconnected nodes (will need to be connected before activating): ${unreachable.map((n) => n.id).join(', ')}`);
+      }
     }
   }
 
@@ -174,14 +191,38 @@ export function validateBusinessRules(spec: SequenceSpec): ValidationResult {
     }
   }
 
-  // SMS nodes must have content
+  // SMS nodes must have content (only enforce for active sequences)
   const smsNodes = spec.nodes.filter((n) => n.type === 'send_sms') as Array<{ id: string; content: string }>;
   for (const node of smsNodes) {
     if (!node.content || node.content.trim().length === 0) {
-      errors.push(`SMS node ${node.id} must have content`);
+      // Only error if sequence is active - allow empty for draft sequences
+      if (spec.metadata.status === 'active') {
+        errors.push(`SMS node ${node.id} must have content`);
+      } else {
+        warnings.push(`SMS node ${node.id} has no content - add message content before activating sequence`);
+      }
     }
-    if (node.content.length > 1600) {
+    if (node.content && node.content.length > 1600) {
       warnings.push(`SMS node ${node.id} content exceeds 1600 characters (may be split into multiple messages)`);
+    }
+  }
+
+  // Email nodes must have subject and content (only enforce for active sequences)
+  const emailNodes = spec.nodes.filter((n) => n.type === 'send_email') as Array<{ id: string; subject: string; html_content: string }>;
+  for (const node of emailNodes) {
+    if (!node.subject || node.subject.trim().length === 0) {
+      if (spec.metadata.status === 'active') {
+        errors.push(`Email node ${node.id} must have a subject`);
+      } else {
+        warnings.push(`Email node ${node.id} has no subject - add subject before activating sequence`);
+      }
+    }
+    if (!node.html_content || node.html_content.trim().length === 0) {
+      if (spec.metadata.status === 'active') {
+        errors.push(`Email node ${node.id} must have HTML content`);
+      } else {
+        warnings.push(`Email node ${node.id} has no HTML content - add content before activating sequence`);
+      }
     }
   }
 

@@ -11,6 +11,7 @@ import { NodePropertiesPanel } from '@/components/sequences/NodePropertiesPanel'
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
 import { Save, Plus, Loader2, Bot, Hand, Settings, MessageSquare, BarChart3, ArrowLeft, Info, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { AdminSidebar } from '@/components/admin/AdminSidebar';
 import { createEmptySpec } from '@/lib/sequences/spec';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
@@ -209,54 +210,47 @@ function SequencesPageContent() {
   }
 
   return (
-    <div className="admin-font min-h-screen bg-gradient-to-br from-gray-50 via-white to-purple-50/30 flex flex-col">
-      {/* Error Banner */}
-      {error && (
-        <div className="bg-red-50 border-b border-red-200 p-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-red-800 font-medium text-sm">Error: {error}</span>
-          </div>
-          <Button variant="ghost" size="sm" onClick={clearError} className="cursor-pointer">
-            ✕
-          </Button>
-        </div>
-      )}
+    <div className="admin-font min-h-screen bg-gradient-to-br from-gray-50 via-white to-purple-50/30 flex">
+      <AdminSidebar password={password || 'veritas2024admin'} />
       
-      {/* Modern Header matching Analytics page */}
-      <div className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-gray-200/50 shadow-sm">
-        <div className="px-4 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center shadow-md">
-                <MessageSquare className="h-5 w-5 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold bg-gradient-to-r from-purple-600 to-purple-800 bg-clip-text text-transparent">
-                  SMS Sequence Builder
-                </h1>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  {spec ? `${spec.nodes.length} nodes • ${spec.edges.length} connections` : 'Create automated SMS workflows'}
-                </p>
-              </div>
-            </div>
-            
+      <div className="flex-1 ml-64 transition-all duration-300 flex flex-col">
+        {/* Error Banner */}
+        {error && (
+          <div className="bg-red-50 border-b border-red-200 p-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Link href={`/admin?key=${encodeURIComponent(password || 'veritas2024admin')}`}>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="border-gray-200 text-gray-700 hover:bg-purple-50 hover:border-purple-300 hover:text-purple-700 transition-all duration-200 rounded-lg cursor-pointer"
-                >
-                  <BarChart3 className="h-4 w-4 mr-2" />
-                  Analytics
-                </Button>
-              </Link>
-              <Link href={`/admin/sequences/list?key=${encodeURIComponent(password || 'veritas2024admin')}`}>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  className="border-gray-200 text-gray-700 hover:bg-purple-50 hover:border-purple-300 hover:text-purple-700 transition-all duration-200 rounded-lg cursor-pointer"
-                >
+              <span className="text-red-800 font-medium text-sm">Error: {error}</span>
+            </div>
+            <Button variant="ghost" size="sm" onClick={clearError} className="cursor-pointer">
+              ✕
+            </Button>
+          </div>
+        )}
+        
+        {/* Modern Header matching Analytics page */}
+        <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-gray-200/50 shadow-sm">
+          <div className="px-4 lg:px-8 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center shadow-md">
+                  <MessageSquare className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-xl font-bold bg-gradient-to-r from-purple-600 to-purple-800 bg-clip-text text-transparent">
+                    SMS Sequence Builder
+                  </h1>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {spec ? `${spec.nodes.length} nodes • ${spec.edges.length} connections` : 'Create automated SMS workflows'}
+                  </p>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <Link href={`/admin/sequences/list?key=${encodeURIComponent(password || 'veritas2024admin')}`}>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className="border-gray-200 text-gray-700 hover:bg-purple-50 hover:border-purple-300 hover:text-purple-700 transition-all duration-200 rounded-lg cursor-pointer"
+                  >
                   View All
                 </Button>
               </Link>
@@ -450,6 +444,7 @@ function SequencesPageContent() {
           </>
         )}
 
+      </div>
       </div>
     </div>
   );

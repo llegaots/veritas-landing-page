@@ -1,20 +1,26 @@
 // Compiler: SequenceSpec → Message Jobs
 // Deterministic compiler that converts a sequence spec into scheduled message jobs
 
-import { SequenceSpec, SequenceNode, SendSmsNode, WaitNode, ConditionNode } from './spec';
+import { SequenceSpec, SequenceNode, SendSmsNode, SendEmailNode, WaitNode, ConditionNode } from './spec';
 import { getOutgoingEdges } from './spec';
 
 export interface JobContext {
   lead_id: string;
   phone: string;
+  email?: string; // Email address for email jobs
   [key: string]: any; // Additional context variables
 }
 
 export interface MessageJob {
   run_id: string;
   node_id: string;
-  phone_number: string;
-  message_text: string;
+  job_type: 'sms' | 'email'; // Type of job
+  phone_number?: string; // For SMS jobs
+  email_address?: string; // For email jobs
+  message_text?: string; // For SMS jobs
+  email_subject?: string; // For email jobs
+  email_html?: string; // For email jobs
+  email_text?: string; // For email jobs (plain text fallback)
   scheduled_for: string; // ISO timestamp
 }
 
@@ -108,9 +114,9 @@ function parseDuration(duration: string, phoneNumber?: string): number {
 }
 
 /**
- * Render SMS content with variable substitution
+ * Render content with variable substitution (for SMS or email)
  */
-function renderSmsContent(content: string, context: JobContext): string {
+function renderContent(content: string, context: JobContext): string {
   let rendered = content;
   
   // Replace {{variable}} patterns
@@ -155,11 +161,9 @@ function walkGraph(
   // Handle different node types
   if (node.type === 'send_sms') {
     const smsNode = node as SendSmsNode;
-    const renderedContent = renderSmsContent(smsNode.content || '', context);
+    const renderedContent = renderContent(smsNode.content || '', context);
     
     // Calculate scheduled time: apply timing delay AFTER currentTime
-    // The timing is the delay before sending THIS message (after the previous step)
-    // ALL SMS nodes respect their timing - the timing is the delay after the previous step
     let scheduledTime = new Date(currentTime);
     if (smsNode.timing) {
       const waitMs = parseDuration(smsNode.timing, context.phone);
@@ -179,13 +183,56 @@ function walkGraph(
     jobs.push({
       run_id: context.run_id as string,
       node_id: currentNodeId,
+      job_type: 'sms',
       phone_number: context.phone,
       message_text: renderedContent,
       scheduled_for: scheduledTime.toISOString(),
     });
     
     // Update currentTime to the scheduled time of this message
-    // This ensures the next message's timing is calculated from when THIS message is sent
+    currentTime = new Date(scheduledTime);
+    console.log(`  - Updated currentTime to scheduled time: ${currentTime.toISOString()}`);
+  } else if (node.type === 'send_email') {
+    const emailNode = node as SendEmailNode;
+    const renderedSubject = renderContent(emailNode.subject || '', context);
+    const renderedHtml = renderContent(emailNode.html_content || '', context);
+    const renderedText = emailNode.text_content ? renderContent(emailNode.text_content, context) : undefined;
+    
+    if (!context.email) {
+      console.warn(`[Compiler] Email node ${currentNodeId} requires email address, but none provided in context`);
+      return currentTime;
+    }
+    
+    // Calculate scheduled time: apply timing delay AFTER currentTime
+    let scheduledTime = new Date(currentTime);
+    if (emailNode.timing) {
+      const waitMs = parseDuration(emailNode.timing, context.phone);
+      scheduledTime = new Date(currentTime.getTime() + waitMs);
+      console.log(`[Compiler] Processing Email node ${currentNodeId}:`);
+      console.log(`  - Current time: ${currentTime.toISOString()}`);
+      console.log(`  - Timing property: ${emailNode.timing}`);
+      console.log(`  - Timing delay: ${waitMs}ms (${waitMs / 1000 / 60} minutes)`);
+      console.log(`  - Scheduled time: ${scheduledTime.toISOString()}`);
+    } else {
+      console.log(`[Compiler] Processing Email node ${currentNodeId}:`);
+      console.log(`  - Current time: ${currentTime.toISOString()}`);
+      console.log(`  - No timing specified, scheduling immediately`);
+    }
+    console.log(`  - Subject: ${renderedSubject}`);
+    console.log(`  - HTML length: ${renderedHtml.length} chars`);
+    
+    jobs.push({
+      run_id: context.run_id as string,
+      node_id: currentNodeId,
+      job_type: 'email',
+      email_address: context.email,
+      email_subject: renderedSubject,
+      email_html: renderedHtml,
+      email_text: renderedText,
+      scheduled_for: scheduledTime.toISOString(),
+    });
+    
+    // Update currentTime to the scheduled time of this message
     currentTime = new Date(scheduledTime);
     console.log(`  - Updated currentTime to scheduled time: ${currentTime.toISOString()}`);
   } else if (node.type === 'wait') {

@@ -3,113 +3,67 @@
 import { useState } from 'react';
 import { useSequenceStore } from '@/lib/store/sequence-store';
 import { createAddNodePatch, createAddEdgePatch } from '@/lib/sequences/patches';
-import { SendSmsNode, WaitNode, ConditionNode } from '@/lib/sequences/spec';
+import { SendSmsNode } from '@/lib/sequences/spec';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { MessageSquare, Clock, GitBranch, Plus } from 'lucide-react';
+import { MessageSquare, Mail, Plus } from 'lucide-react';
 
 export function NodePalette() {
-  const { spec, applyOps, commitOpsToServer, selectedNodeId } = useSequenceStore();
+  const { spec, addSendSmsNode, addSendEmailNode, setSpec } = useSequenceStore();
   const [isOpen, setIsOpen] = useState(true);
 
-  const handleAddNode = (type: 'send_sms' | 'wait' | 'condition') => {
-    if (!spec) return;
-
-    const nodeId = `${type}_${Date.now()}`;
-    const position = { x: 400, y: 300 };
-
-    let newNode: SendSmsNode | WaitNode | ConditionNode;
-    
-    if (type === 'send_sms') {
-      newNode = {
-        id: nodeId,
-        type: 'send_sms',
-        content: '',
-      };
-    } else if (type === 'wait') {
-      newNode = {
-        id: nodeId,
-        type: 'wait',
-        duration: '1 hour',
-      };
-    } else {
-      newNode = {
-        id: nodeId,
-        type: 'condition',
-        condition: {
-          field: '',
-          operator: 'equals',
-          value: '',
-        },
-      };
+  const handleAddNode = (type: 'send_sms' | 'send_email') => {
+    if (!spec) {
+      console.error('[NodePalette] No spec available, initializing empty spec');
+      // Initialize empty spec if it doesn't exist
+      const { createEmptySpec } = require('@/lib/sequences/spec');
+      const emptySpec = createEmptySpec('New Sequence', 'user');
+      setSpec(emptySpec);
+      // Wait a bit for spec to be set, then try again
+      setTimeout(() => {
+        const updatedSpec = useSequenceStore.getState().spec;
+        if (updatedSpec) {
+          handleAddNode(type);
+        } else {
+          alert('Failed to initialize sequence. Please refresh the page.');
+        }
+      }, 100);
+      return;
     }
 
-    const patches = createAddNodePatch(nodeId, newNode, position);
+    console.log('[NodePalette] Adding node:', type, 'to spec with', spec.nodes.length, 'nodes');
     
-    // If a node is selected, connect it to the new node
-    if (selectedNodeId && selectedNodeId !== 'end') {
-      // Find the end node to disconnect it
-      const endNode = spec.nodes.find(n => n.type === 'end');
-      if (endNode) {
-        // Remove edge from selected node to end (if exists)
-        const edgeToEnd = spec.edges.find(e => e.from === selectedNodeId && e.to === endNode.id);
-        if (edgeToEnd) {
-          const edgeIndex = spec.edges.findIndex(e => e.from === selectedNodeId && e.to === endNode.id);
-          patches.push({
-            op: 'remove',
-            path: `/edges/${edgeIndex}`,
-          });
-        }
-        
-        // Add edge from selected node to new node
-        const edgePatches1 = createAddEdgePatch(selectedNodeId, nodeId);
-        patches.push(...edgePatches1);
-        
-        // Add edge from new node to end
-        const edgePatches2 = createAddEdgePatch(nodeId, endNode.id);
-        patches.push(...edgePatches2);
-      }
+    // Use atomic store action
+    const newId = type === 'send_sms' 
+      ? addSendSmsNode()
+      : addSendEmailNode();
+    
+    if (!newId) {
+      console.error('[NodePalette] Failed to add node');
+      alert('Failed to add node. Please check the console for errors.');
     } else {
-      // If no node selected, find the last node before end and connect there
-      const endNode = spec.nodes.find(n => n.type === 'end');
-      if (endNode) {
-        // Find edge going to end
-        const edgeToEnd = spec.edges.find(e => e.to === endNode.id);
-        if (edgeToEnd) {
-          // Remove edge to end
-          const edgeIndex = spec.edges.findIndex(e => e.from === edgeToEnd.from && e.to === endNode.id);
-          patches.push({
-            op: 'remove',
-            path: `/edges/${edgeIndex}`,
-          });
-          
-          // Connect previous node to new node
-          patches.push(...createAddEdgePatch(edgeToEnd.from, nodeId));
-        }
-        
-        // Connect new node to end
-        patches.push(...createAddEdgePatch(nodeId, endNode.id));
-      } else {
-        // Fallback: connect to trigger
-        const triggerNode = spec.nodes.find(n => n.type === 'trigger');
-        if (triggerNode) {
-          patches.push(...createAddEdgePatch(triggerNode.id, nodeId));
-        }
-      }
-    }
-
-    if (patches.length > 0) {
-      applyOps(patches);
-      commitOpsToServer(patches, `Added ${type} node`);
+      console.log('[NodePalette] Successfully added node:', newId);
     }
   };
+
+  if (!spec) {
+    return (
+      <Card className="absolute top-4 left-4 z-10 w-64 bg-yellow-50 border-yellow-200 shadow-lg">
+        <CardContent className="p-3">
+          <p className="text-sm text-yellow-800">
+            Please initialize a sequence first using the "Initialize" button in the left sidebar.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (!isOpen) {
     return (
       <Button
         variant="outline"
         size="sm"
-        className="absolute top-4 left-4 z-10"
+        className="absolute top-4 left-4 z-10 cursor-pointer border-gray-200 hover:bg-purple-50 hover:border-purple-300 transition-all duration-200"
         onClick={() => setIsOpen(true)}
       >
         <Plus className="h-4 w-4 mr-2" />
@@ -119,14 +73,14 @@ export function NodePalette() {
   }
 
   return (
-    <Card className="absolute top-4 left-4 z-10 w-48">
+    <Card className="absolute top-4 left-4 z-10 w-48 bg-white border-gray-200 shadow-lg">
       <CardContent className="p-3">
         <div className="flex items-center justify-between mb-3">
-          <h4 className="text-sm font-semibold">Add Node</h4>
+          <h4 className="text-sm font-semibold text-gray-900">Add Node</h4>
           <Button
             variant="ghost"
             size="sm"
-            className="h-6 w-6 p-0"
+            className="h-6 w-6 p-0 cursor-pointer hover:bg-gray-100"
             onClick={() => setIsOpen(false)}
           >
             ×
@@ -136,7 +90,7 @@ export function NodePalette() {
           <Button
             variant="outline"
             size="sm"
-            className="w-full justify-start"
+            className="w-full justify-start cursor-pointer border-gray-200 hover:bg-purple-50 hover:border-purple-300 hover:text-purple-700 transition-all duration-200"
             onClick={() => handleAddNode('send_sms')}
           >
             <MessageSquare className="h-4 w-4 mr-2" />
@@ -145,20 +99,11 @@ export function NodePalette() {
           <Button
             variant="outline"
             size="sm"
-            className="w-full justify-start"
-            onClick={() => handleAddNode('wait')}
+            className="w-full justify-start cursor-pointer border-gray-200 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-all duration-200"
+            onClick={() => handleAddNode('send_email')}
           >
-            <Clock className="h-4 w-4 mr-2" />
-            Wait
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="w-full justify-start"
-            onClick={() => handleAddNode('condition')}
-          >
-            <GitBranch className="h-4 w-4 mr-2" />
-            Condition
+            <Mail className="h-4 w-4 mr-2" />
+            Send Email
           </Button>
         </div>
       </CardContent>

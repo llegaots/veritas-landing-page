@@ -35,6 +35,7 @@ import {
 import { Event, VisitorProfile, TableColumn, KPITrend } from '@/lib/admin/types'
 import Link from 'next/link'
 import { BarChart3, Users, Activity, TrendingUp, ArrowRight, Sparkles } from 'lucide-react'
+import { AdminSidebar } from '@/components/admin/AdminSidebar'
 
 interface Stats {
   summary: {
@@ -526,66 +527,37 @@ function AdminDashboardContent() {
   }
 
   return (
-    <div className="admin-font min-h-screen bg-gradient-to-br from-gray-50 via-white to-purple-50/30">
-      <Toaster />
+    <div className="admin-font min-h-screen bg-gradient-to-br from-gray-50 via-white to-purple-50/30 flex">
+      <AdminSidebar password={password} />
       
-      {/* Modern Header with Purple Gradient */}
-      <div className="sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-gray-200/50 shadow-sm">
-        <div className="px-4 lg:px-8 py-4 max-w-7xl mx-auto">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center shadow-md">
-                <BarChart3 className="h-5 w-5 text-white" />
+      <div className="flex-1 ml-64 transition-all duration-300">
+        <Toaster />
+        
+        {/* Modern Header with Purple Gradient */}
+        <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-gray-200/50 shadow-sm">
+          <div className="px-4 lg:px-8 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center shadow-md">
+                  <BarChart3 className="h-5 w-5 text-white" />
+                </div>
+                <h1 className="text-xl font-bold bg-gradient-to-r from-purple-600 to-purple-800 bg-clip-text text-transparent">
+                  Engagement Analytics
+                </h1>
               </div>
-              <h1 className="text-xl font-bold bg-gradient-to-r from-purple-600 to-purple-800 bg-clip-text text-transparent">
-                Engagement Analytics
-              </h1>
-            </div>
-            <div className="flex gap-2">
-              <Link href={`/admin/investors?key=${encodeURIComponent(password)}`}>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="border-gray-200 text-gray-700 hover:bg-purple-50 hover:border-purple-300 hover:text-purple-700 transition-all duration-200 rounded-lg cursor-pointer"
-                >
-                  <Users className="h-4 w-4 mr-2" />
-                  View Investors
-                </Button>
-              </Link>
-              <Link href={`/admin/sequences?key=${encodeURIComponent(password)}`}>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="border-gray-200 text-gray-700 hover:bg-purple-50 hover:border-purple-300 hover:text-purple-700 transition-all duration-200 rounded-lg cursor-pointer"
-                >
-                  <Activity className="h-4 w-4 mr-2" />
-                  SMS Sequences
-                </Button>
-              </Link>
-              <Link href={`/admin/sms-veritas?key=${encodeURIComponent(password)}`}>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="border-gray-200 text-gray-700 hover:bg-purple-50 hover:border-purple-300 hover:text-purple-700 transition-all duration-200 rounded-lg cursor-pointer"
-                >
-                  <TrendingUp className="h-4 w-4 mr-2" />
-                  Veritas Sequence
-                </Button>
-              </Link>
             </div>
           </div>
         </div>
-      </div>
 
-      <FilterBar
-        filters={filters}
-        onFiltersChange={setFilters}
-        onRefresh={handleRefresh}
-        onExport={() => handleExport()}
-        lastUpdated={lastUpdated || undefined}
-      />
+        <FilterBar
+          filters={filters}
+          onFiltersChange={setFilters}
+          onRefresh={handleRefresh}
+          onExport={() => handleExport()}
+          lastUpdated={lastUpdated || undefined}
+        />
 
-      <div className="px-4 lg:px-8 py-6 max-w-7xl mx-auto">
+        <div className="px-4 lg:px-8 py-6">
         {loading && (
           <div className="space-y-4">
             {[...Array(8)].map((_, i) => (
@@ -826,6 +798,7 @@ function AdminDashboardContent() {
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
       />
+      </div>
     </div>
   )
 }

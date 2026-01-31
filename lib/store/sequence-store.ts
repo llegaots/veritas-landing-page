@@ -1,6 +1,6 @@
 // Zustand store for sequence state management
 import { create } from 'zustand';
-import { SequenceSpec, SendSmsNode } from '../sequences/spec';
+import { SequenceSpec, SendSmsNode, SendEmailNode } from '../sequences/spec';
 import { JSONPatchOperation, applyPatchesToSpec } from '../sequences/patches';
 
 export interface ChatMessage {
@@ -35,6 +35,7 @@ interface SequenceStore {
   clearError: () => void;
   reset: () => void;
   addSendSmsNode: (afterNodeId?: string) => string | null; // Returns new node ID or null
+  addSendEmailNode: (afterNodeId?: string) => string | null; // Returns new node ID or null
   
   // Legacy aliases for backward compatibility
   currentSpec: SequenceSpec | null;
@@ -548,6 +549,94 @@ export const useSequenceStore = create<SequenceStore>((set, get) => ({
 
     // DON'T commit to server here - user will click "Save" button to persist
     // commitOpsToServer goes through /api/copilot which is for AI assistant, not manual edits
+
+    // Select the new node
+    set({ selectedNodeId: newId });
+
+    return newId;
+  },
+
+  addSendEmailNode: (afterNodeId?: string) => {
+    const { spec } = get();
+    if (!spec) {
+      console.error('[Store] Cannot add node: no spec');
+      return null;
+    }
+
+    const endNode = spec.nodes.find(n => n.type === 'end');
+    if (!endNode) {
+      console.error('[Store] Cannot add node: no end node');
+      return null;
+    }
+
+    // Create new node
+    const newId = `send_email_${Date.now()}`;
+    const newNode: SendEmailNode = {
+      id: newId,
+      type: 'send_email',
+      subject: '',
+      html_content: '',
+      timing: '',
+    };
+
+    // Place new node in the center of the canvas
+    const newPosition = { 
+      x: 400,
+      y: 300
+    };
+
+    // Build atomic patches: add node + position ONLY (NO automatic connections)
+    const patches: JSONPatchOperation[] = [];
+
+    // 1. Add node
+    patches.push({
+      op: 'add',
+      path: '/nodes/-',
+      value: newNode,
+    });
+
+    // 2. Add position - ensure ui and positions exist
+    if (!spec.ui) {
+      patches.push({
+        op: 'add',
+        path: '/ui',
+        value: { positions: {}, zoom: 1 },
+      });
+    }
+    if (!spec.ui?.positions) {
+      patches.push({
+        op: 'add',
+        path: '/ui/positions',
+        value: {},
+      });
+    }
+    patches.push({
+      op: 'add',
+      path: `/ui/positions/${newId}`,
+      value: newPosition,
+    });
+
+    console.log('[Store] Adding Email node (disconnected):', {
+      newId,
+      position: newPosition,
+      patches: patches.length,
+      specNodesBefore: spec.nodes.length,
+    });
+
+    // Apply patches
+    get().applyOps(patches);
+    
+    // Verify the node was added
+    const updatedSpec = get().spec;
+    if (updatedSpec) {
+      const nodeExists = updatedSpec.nodes.some(n => n.id === newId);
+      const positionExists = updatedSpec.ui.positions?.[newId];
+      console.log('[Store] After adding email node:', {
+        nodeExists,
+        positionExists,
+        totalNodes: updatedSpec.nodes.length,
+      });
+    }
 
     // Select the new node
     set({ selectedNodeId: newId });

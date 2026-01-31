@@ -97,3 +97,4 @@ The `.env.local` file is already in `.gitignore`, so it won't be committed to gi
    - Make sure `SUPABASE_SERVICE_ROLE_KEY` is the **service_role** key (not anon key)
    - The service_role key has admin permissions needed for the investors API
 
+

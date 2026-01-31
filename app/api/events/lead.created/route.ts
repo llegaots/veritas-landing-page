@@ -35,11 +35,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { lead_id, phone, attributes = {}, org_id } = body;
+    const { lead_id, phone, email, attributes = {}, org_id } = body;
 
-    if (!lead_id || !phone) {
+    if (!lead_id || (!phone && !email)) {
       return NextResponse.json(
-        { error: 'Missing required fields: lead_id, phone' },
+        { error: 'Missing required fields: lead_id and either phone or email' },
         { status: 400 }
       );
     }
@@ -155,7 +155,8 @@ export async function POST(request: NextRequest) {
       // Compile sequence to jobs
       const jobs = compileSequenceToJobs(spec, run.id, {
         lead_id,
-        phone,
+        phone: phone || '',
+        email: email || attributes.email || '',
         ...attributes,
       });
 
