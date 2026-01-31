@@ -22,7 +22,9 @@ import {
   Send,
   Timer,
   Users,
-  Calendar
+  Calendar,
+  Pause,
+  Play
 } from 'lucide-react';
 import { formatDistanceToNow, format, differenceInSeconds, differenceInMinutes } from 'date-fns';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -114,6 +116,7 @@ function MessageJobsContent() {
   const [endDate, setEndDate] = useState<string>('');
   const [sourceFilter, setSourceFilter] = useState<string>('');
   const [availableSources, setAvailableSources] = useState<string[]>([]);
+  const [pausingRuns, setPausingRuns] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetchData();
@@ -164,6 +167,56 @@ function MessageJobsContent() {
   };
 
   const hasActiveFilters = startDate || endDate || sourceFilter;
+
+  const pauseSequenceRun = async (runId: string) => {
+    setPausingRuns(prev => new Set(prev).add(runId));
+    try {
+      const response = await fetch(`/api/admin/sequence-runs/${runId}/pause?key=${encodeURIComponent(password)}`, {
+        method: 'POST',
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to pause sequence run');
+      }
+      
+      // Refresh data to show updated status
+      await fetchData();
+    } catch (err) {
+      console.error('Error pausing sequence run:', err);
+      alert(err instanceof Error ? err.message : 'Failed to pause sequence run');
+    } finally {
+      setPausingRuns(prev => {
+        const next = new Set(prev);
+        next.delete(runId);
+        return next;
+      });
+    }
+  };
+
+  const resumeSequenceRun = async (runId: string) => {
+    setPausingRuns(prev => new Set(prev).add(runId));
+    try {
+      const response = await fetch(`/api/admin/sequence-runs/${runId}/resume?key=${encodeURIComponent(password)}`, {
+        method: 'POST',
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to resume sequence run');
+      }
+      
+      // Refresh data to show updated status
+      await fetchData();
+    } catch (err) {
+      console.error('Error resuming sequence run:', err);
+      alert(err instanceof Error ? err.message : 'Failed to resume sequence run');
+    } finally {
+      setPausingRuns(prev => {
+        const next = new Set(prev);
+        next.delete(runId);
+        return next;
+      });
+    }
+  };
 
   // Group jobs by investor (or phone number if no investor)
   const jobsByInvestor = useMemo(() => {
@@ -494,6 +547,15 @@ function MessageJobsContent() {
               // Get unique sequences for this investor
               const sequences = Array.from(new Set(investorJobs.map(j => j.sequence_name).filter(Boolean)));
               
+              // Get unique run IDs and their statuses
+              const runIds = Array.from(new Set(investorJobs.map(j => j.run_id).filter(Boolean)));
+              const runStatuses = new Map<string, string>();
+              investorJobs.forEach(job => {
+                if (job.run_id && job.sequence_runs?.status) {
+                  runStatuses.set(job.run_id, job.sequence_runs.status);
+                }
+              });
+              
               // Get intent score and interactions from first job (all jobs have same investor data)
               const firstJob = investorJobs[0];
               const intentScore = firstJob?.investor_intent_score || 0;
@@ -580,16 +642,51 @@ function MessageJobsContent() {
                           )}
                         </div>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleInvestor(investorKey);
-                        }}
-                      >
-                        {isExpanded ? 'Collapse' : 'Expand'}
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        {/* Pause/Resume buttons for each run */}
+                        {runIds.map(runId => {
+                          const runStatus = runStatuses.get(runId) || 'active';
+                          const isPaused = runStatus === 'paused';
+                          const isPausing = pausingRuns.has(runId);
+                          
+                          return (
+                            <Button
+                              key={runId}
+                              variant={isPaused ? "default" : "outline"}
+                              size="sm"
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                if (isPaused) {
+                                  await resumeSequenceRun(runId);
+                                } else {
+                                  await pauseSequenceRun(runId);
+                                }
+                              }}
+                              disabled={isPausing}
+                              className={isPaused ? "bg-green-600 hover:bg-green-700 text-white" : ""}
+                            >
+                              {isPausing ? (
+                                <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                              ) : isPaused ? (
+                                <Play className="h-4 w-4 mr-1" />
+                              ) : (
+                                <Pause className="h-4 w-4 mr-1" />
+                              )}
+                              {isPaused ? 'Resume' : 'Pause'}
+                            </Button>
+                          );
+                        })}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleInvestor(investorKey);
+                          }}
+                        >
+                          {isExpanded ? 'Collapse' : 'Expand'}
+                        </Button>
+                      </div>
                     </div>
                   </CardHeader>
                   {isExpanded && (
