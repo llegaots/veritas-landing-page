@@ -47,6 +47,17 @@ export const WaitStepSchema = z.object({
   next: z.string().optional(), // stepId
 });
 
+export const SendEmailStepSchema = z.object({
+  id: z.string(),
+  type: z.literal('send_email'),
+  subject: z.string(),
+  html_content: z.string(),
+  text_content: z.string().optional(),
+  timing: TimingSchema.optional(),
+  next: z.string().optional(), // stepId
+  onNoResponse: z.string().optional(), // stepId (alternative path)
+});
+
 export const EndStepSchema = z.object({
   id: z.string(),
   type: z.literal('end'),
@@ -54,12 +65,14 @@ export const EndStepSchema = z.object({
 
 export const WorkflowStepSchema = z.discriminatedUnion('type', [
   SendSmsStepSchema,
+  SendEmailStepSchema,
   ConditionStepSchema,
   WaitStepSchema,
   EndStepSchema,
 ]);
 
 export type SendSmsStep = z.infer<typeof SendSmsStepSchema>;
+export type SendEmailStep = z.infer<typeof SendEmailStepSchema>;
 export type ConditionStep = z.infer<typeof ConditionStepSchema>;
 export type WaitStep = z.infer<typeof WaitStepSchema>;
 export type EndStep = z.infer<typeof EndStepSchema>;
@@ -163,6 +176,13 @@ export function validateWorkflowInvariants(workflow: WorkflowSpecV2): { valid: b
       if (step.onNoResponse && !stepIds.has(step.onNoResponse)) {
         errors.push(`Step ${step.id} references non-existent onNoResponse step: ${step.onNoResponse}`);
       }
+    } else if (step.type === 'send_email') {
+      if (step.next && !stepIds.has(step.next)) {
+        errors.push(`Step ${step.id} references non-existent next step: ${step.next}`);
+      }
+      if (step.onNoResponse && !stepIds.has(step.onNoResponse)) {
+        errors.push(`Step ${step.id} references non-existent onNoResponse step: ${step.onNoResponse}`);
+      }
     } else if (step.type === 'wait') {
       if (step.next && !stepIds.has(step.next)) {
         errors.push(`Step ${step.id} references non-existent next step: ${step.next}`);
@@ -193,6 +213,15 @@ export function validateWorkflowInvariants(workflow: WorkflowSpecV2): { valid: b
     if (!step) continue;
     
     if (step.type === 'send_sms') {
+      if (step.next && !reachable.has(step.next)) {
+        reachable.add(step.next);
+        queue.push(step.next);
+      }
+      if (step.onNoResponse && !reachable.has(step.onNoResponse)) {
+        reachable.add(step.onNoResponse);
+        queue.push(step.onNoResponse);
+      }
+    } else if (step.type === 'send_email') {
       if (step.next && !reachable.has(step.next)) {
         reachable.add(step.next);
         queue.push(step.next);

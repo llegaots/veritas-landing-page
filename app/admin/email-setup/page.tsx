@@ -50,26 +50,49 @@ function EmailSetupContent() {
       }
     };
 
-    // Check for OAuth callback results first
+    // Check for OAuth callback results first (from URL params)
     const oauthSuccess = searchParams.get('oauth_success');
     const oauthError = searchParams.get('oauth_error');
     const email = searchParams.get('email');
     const token = searchParams.get('refresh_token');
+
+    // Also check localStorage for persisted tokens
+    const storedToken = typeof window !== 'undefined' ? localStorage.getItem('oauth_refresh_token') : null;
+    const storedEmail = typeof window !== 'undefined' ? localStorage.getItem('oauth_user_email') : null;
 
     if (oauthSuccess === '1') {
       setStatus('success');
       if (email) {
         setUserEmail(email);
         setCustomFromEmail(email);
+        // Store in localStorage for persistence
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('oauth_user_email', email);
+        }
       }
-      if (token) setRefreshToken(token);
+      if (token) {
+        setRefreshToken(token);
+        // Store in localStorage for persistence
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('oauth_refresh_token', token);
+        }
+      }
       // Refresh status after OAuth success
       setTimeout(checkEmailStatus, 1000);
     } else if (oauthError) {
       setStatus('error');
       setError(decodeURIComponent(oauthError));
     } else {
-      // Check existing connection
+      // No OAuth callback in URL, check localStorage for persisted tokens
+      if (storedToken) {
+        setRefreshToken(storedToken);
+        setStatus('success'); // Show success state with token
+      }
+      if (storedEmail && !userEmail) {
+        setUserEmail(storedEmail);
+        setCustomFromEmail(storedEmail);
+      }
+      // Check actual connection status
       checkEmailStatus();
     }
   }, [searchParams]);
@@ -254,42 +277,69 @@ function EmailSetupContent() {
                     <div className="space-y-3">
                       <div>
                         <label className="text-sm font-medium text-gray-700 mb-2 block">
-                          Refresh Token (save this to .env.local):
+                          Refresh Token (COPY THIS - You'll need to add it to Vercel):
                         </label>
-                        <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg font-mono text-xs break-all">
+                        <div className="p-3 bg-gray-50 border-2 border-gray-300 rounded-lg font-mono text-xs break-all select-all">
                           {refreshToken}
                         </div>
+                        <Button
+                          onClick={() => {
+                            if (refreshToken) {
+                              navigator.clipboard.writeText(refreshToken);
+                              alert('✅ Refresh token copied to clipboard!');
+                            }
+                          }}
+                          variant="outline"
+                          size="sm"
+                          className="mt-2"
+                        >
+                          📋 Copy Token
+                        </Button>
                       </div>
 
-                      <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                        <p className="text-sm text-blue-800 mb-2">
-                          <strong>Next steps:</strong>
+                      <div className="p-4 bg-blue-50 border-2 border-blue-300 rounded-lg">
+                        <p className="text-sm font-semibold text-blue-900 mb-3">
+                          📋 Step-by-Step: Save to Vercel Environment Variables
                         </p>
-                        <ol className="text-sm text-blue-700 space-y-1 list-decimal list-inside">
-                          <li>Add to your <code className="bg-blue-100 px-1 rounded">.env.local</code> file:</li>
+                        <ol className="text-sm text-blue-800 space-y-2 list-decimal list-inside">
+                          <li>
+                            Go to <a href="https://vercel.com/dashboard" target="_blank" rel="noopener noreferrer" className="underline font-medium">Vercel Dashboard</a> → Your Project → <strong>Settings</strong> → <strong>Environment Variables</strong>
+                          </li>
+                          <li>
+                            Click <strong>"Add New"</strong> and add these variables (for <strong>Production</strong>):
+                          </li>
                         </ol>
-                        <div className="mt-2 p-2 bg-white border border-blue-200 rounded font-mono text-xs">
-                          GMAIL_REFRESH_TOKEN={refreshToken}<br />
-                          EMAIL_PROVIDER=gmail<br />
-                          EMAIL_FROM={customFromEmail || userEmail || 'your-email@gmail.com'}
+                        <div className="mt-3 p-3 bg-white border-2 border-blue-200 rounded font-mono text-xs space-y-1">
+                          <div><strong>Name:</strong> GMAIL_REFRESH_TOKEN</div>
+                          <div><strong>Value:</strong> <span className="break-all">{refreshToken}</span></div>
+                          <div className="mt-2"><strong>Name:</strong> EMAIL_PROVIDER</div>
+                          <div><strong>Value:</strong> gmail</div>
+                          <div className="mt-2"><strong>Name:</strong> EMAIL_FROM</div>
+                          <div><strong>Value:</strong> {customFromEmail || userEmail || 'your-email@gmail.com'}</div>
+                        </div>
+                        <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                          <p className="text-xs font-semibold text-red-900 mb-1">⚠️ CRITICAL: After Adding Variables</p>
+                          <p className="text-xs text-red-800">
+                            You <strong>MUST redeploy</strong> for the connection to work:
+                            <br />
+                            1. Go to <strong>Deployments</strong> tab
+                            <br />
+                            2. Click <strong>⋯</strong> on latest deployment
+                            <br />
+                            3. Click <strong>"Redeploy"</strong>
+                            <br />
+                            4. Wait for deployment to complete
+                            <br />
+                            5. Come back here and refresh - you should see "✅ Email Account Connected"
+                          </p>
                         </div>
                         {customFromEmail && customFromEmail !== userEmail && (
-                          <div className="mt-2 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                          <div className="mt-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
                             <p className="text-xs text-purple-800">
-                              <strong>✨ Custom Domain Setup:</strong> Make sure <code className="bg-purple-100 px-1 rounded">{customFromEmail}</code> is:
-                              <br />
-                              • A Google Workspace account, OR
-                              <br />
-                              • Set up as "Send mail as" in your Gmail account
-                              <br />
-                              <br />
-                              Once configured, you can send from {customFromEmail} just like N8N! 🎉
+                              <strong>✨ Custom Domain:</strong> Make sure <code className="bg-purple-100 px-1 rounded">{customFromEmail}</code> is set up in Google Workspace or "Send mail as" in Gmail.
                             </p>
                           </div>
                         )}
-                        <p className="text-sm text-blue-700 mt-2">
-                          <strong>For Vercel:</strong> Add these same variables in Vercel Dashboard → Settings → Environment Variables
-                        </p>
                       </div>
 
                       <Button

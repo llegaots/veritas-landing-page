@@ -14,6 +14,7 @@ interface Sequence {
   active_version_id: string | null;
   created_at: string;
   updated_at: string;
+  status?: 'active' | 'draft' | 'archived'; // Status from active version
 }
 
 function SequencesListContent() {
@@ -38,7 +39,30 @@ function SequencesListContent() {
       }
       const data = await response.json();
       const sequencesList = Array.isArray(data) ? data : (data.sequences || []);
-      setSequences(sequencesList);
+      
+      // Fetch status for each sequence
+      const sequencesWithStatus = await Promise.all(
+        sequencesList.map(async (seq: Sequence) => {
+          if (!seq.active_version_id) {
+            return { ...seq, status: 'draft' as const };
+          }
+          try {
+            const versionResponse = await fetch(
+              `/api/sequences/${seq.id}/versions?key=${encodeURIComponent(password)}&versionId=${seq.active_version_id}`
+            );
+            if (versionResponse.ok) {
+              const versionData = await versionResponse.json();
+              const status = versionData.spec?.metadata?.status || 'draft';
+              return { ...seq, status };
+            }
+          } catch (err) {
+            console.error('Error fetching version status:', err);
+          }
+          return { ...seq, status: 'draft' as const };
+        })
+      );
+      
+      setSequences(sequencesWithStatus);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load sequences');
     } finally {
@@ -60,6 +84,22 @@ function SequencesListContent() {
       await fetchSequences(); // Refresh list
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to delete sequence');
+    }
+  };
+
+  const handleToggleStatus = async (id: string, currentStatus: 'active' | 'draft' | 'archived' | undefined) => {
+    try {
+      const response = await fetch(
+        `/api/sequences/${id}/toggle-status?key=${encodeURIComponent(password)}`,
+        { method: 'PATCH' }
+      );
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to toggle status');
+      }
+      await fetchSequences(); // Refresh list
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to toggle sequence status');
     }
   };
 
@@ -152,11 +192,30 @@ function SequencesListContent() {
                         <> • Updated: {new Date(sequence.updated_at).toLocaleDateString()}</>
                       )}
                     </p>
-                    {sequence.active_version_id && (
-                      <p className="text-xs text-green-600 mt-1 font-medium">✓ Active Version</p>
-                    )}
+                    <div className="flex items-center gap-2 mt-1">
+                      {sequence.status === 'active' ? (
+                        <p className="text-xs text-green-600 font-medium">✓ Active</p>
+                      ) : (
+                        <p className="text-xs text-gray-500 font-medium">○ Draft</p>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                    {/* Toggle Switch */}
+                    <div className="flex items-center gap-2 mr-2">
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={sequence.status === 'active'}
+                          onChange={() => handleToggleStatus(sequence.id, (sequence.status || 'draft') as 'active' | 'draft' | 'archived')}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-purple-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
+                      </label>
+                      <span className="text-xs text-gray-600">
+                        {sequence.status === 'active' ? 'Active' : 'Draft'}
+                      </span>
+                    </div>
                     <Link 
                       href={`/admin/sequences?key=${encodeURIComponent(password)}&id=${sequence.id}`}
                       className="cursor-pointer"

@@ -4,19 +4,34 @@ import { NodeProps, Handle, Position } from '@xyflow/react';
 import { X, Mail } from 'lucide-react';
 import { useSequenceStore } from '@/lib/store/sequence-store';
 import { SendEmailNode } from '@/lib/sequences/spec';
-import { timingToString } from '@/lib/sequences/adapters';
+import { SendEmailStep } from '@/lib/sequences/workflow-v2';
+import { timingToString, parseTimingString } from '@/lib/sequences/adapters';
 
 export function WorkflowSendEmailNode(props: NodeProps) {
   const { selectedNodeId, setSelectedNodeId } = useSequenceStore();
-  const node = props.data as unknown as SendEmailNode;
+  // Data can be either SendEmailNode (from SequenceSpec) or SendEmailStep (from WorkflowSpecV2)
+  const node = props.data as unknown as SendEmailNode | SendEmailStep;
   const isSelected = selectedNodeId === props.id;
 
   // Truncate subject for display
-  const subject = node.subject || '';
+  const subject = ('subject' in node ? node.subject : '') || '';
   const maxLength = 60;
   const displaySubject = subject.length > maxLength 
     ? subject.substring(0, maxLength) + '...' 
     : subject;
+
+  // Handle timing - can be string (SendEmailNode) or Timing object (SendEmailStep)
+  let timingDisplay: string | null = null;
+  if ('timing' in node && node.timing) {
+    if (typeof node.timing === 'string') {
+      // It's a string, parse it first
+      const timingObj = parseTimingString(node.timing);
+      timingDisplay = timingToString(timingObj);
+    } else {
+      // It's already a Timing object
+      timingDisplay = timingToString(node.timing);
+    }
+  }
 
   return (
     <div
@@ -46,9 +61,9 @@ export function WorkflowSendEmailNode(props: NodeProps) {
           </div>
           <div className="flex-1 min-w-0">
             <div className="font-semibold text-sm text-gray-900">Send Email</div>
-            {node.timing && (
+            {timingDisplay && (
               <div className="text-xs text-blue-600 font-medium mt-0.5">
-                {node.timing}
+                {timingDisplay}
               </div>
             )}
           </div>
@@ -61,9 +76,9 @@ export function WorkflowSendEmailNode(props: NodeProps) {
               <span className="text-gray-400 italic">No subject</span>
             )}
           </div>
-          {node.html_content && (
+          {('html_content' in node ? node.html_content : '') && (
             <div className="text-xs text-gray-500 mt-2">
-              HTML content ({node.html_content.length} chars)
+              HTML content ({('html_content' in node ? node.html_content : '').length} chars)
             </div>
           )}
         </div>

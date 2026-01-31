@@ -111,10 +111,24 @@ export async function POST(request: NextRequest) {
 
       const spec = version.spec_jsonb as unknown as SequenceSpec;
 
-      // Check if trigger matches
-      if (spec.trigger.type !== 'lead.created') {
+      // IMPORTANT: Only trigger sequences with status "active" (not "draft" or "archived")
+      const sequenceStatus = spec.metadata?.status;
+      console.log(`[lead.created] Checking sequence ${sequence.id} (${spec.metadata?.name || 'unnamed'}): status="${sequenceStatus}"`);
+      
+      if (sequenceStatus !== 'active') {
+        console.log(`[lead.created] ⏭️  Skipping sequence ${sequence.id} - status is "${sequenceStatus || 'unknown'}" (not active)`);
         continue;
       }
+
+      console.log(`[lead.created] ✅ Sequence ${sequence.id} is active, checking trigger...`);
+
+      // Check if trigger matches
+      if (spec.trigger.type !== 'lead.created') {
+        console.log(`[lead.created] ⏭️  Skipping sequence ${sequence.id} - trigger type is "${spec.trigger.type}" (not "lead.created")`);
+        continue;
+      }
+
+      console.log(`[lead.created] ✅ Sequence ${sequence.id} trigger matches, creating run...`);
 
       // Apply trigger filters if any
       if (spec.trigger.filters) {
@@ -125,10 +139,14 @@ export async function POST(request: NextRequest) {
             break;
           }
         }
-        if (!matches) continue;
+        if (!matches) {
+          console.log(`[lead.created] ⏭️  Skipping sequence ${sequence.id} - trigger filters don't match`);
+          continue;
+        }
       }
 
       // Create sequence run
+      console.log(`[lead.created] 🚀 Creating run for sequence ${sequence.id} (${spec.metadata?.name || 'unnamed'})`);
       const { data: run, error: runError } = await supabase
         .from('sequence_runs')
         .insert({

@@ -1,8 +1,8 @@
 // Adapters: Convert between SequenceSpec (graph) and WorkflowSpecV2 (domain model)
 // This allows gradual migration while keeping both representations in sync
 
-import { SequenceSpec, SequenceNode, SendSmsNode, ConditionNode, WaitNode, EndNode, TriggerNode } from './spec';
-import { WorkflowSpecV2, WorkflowStep, SendSmsStep, ConditionStep, WaitStep, EndStep, Timing, Condition } from './workflow-v2';
+import { SequenceSpec, SequenceNode, SendSmsNode, SendEmailNode, ConditionNode, WaitNode, EndNode, TriggerNode } from './spec';
+import { WorkflowSpecV2, WorkflowStep, SendSmsStep, SendEmailStep, ConditionStep, WaitStep, EndStep, Timing, Condition } from './workflow-v2';
 
 /**
  * Convert SequenceSpec (graph) → WorkflowSpecV2 (domain model)
@@ -61,6 +61,34 @@ export function sequenceSpecToWorkflow(seq: SequenceSpec): WorkflowSpecV2 {
         id: stepId,
         type: 'send_sms',
         message: smsNode.content || '',
+        timing,
+        next: nextEdge ? nodeToStepId.get(nextEdge.to) : undefined,
+        onNoResponse: noResponseEdge ? 'end' : undefined,
+      };
+      steps.push(step);
+    } else if (node.type === 'send_email') {
+      const emailNode = node as SendEmailNode;
+      const timing: Timing | undefined = emailNode.timing ? parseTimingString(emailNode.timing) : undefined;
+      
+      // Find outgoing edges
+      const outgoing = seq.edges.filter(e => e.from === node.id);
+      const nextEdge = outgoing.find(e => e.to !== endNode.id);
+      const noResponseEdge = outgoing.find(e => e.to === endNode.id && outgoing.length > 1);
+      
+      console.log('[Adapter] Converting send_email node:', {
+        nodeId: node.id,
+        stepId,
+        outgoing: outgoing.length,
+        nextEdge: nextEdge ? { from: nextEdge.from, to: nextEdge.to } : null,
+        nextStepId: nextEdge ? nodeToStepId.get(nextEdge.to) : undefined,
+      });
+      
+      const step: SendEmailStep = {
+        id: stepId,
+        type: 'send_email',
+        subject: emailNode.subject || '',
+        html_content: emailNode.html_content || '',
+        text_content: emailNode.text_content,
         timing,
         next: nextEdge ? nodeToStepId.get(nextEdge.to) : undefined,
         onNoResponse: noResponseEdge ? 'end' : undefined,
@@ -222,6 +250,24 @@ export function workflowToGraph(
           type: 'smoothstep',
         });
       }
+    } else if (step.type === 'send_email') {
+      if (step.next) {
+        edges.push({
+          id: `${step.id}-next-${step.next}`,
+          source: step.id,
+          target: step.next,
+          type: 'smoothstep',
+        });
+      }
+      if (step.onNoResponse) {
+        edges.push({
+          id: `${step.id}-noresponse-${step.onNoResponse}`,
+          source: step.id,
+          target: step.onNoResponse,
+          label: 'no response',
+          type: 'smoothstep',
+        });
+      }
     } else if (step.type === 'wait') {
       if (step.next) {
         edges.push({
@@ -315,7 +361,7 @@ export function workflowToGraph(
 /**
  * Helper: Parse timing string to Timing object
  */
-function parseTimingString(timing: string): Timing {
+export function parseTimingString(timing: string): Timing {
   const normalized = timing.toLowerCase().trim();
   
   // Handle "Day 1", "Day 2", etc.
