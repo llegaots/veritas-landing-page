@@ -38,6 +38,8 @@ export function WorkflowDiagram() {
   const [layoutPositions, setLayoutPositions] = useState<Record<string, { x: number; y: number }>>({});
   const [isLayouting, setIsLayouting] = useState(false);
   const [lastStructureKey, setLastStructureKey] = useState<string>('');
+  const [isDragging, setIsDragging] = useState(false);
+  const [userPositions, setUserPositions] = useState<Record<string, { x: number; y: number }>>({});
 
   // Convert SequenceSpec to WorkflowSpecV2 (migration)
   useEffect(() => {
@@ -73,17 +75,21 @@ export function WorkflowDiagram() {
             const originalNodeId = step.id.replace(/^step_/, '');
             if (spec.ui.positions[originalNodeId]) {
               mappedPositions[step.id] = spec.ui.positions[originalNodeId];
+              // Also store in userPositions to preserve user-set positions
+              setUserPositions(prev => ({ ...prev, [step.id]: spec.ui.positions[originalNodeId] }));
             }
           } else {
             // For "end" and other non-prefixed IDs, use as-is
             if (spec.ui.positions[step.id]) {
               mappedPositions[step.id] = spec.ui.positions[step.id];
+              setUserPositions(prev => ({ ...prev, [step.id]: spec.ui.positions[step.id] }));
             }
           }
         });
         // Also keep trigger position
         if (spec.ui.positions['trigger']) {
           mappedPositions['trigger'] = spec.ui.positions['trigger'];
+          setUserPositions(prev => ({ ...prev, 'trigger': spec.ui.positions['trigger'] }));
         }
         
         if (Object.keys(mappedPositions).length > 0) {
@@ -105,9 +111,9 @@ export function WorkflowDiagram() {
     return workflowToGraph(workflow, layoutPositions, spec ? { edges: spec.edges } : undefined);
   }, [workflow, layoutPositions, spec]);
 
-  // Calculate layout when structure changes - but PRESERVE existing positions
+  // Calculate layout when structure changes - but PRESERVE user-set positions
   useEffect(() => {
-    if (!graphSpec || isLayouting) return;
+    if (!graphSpec || isLayouting || isDragging) return; // Don't recalculate during drag
 
     // Create a stable structure key from node IDs and edge connections
     const nodeIds = graphSpec.nodes.map(n => n.id).sort().join(',');
@@ -125,11 +131,11 @@ export function WorkflowDiagram() {
         calculateElkLayout(graphSpec)
           .then(positions => {
             console.log('[WorkflowDiagram] Layout calculated successfully, positions:', Object.keys(positions).length, 'for', graphSpec.nodes.length, 'nodes');
-            // PRESERVE existing positions, only add missing ones
-            const allPositions: Record<string, { x: number; y: number }> = { ...layoutPositions };
+            // PRESERVE user-set positions, only use auto-layout for nodes without user positions
+            const allPositions: Record<string, { x: number; y: number }> = { ...userPositions };
             graphSpec.nodes.forEach(node => {
-              // Only assign position if node doesn't have one already
-              if (!allPositions[node.id]) {
+              // Only assign auto-layout position if node doesn't have a user-set position
+              if (!allPositions[node.id] && !userPositions[node.id]) {
                 if (positions[node.id]) {
                   allPositions[node.id] = positions[node.id];
                 } else {
@@ -143,10 +149,10 @@ export function WorkflowDiagram() {
           })
           .catch(error => {
             console.error('[WorkflowDiagram] Layout calculation failed:', error);
-            // Fallback: only assign positions to nodes that don't have them
-            const fallbackPositions: Record<string, { x: number; y: number }> = { ...layoutPositions };
+            // Fallback: only assign positions to nodes that don't have user positions
+            const fallbackPositions: Record<string, { x: number; y: number }> = { ...userPositions };
             graphSpec.nodes.forEach((node, idx) => {
-              if (!fallbackPositions[node.id]) {
+              if (!fallbackPositions[node.id] && !userPositions[node.id]) {
                 fallbackPositions[node.id] = { x: idx * 400, y: 100 };
               }
             });
@@ -155,7 +161,7 @@ export function WorkflowDiagram() {
           });
       }, 0);
     }
-  }, [graphSpec, isLayouting, lastStructureKey, layoutPositions]);
+  }, [graphSpec, isLayouting, lastStructureKey, userPositions, isDragging]);
 
   // Convert to React Flow format
   const { nodes: flowNodes, edges: flowEdges } = useMemo(() => {
@@ -165,16 +171,16 @@ export function WorkflowDiagram() {
     }
 
     console.log('[WorkflowDiagram] Converting to React Flow format:', graphSpec.nodes.length, 'nodes,', graphSpec.edges.length, 'edges');
-    console.log('[WorkflowDiagram] Node IDs in graphSpec:', graphSpec.nodes.map(n => n.id));
     console.log('[WorkflowDiagram] Available positions:', Object.keys(layoutPositions));
+    console.log('[WorkflowDiagram] User positions:', Object.keys(userPositions));
 
     const nodes = graphSpec.nodes.map(node => {
-      // Always provide a position - use layoutPositions first, then node.position, then fallback
-      const pos = layoutPositions[node.id] || node.position || { x: 0, y: 0 };
-      console.log('[WorkflowDiagram] Node', node.id, 'position:', pos, '(from layoutPositions:', !!layoutPositions[node.id], ', from node.position:', !!node.position, ')');
+      // Priority: userPositions > layoutPositions > node.position > fallback
+      const pos = userPositions[node.id] || layoutPositions[node.id] || node.position || { x: 0, y: 0 };
       return {
         ...node,
         position: pos,
+        draggable: true,
       };
     });
     const edges = graphSpec.edges.map(edge => ({
@@ -204,8 +210,13 @@ export function WorkflowDiagram() {
   // Track pending connections to prevent them from being overwritten
   const pendingConnectionsRef = useRef<Set<string>>(new Set());
 
-  // Update when graph changes
+  // Update when graph changes - but preserve positions during drag
   useEffect(() => {
+    if (isDragging) {
+      // Don't update positions during drag to prevent glitching
+      return;
+    }
+    
     setNodes(flowNodes);
     // Only update edges if they're not pending connections
     setEdges((currentEdges) => {
@@ -228,7 +239,7 @@ export function WorkflowDiagram() {
         return true;
       });
     });
-  }, [flowNodes, flowEdges, setNodes, setEdges]);
+  }, [flowNodes, flowEdges, setNodes, setEdges, isDragging]);
 
   // Handle edge changes (including deletion)
   // NOTE: We handle edge additions in onConnect, so we filter those out here
@@ -455,8 +466,15 @@ export function WorkflowDiagram() {
     }, 200);
   }, [spec, applyOps, setEdges]);
 
+  // Handle drag start
+  const onNodeDragStart = useCallback(() => {
+    setIsDragging(true);
+  }, []);
+
   // Handle node position changes - save to spec when user drags
   const onNodeDragStop = useCallback((_: any, node: Node) => {
+    setIsDragging(false);
+    
     if (!workflow || !spec) return;
     
     // Convert step ID back to node ID for spec
@@ -464,6 +482,9 @@ export function WorkflowDiagram() {
     if (node.id.startsWith('step_')) {
       nodeId = node.id.replace(/^step_/, '');
     }
+    
+    // Update user positions immediately to prevent glitching
+    setUserPositions(prev => ({ ...prev, [node.id]: node.position }));
     
     // Check if position path exists, use 'add' if not, 'replace' if it does
     const existingPosition = spec.ui?.positions?.[nodeId];
@@ -498,6 +519,7 @@ export function WorkflowDiagram() {
         onConnect={onConnect}
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
+        onNodeDragStart={onNodeDragStart}
         onNodeDragStop={onNodeDragStop}
         onEdgeClick={onEdgeClick}
         onEdgesDelete={onEdgesDelete}
