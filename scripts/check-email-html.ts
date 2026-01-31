@@ -71,12 +71,25 @@ async function checkEmailJobs() {
       console.log(`  ⚠️  WARNING: Mismatch in table tags!`);
     }
     
-    // Show first and last 300 chars
+    // Show first and last 500 chars to see if beginning is missing
     if (job.email_html) {
-      console.log(`\nFirst 300 chars:`);
-      console.log(job.email_html.substring(0, 300));
-      console.log(`\nLast 300 chars:`);
-      console.log(job.email_html.substring(Math.max(0, htmlLength - 300)));
+      console.log(`\nFirst 500 chars:`);
+      console.log(job.email_html.substring(0, 500));
+      console.log(`\nLast 500 chars:`);
+      console.log(job.email_html.substring(Math.max(0, htmlLength - 500)));
+      
+      // Check if HTML starts with <table> (expected) or something else
+      const startsWithTable = job.email_html.trim().startsWith('<table');
+      const startsWithDoctype = job.email_html.trim().startsWith('<!DOCTYPE');
+      console.log(`\nHTML starts with:`);
+      console.log(`  - <table>: ${startsWithTable}`);
+      console.log(`  - <!DOCTYPE: ${startsWithDoctype}`);
+      
+      // Check if the HTML appears to be missing the opening
+      if (!startsWithTable && !startsWithDoctype) {
+        console.log(`\n⚠️  WARNING: HTML doesn't start with expected tags!`);
+        console.log(`Actual start: "${job.email_html.substring(0, 100)}"`);
+      }
     }
     
     console.log('\n' + '='.repeat(80) + '\n');

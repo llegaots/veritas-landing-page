@@ -225,6 +225,20 @@ async function sendViaSmtp(options: EmailSendOptions): Promise<EmailSendResult> 
           console.warn(`[Gmail API] WARNING: HTML appears incomplete - ${tableCount} opening <table> tags but only ${closingTableCount} closing </table> tags`);
         }
         
+        // Ensure HTML table structure is complete for email clients
+        // Some email clients require explicit <tbody> tags
+        if (htmlContent.includes('<table') && !htmlContent.includes('<tbody')) {
+          // Add <tbody> wrapper if missing (email clients need it)
+          htmlContent = htmlContent.replace(
+            /(<table[^>]*>)(\s*)(<tr)/gi,
+            '$1<tbody>$2$3'
+          );
+          htmlContent = htmlContent.replace(
+            /(<\/tr>)(\s*)(<\/table>)/gi,
+            '$1</tbody>$2$3'
+          );
+        }
+        
         // Wrap HTML in proper email structure if it's not already wrapped
         // Some email clients require full HTML document structure
         if (!htmlContent.trim().toLowerCase().startsWith('<!doctype') && !htmlContent.trim().toLowerCase().startsWith('<html')) {
