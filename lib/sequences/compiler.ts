@@ -122,7 +122,8 @@ function renderContent(content: string, context: JobContext): string {
   // Replace {{variable}} patterns
   const variablePattern = /\{\{([^}]+)\}\}/g;
   rendered = rendered.replace(variablePattern, (match, varPath) => {
-    const parts = varPath.split('.');
+    const trimmedVarPath = varPath.trim();
+    const parts = trimmedVarPath.split('.');
     let value: any = context;
     
     for (const part of parts) {
@@ -130,7 +131,12 @@ function renderContent(content: string, context: JobContext): string {
       if (value === undefined) break;
     }
     
-    return value !== undefined ? String(value) : match;
+    if (value === undefined) {
+      console.warn(`[renderContent] Variable "${trimmedVarPath}" not found in context. Available keys: ${Object.keys(context).join(', ')}`);
+      return match; // Return original placeholder if not found
+    }
+    
+    return String(value);
   });
   
   return rendered;

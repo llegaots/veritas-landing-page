@@ -46,6 +46,7 @@ export async function triggerSmsSequenceForLead(leadData: LeadData): Promise<{
     // Prepare attributes for SMS personalization
     const attributes: Record<string, any> = {
       FirstName: extractFirstName(leadData.name),
+      FullName: leadData.name || '', // Add FullName for {{FullName}} variable
       PropertyName: leadData.property_name || 'Horizontal Parks',
       CalendarLink: 'https://calendly.com/alex-veritasequitypartners/15-minute-intro-call',
       ...leadData.attributes,

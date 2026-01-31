@@ -171,12 +171,24 @@ export async function POST(request: NextRequest) {
       }
 
       // Compile sequence to jobs
-      const jobs = compileSequenceToJobs(spec, run.id, {
+      // Ensure FullName is available if name is in attributes
+      const compileContext = {
         lead_id,
         phone: phone || '',
         email: email || attributes.email || '',
         ...attributes,
-      });
+      };
+      
+      // Add FullName if not already present but name is available
+      if (!compileContext.FullName && attributes.name) {
+        compileContext.FullName = attributes.name;
+      }
+      // Also ensure FirstName is available
+      if (!compileContext.FirstName && attributes.name) {
+        compileContext.FirstName = attributes.name.split(' ')[0] || attributes.name;
+      }
+      
+      const jobs = compileSequenceToJobs(spec, run.id, compileContext);
 
       // Insert jobs
       if (jobs.length > 0) {
