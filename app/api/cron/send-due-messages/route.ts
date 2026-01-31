@@ -193,6 +193,7 @@ export async function GET(request: NextRequest) {
             console.warn(`[Cron] WARNING: Email job ${job.id} HTML may be incomplete! hasOpeningTable=${hasOpeningTable}, hasClosingTable=${hasClosingTable}`);
           }
 
+          console.log(`[Cron] Calling sendEmail for job ${job.id}...`);
           sendResult = await sendEmail({
             to: job.email_address,
             subject: job.email_subject,
@@ -203,6 +204,11 @@ export async function GET(request: NextRequest) {
               run_id: job.run_id,
               node_id: job.node_id,
             },
+          });
+          console.log(`[Cron] sendEmail result for job ${job.id}:`, {
+            success: sendResult.success,
+            status: sendResult.status,
+            error: sendResult.error,
           });
         } else {
           // Send SMS (default)

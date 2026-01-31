@@ -24,17 +24,42 @@ export interface EmailSendResult {
  */
 export async function sendEmail(options: EmailSendOptions): Promise<EmailSendResult> {
   const provider = process.env.EMAIL_PROVIDER || 'resend';
+  
+  console.log(`[Email] Using provider: ${provider}`);
+  console.log(`[Email] EMAIL_PROVIDER env var: ${process.env.EMAIL_PROVIDER || 'not set (defaulting to resend)'}`);
+  console.log(`[Email] GMAIL_REFRESH_TOKEN: ${process.env.GMAIL_REFRESH_TOKEN ? 'set' : 'not set'}`);
 
-  switch (provider) {
-    case 'resend':
-      return sendViaResend(options);
-    case 'gmail':
-    case 'smtp':
-      return sendViaSmtp(options);
-    case 'mock':
-      return sendViaMock(options);
-    default:
-      throw new Error(`Unsupported email provider: ${provider}`);
+  try {
+    let result: EmailSendResult;
+    switch (provider) {
+      case 'resend':
+        result = await sendViaResend(options);
+        break;
+      case 'gmail':
+      case 'smtp':
+        result = await sendViaSmtp(options);
+        break;
+      case 'mock':
+        result = await sendViaMock(options);
+        break;
+      default:
+        throw new Error(`Unsupported email provider: ${provider}`);
+    }
+    
+    console.log(`[Email] Send result:`, {
+      success: result.success,
+      status: result.status,
+      messageId: result.messageId,
+      error: result.error,
+    });
+    
+    return result;
+  } catch (error) {
+    console.error(`[Email] Unexpected error in sendEmail:`, error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
   }
 }
 
