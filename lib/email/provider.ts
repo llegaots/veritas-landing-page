@@ -224,23 +224,48 @@ ${htmlContent}
         console.log(`[Gmail API] HTML preview (first 200 chars): ${htmlContent.substring(0, 200)}`);
         console.log(`[Gmail API] HTML preview (last 200 chars): ${htmlContent.substring(Math.max(0, htmlContent.length - 200))}`);
         
+        // Construct email message with proper MIME structure
+        // Use multipart/alternative for better email client compatibility
+        const boundary = `----=_Part_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+        
         const emailContent = [
           `From: ${fromEmail}`,
           `To: ${options.to}`,
           `Subject: ${encodeSubject(options.subject)}`,
           `MIME-Version: 1.0`,
-          `Content-Type: text/html; charset=utf-8`,
+          `Content-Type: multipart/alternative; boundary="${boundary}"`,
           options.replyTo ? `Reply-To: ${options.replyTo}` : '',
           '',
+          `--${boundary}`,
+          `Content-Type: text/plain; charset=utf-8`,
+          `Content-Transfer-Encoding: quoted-printable`,
+          '',
+          options.text || 'This email requires HTML support.',
+          '',
+          `--${boundary}`,
+          `Content-Type: text/html; charset=utf-8`,
+          `Content-Transfer-Encoding: quoted-printable`,
+          '',
           htmlContent,
+          '',
+          `--${boundary}--`,
         ].filter(Boolean).join('\r\n');
         
+        // Verify email content length before encoding
+        console.log(`[Gmail API] Full email content length: ${emailContent.length} chars`);
+        console.log(`[Gmail API] Email content ends with: ${emailContent.substring(Math.max(0, emailContent.length - 100))}`);
+        
         // Encode message in base64url format (Gmail API requirement)
-        const encodedMessage = Buffer.from(emailContent)
+        const emailBuffer = Buffer.from(emailContent, 'utf-8');
+        console.log(`[Gmail API] Email buffer length: ${emailBuffer.length} bytes`);
+        
+        const encodedMessage = emailBuffer
           .toString('base64')
           .replace(/\+/g, '-')
           .replace(/\//g, '_')
           .replace(/=+$/, '');
+        
+        console.log(`[Gmail API] Encoded message length: ${encodedMessage.length} chars`);
         
         console.log('[Gmail API] Sending email:', {
           to: options.to,
