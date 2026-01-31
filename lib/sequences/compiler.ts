@@ -170,19 +170,24 @@ function walkGraph(
     const renderedContent = renderContent(smsNode.content || '', context);
     
     // Calculate scheduled time: apply timing delay AFTER currentTime
+    // IMPORTANT: If timing is empty/undefined, schedule immediately (no delay)
+    // The delay is applied relative to currentTime, which accumulates as we traverse the graph
     let scheduledTime = new Date(currentTime);
-    if (smsNode.timing) {
-      const waitMs = parseDuration(smsNode.timing, context.phone);
+    const timingStr = smsNode.timing?.trim();
+    if (timingStr && timingStr.length > 0) {
+      const waitMs = parseDuration(timingStr, context.phone);
       scheduledTime = new Date(currentTime.getTime() + waitMs);
       console.log(`[Compiler] Processing SMS node ${currentNodeId}:`);
       console.log(`  - Current time: ${currentTime.toISOString()}`);
-      console.log(`  - Timing property: ${smsNode.timing}`);
+      console.log(`  - Timing property: "${timingStr}"`);
       console.log(`  - Timing delay: ${waitMs}ms (${waitMs / 1000 / 60} minutes)`);
       console.log(`  - Scheduled time: ${scheduledTime.toISOString()}`);
     } else {
+      // No timing = schedule immediately at currentTime (no additional delay)
       console.log(`[Compiler] Processing SMS node ${currentNodeId}:`);
       console.log(`  - Current time: ${currentTime.toISOString()}`);
-      console.log(`  - No timing specified, scheduling immediately`);
+      console.log(`  - No timing specified (empty/undefined), scheduling immediately at currentTime`);
+      scheduledTime = new Date(currentTime); // Explicitly use currentTime (no delay)
     }
     console.log(`  - Message: ${renderedContent.substring(0, 50)}...`);
     
@@ -210,19 +215,24 @@ function walkGraph(
     }
     
     // Calculate scheduled time: apply timing delay AFTER currentTime
+    // IMPORTANT: If timing is empty/undefined, schedule immediately (no delay)
+    // The delay is applied relative to currentTime, which accumulates as we traverse the graph
     let scheduledTime = new Date(currentTime);
-    if (emailNode.timing) {
-      const waitMs = parseDuration(emailNode.timing, context.phone);
+    const timingStr = emailNode.timing?.trim();
+    if (timingStr && timingStr.length > 0) {
+      const waitMs = parseDuration(timingStr, context.phone);
       scheduledTime = new Date(currentTime.getTime() + waitMs);
       console.log(`[Compiler] Processing Email node ${currentNodeId}:`);
       console.log(`  - Current time: ${currentTime.toISOString()}`);
-      console.log(`  - Timing property: ${emailNode.timing}`);
+      console.log(`  - Timing property: "${timingStr}"`);
       console.log(`  - Timing delay: ${waitMs}ms (${waitMs / 1000 / 60} minutes)`);
       console.log(`  - Scheduled time: ${scheduledTime.toISOString()}`);
     } else {
+      // No timing = schedule immediately at currentTime (no additional delay)
       console.log(`[Compiler] Processing Email node ${currentNodeId}:`);
       console.log(`  - Current time: ${currentTime.toISOString()}`);
-      console.log(`  - No timing specified, scheduling immediately`);
+      console.log(`  - No timing specified (empty/undefined), scheduling immediately at currentTime`);
+      scheduledTime = new Date(currentTime); // Explicitly use currentTime (no delay)
     }
     console.log(`  - Subject: ${renderedSubject}`);
     console.log(`  - HTML length: ${renderedHtml.length} chars`);
