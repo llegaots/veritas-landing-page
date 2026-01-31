@@ -258,7 +258,7 @@ ${htmlContent}
         ].filter(Boolean).join('\r\n');
         
         // Encode message in base64url format (Gmail API requirement)
-        const encodedMessage = Buffer.from(emailContent)
+        const encodedMessage = Buffer.from(emailContent, 'utf-8')
           .toString('base64')
           .replace(/\+/g, '-')
           .replace(/\//g, '_')
@@ -268,7 +268,10 @@ ${htmlContent}
           to: options.to,
           from: fromEmail,
           subject: options.subject,
-          htmlLength: options.html.length,
+          originalHtmlLength: options.html.length,
+          wrappedHtmlLength: htmlContent.length,
+          emailContentLength: emailContent.length,
+          encodedMessageLength: encodedMessage.length,
         });
         
         const response = await gmail.users.messages.send({

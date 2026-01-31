@@ -182,18 +182,15 @@ export async function GET(request: NextRequest) {
           const htmlLength = job.email_html?.length || 0;
           const htmlPreview = job.email_html?.substring(0, 200) || '';
           const htmlEndPreview = job.email_html?.substring(Math.max(0, htmlLength - 200)) || '';
-          console.log(`[Cron] Email job ${job.id} HTML content from DB: ${htmlLength} chars`);
-          console.log(`[Cron] HTML preview (first 200): ${htmlPreview}...`);
-          console.log(`[Cron] HTML preview (last 200): ...${htmlEndPreview}`);
-          
-          // Verify HTML is complete (has opening and closing table tags)
-          const hasOpeningTable = job.email_html?.includes('<table');
-          const hasClosingTable = job.email_html?.includes('</table>');
-          if (!hasOpeningTable || !hasClosingTable) {
-            console.warn(`[Cron] WARNING: Email job ${job.id} HTML may be incomplete! hasOpeningTable=${hasOpeningTable}, hasClosingTable=${hasClosingTable}`);
+          console.log(`[Cron] Email job ${job.id} HTML content: ${htmlLength} chars`);
+          console.log(`[Cron] HTML preview (first 200): ${htmlPreview}`);
+          console.log(`[Cron] HTML preview (last 200): ${htmlEndPreview}`);
+
+          // Ensure we have the full HTML content - check if it seems truncated
+          if (!job.email_html || job.email_html.length === 0) {
+            throw new Error('Email HTML content is empty');
           }
 
-          console.log(`[Cron] Calling sendEmail for job ${job.id}...`);
           sendResult = await sendEmail({
             to: job.email_address,
             subject: job.email_subject,
@@ -204,11 +201,6 @@ export async function GET(request: NextRequest) {
               run_id: job.run_id,
               node_id: job.node_id,
             },
-          });
-          console.log(`[Cron] sendEmail result for job ${job.id}:`, {
-            success: sendResult.success,
-            status: sendResult.status,
-            error: sendResult.error,
           });
         } else {
           // Send SMS (default)
@@ -227,20 +219,15 @@ export async function GET(request: NextRequest) {
           });
         }
 
-        // Update job with provider status and messageId
-        // For Gmail API, messageId is the actual Gmail message ID (e.g., "19c165ea1506a4f8")
-        // For other providers, status might be "sent" or similar
-        const providerStatus = sendResult.messageId || sendResult.status || 'sent';
+        // Update job with provider status
         await supabase
           .from('message_jobs')
           .update({
-            provider_status: providerStatus,
+            provider_status: sendResult.status,
             error: sendResult.error || null,
             // sent_at already set above
           })
           .eq('id', job.id);
-        
-        console.log(`[Cron] Updated job ${job.id} with provider_status: ${providerStatus}`);
 
         if (sendResult.success) {
           results.sent++;
