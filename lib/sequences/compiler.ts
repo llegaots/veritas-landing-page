@@ -226,6 +226,15 @@ function walkGraph(
     }
     console.log(`  - Subject: ${renderedSubject}`);
     console.log(`  - HTML length: ${renderedHtml.length} chars`);
+    console.log(`  - HTML preview (first 200): ${renderedHtml.substring(0, 200)}...`);
+    console.log(`  - HTML preview (last 200): ...${renderedHtml.substring(Math.max(0, renderedHtml.length - 200))}`);
+    
+    // Verify HTML structure before saving
+    const hasOpeningTable = renderedHtml.includes('<table');
+    const hasClosingTable = renderedHtml.includes('</table>');
+    if (!hasOpeningTable || !hasClosingTable) {
+      console.warn(`[Compiler] WARNING: Email HTML for node ${currentNodeId} may be incomplete! hasOpeningTable=${hasOpeningTable}, hasClosingTable=${hasClosingTable}`);
+    }
     
     jobs.push({
       run_id: context.run_id as string,

@@ -297,12 +297,14 @@ ${htmlContent}
           console.error(`[Gmail API] Error testing decode:`, e);
         }
         
-        console.log('[Gmail API] Sending email:', {
-          to: options.to,
-          from: fromEmail,
-          subject: options.subject,
-          htmlLength: options.html.length,
-        });
+    console.log('[Gmail API] Sending email:', {
+      to: options.to,
+      from: fromEmail,
+      subject: options.subject,
+      originalHtmlLength: options.html?.length || 0,
+      finalHtmlLength: htmlContent.length,
+      htmlContentDifference: htmlContent.length - (options.html?.length || 0),
+    });
         
         const response = await gmail.users.messages.send({
           userId: 'me',

@@ -180,8 +180,18 @@ export async function GET(request: NextRequest) {
 
           // Log HTML content length for debugging
           const htmlLength = job.email_html?.length || 0;
-          const htmlPreview = job.email_html?.substring(0, 100) || '';
-          console.log(`[Cron] Email job ${job.id} HTML content: ${htmlLength} chars, preview: ${htmlPreview}...`);
+          const htmlPreview = job.email_html?.substring(0, 200) || '';
+          const htmlEndPreview = job.email_html?.substring(Math.max(0, htmlLength - 200)) || '';
+          console.log(`[Cron] Email job ${job.id} HTML content from DB: ${htmlLength} chars`);
+          console.log(`[Cron] HTML preview (first 200): ${htmlPreview}...`);
+          console.log(`[Cron] HTML preview (last 200): ...${htmlEndPreview}`);
+          
+          // Verify HTML is complete (has opening and closing table tags)
+          const hasOpeningTable = job.email_html?.includes('<table');
+          const hasClosingTable = job.email_html?.includes('</table>');
+          if (!hasOpeningTable || !hasClosingTable) {
+            console.warn(`[Cron] WARNING: Email job ${job.id} HTML may be incomplete! hasOpeningTable=${hasOpeningTable}, hasClosingTable=${hasClosingTable}`);
+          }
 
           sendResult = await sendEmail({
             to: job.email_address,
