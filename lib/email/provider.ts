@@ -43,7 +43,7 @@ export async function sendEmail(options: EmailSendOptions): Promise<EmailSendRes
  */
 async function sendViaResend(options: EmailSendOptions): Promise<EmailSendResult> {
   const apiKey = process.env.RESEND_API_KEY;
-  const fromEmail = options.from || process.env.EMAIL_FROM || 'noreply@veritas.com';
+  const fromEmail = options.from || process.env.EMAIL_FROM || 'alex@veritasequitypartners.com';
 
   if (!apiKey) {
     return {
@@ -53,10 +53,9 @@ async function sendViaResend(options: EmailSendOptions): Promise<EmailSendResult
   }
 
   // TEST MODE: Only send emails to test email addresses (if enabled)
-  // Default to false in production (Vercel), true in development
-  const isProduction = process.env.VERCEL || process.env.NODE_ENV === 'production';
-  const testMode = process.env.EMAIL_TEST_MODE === 'true' || (!isProduction && process.env.EMAIL_TEST_MODE !== 'false');
-  const TEST_EMAILS = (process.env.EMAIL_TEST_ADDRESSES || 'test@example.com').split(',').map(e => e.trim());
+  // Default to true for safety - only send to test addresses unless explicitly disabled
+  const testMode = process.env.EMAIL_TEST_MODE !== 'false'; // Default to true
+  const TEST_EMAILS = (process.env.EMAIL_TEST_ADDRESSES || 'lucaslegatos123@gmail.com').split(',').map(e => e.trim());
   
   if (testMode) {
     const isTestEmail = TEST_EMAILS.some(testEmail => 
@@ -163,13 +162,12 @@ async function sendViaSmtp(options: EmailSendOptions): Promise<EmailSendResult> 
           auth: oauth2Client,
         });
         
-        const fromEmail = options.from || process.env.EMAIL_FROM || smtpUser;
+        const fromEmail = options.from || process.env.EMAIL_FROM || 'alex@veritasequitypartners.com';
         
         // TEST MODE: Only send emails to test email addresses (if enabled)
-        // Default to false in production (Vercel), true in development
-        const isProduction = process.env.VERCEL || process.env.NODE_ENV === 'production';
-        const testMode = process.env.EMAIL_TEST_MODE === 'true' || (!isProduction && process.env.EMAIL_TEST_MODE !== 'false');
-        const TEST_EMAILS = (process.env.EMAIL_TEST_ADDRESSES || 'test@example.com').split(',').map(e => e.trim());
+        // Default to true for safety - only send to test addresses unless explicitly disabled
+        const testMode = process.env.EMAIL_TEST_MODE !== 'false'; // Default to true
+        const TEST_EMAILS = (process.env.EMAIL_TEST_ADDRESSES || 'lucaslegatos123@gmail.com').split(',').map(e => e.trim());
         
         if (testMode) {
           const isTestEmail = TEST_EMAILS.some(testEmail => 
@@ -248,7 +246,7 @@ async function sendViaSmtp(options: EmailSendOptions): Promise<EmailSendResult> 
     // For OAuth2, you can send from any email address your account has permission to send from
     // This includes custom domain emails (like lucas@neptaai.com) if they're set up in Google Workspace
     // or configured as "Send mail as" in Gmail
-    const fromEmail = options.from || process.env.EMAIL_FROM || smtpUser;
+    const fromEmail = options.from || process.env.EMAIL_FROM || 'alex@veritasequitypartners.com';
 
     if (!smtpUser || (!smtpPassword && !accessToken)) {
       return {
@@ -258,10 +256,9 @@ async function sendViaSmtp(options: EmailSendOptions): Promise<EmailSendResult> 
     }
 
     // TEST MODE: Only send emails to test email addresses (if enabled)
-    // Default to false in production (Vercel), true in development
-    const isProduction = process.env.VERCEL || process.env.NODE_ENV === 'production';
-    const testMode = process.env.EMAIL_TEST_MODE === 'true' || (!isProduction && process.env.EMAIL_TEST_MODE !== 'false');
-    const TEST_EMAILS = (process.env.EMAIL_TEST_ADDRESSES || 'test@example.com').split(',').map(e => e.trim());
+    // Default to true for safety - only send to test addresses unless explicitly disabled
+    const testMode = process.env.EMAIL_TEST_MODE !== 'false'; // Default to true
+    const TEST_EMAILS = (process.env.EMAIL_TEST_ADDRESSES || 'lucaslegatos123@gmail.com').split(',').map(e => e.trim());
     
     if (testMode) {
       const isTestEmail = TEST_EMAILS.some(testEmail => 
