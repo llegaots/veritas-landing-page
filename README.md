@@ -1,10 +1,15 @@
-# Horizon Park Apartments - Landing Page
+# Veritas Landing Page & Sequence Builder
 
-A beautiful, modern landing page for the Horizon Park Apartments investment opportunity, built in Harmozi style. This single-page application showcases the 36-unit apartment complex investment in Edmonds, WA, offered by Veritas Equity Partners.
+A comprehensive platform for Veritas Equity Partners featuring a landing page for investment opportunities and an admin panel for managing investor sequences, SMS/email automation, and analytics.
 
 ## Overview
 
-This landing page is designed to convert qualified accredited investors by providing clear information about the investment opportunity, transparent risk/benefit analysis, social proof, and an easy-to-use contact form.
+This application includes:
+- **Landing Page**: Beautiful, modern landing page for investment opportunities (Horizon Park Apartments)
+- **Admin Panel**: Full-featured admin interface for managing investors, sequences, and analytics
+- **Sequence Builder**: Visual workflow builder for creating automated SMS/email sequences
+- **Automation**: Automated message sending via Twilio (SMS) and Gmail API/Resend (Email)
+- **Analytics**: Visitor tracking, lead management, and sequence performance metrics
 
 ## Features
 
@@ -26,6 +31,12 @@ This landing page is designed to convert qualified accredited investors by provi
 - **UI Components**: Custom components with Radix UI primitives
 - **Animations**: Framer Motion
 - **Icons**: Lucide React
+- **Database**: Supabase (PostgreSQL)
+- **SMS**: Twilio
+- **Email**: Gmail API (OAuth2) / Resend
+- **State Management**: Zustand
+- **Graph Visualization**: React Flow, ELK.js
+- **AI**: OpenAI (for sequence generation)
 
 ## Getting Started
 
@@ -55,33 +66,57 @@ npm run build
 npm start
 ```
 
+### Environment Variables
+
+Required environment variables (see `.env.local.example`):
+- `SUPABASE_URL` - Supabase project URL
+- `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role key
+- `TWILIO_ACCOUNT_SID` - Twilio account SID
+- `TWILIO_AUTH_TOKEN` - Twilio auth token
+- `TWILIO_PHONE_NUMBER` - Twilio phone number
+- `GMAIL_REFRESH_TOKEN` - Gmail OAuth refresh token (for email)
+- `GOOGLE_CLIENT_ID` - Google OAuth client ID
+- `GOOGLE_CLIENT_SECRET` - Google OAuth client secret
+- `RESEND_API_KEY` - Resend API key (alternative email provider)
+- `OPENAI_API_KEY` - OpenAI API key (for AI sequence generation)
+- `ADMIN_PASSWORD` - Admin panel password
+
 ## Project Structure
 
 ```
-veritas-horizon-park/
+veritas-landing-page/
 ├── app/
-│   ├── layout.tsx          # Root layout with metadata
-│   ├── page.tsx            # Main landing page
-│   └── globals.css         # Global styles and theme
+│   ├── admin/              # Admin panel pages
+│   │   ├── investors/      # Investor management
+│   │   ├── sequences/      # Sequence builder & management
+│   │   └── page.tsx        # Admin dashboard
+│   ├── api/                # API routes
+│   │   ├── admin/          # Admin API endpoints
+│   │   ├── cron/           # Scheduled jobs (message sending)
+│   │   ├── events/         # Event webhooks
+│   │   └── webhooks/        # External webhooks (Calendly, Twilio, etc.)
+│   ├── layout.tsx          # Root layout
+│   ├── page.tsx            # Landing page
+│   └── globals.css         # Global styles
 ├── components/
+│   ├── admin/              # Admin UI components
+│   ├── sequences/          # Sequence builder components
 │   ├── landing/            # Landing page sections
-│   │   ├── HeroSection.tsx
-│   │   ├── ValuePropositionSection.tsx
-│   │   ├── ProblemSection.tsx
-│   │   ├── SolutionSection.tsx
-│   │   ├── CaseStudiesSection.tsx
-│   │   ├── BenefitsRisksSection.tsx
-│   │   ├── ProcessSection.tsx
-│   │   ├── TeamSection.tsx
-│   │   ├── FAQSection.tsx
-│   │   └── CTASection.tsx
 │   └── ui/                 # Reusable UI components
-│       ├── button.tsx
-│       └── accordion.tsx
 ├── lib/
-│   └── utils.ts            # Utility functions
-└── public/
-    └── images/             # Static assets
+│   ├── admin/              # Admin utilities (formatting, filters, etc.)
+│   ├── agent/              # AI sequence generation
+│   ├── email/              # Email provider abstraction
+│   ├── sequences/          # Sequence compilation & execution
+│   ├── sms/                # SMS provider abstraction
+│   └── store/              # Zustand state management
+├── scripts/                # Utility scripts
+│   ├── test/               # Test & diagnostic scripts
+│   ├── check-native-imports.js  # Build-time checks
+│   ├── sync-to-airtable.js       # Airtable sync
+│   └── import-airtable-to-supabase.js  # Data import
+├── sql/                    # Database schema files
+└── public/                 # Static assets
 ```
 
 ## Key Investment Details
