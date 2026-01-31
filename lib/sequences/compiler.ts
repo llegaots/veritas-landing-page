@@ -268,12 +268,37 @@ function walkGraph(
     console.log(`[Compiler] Node ${currentNodeId} has ${outgoingEdges.length} outgoing edge(s), currentTime: ${currentTime.toISOString()}`);
   }
   
-  // Process edges sequentially, passing updated currentTime to each
-  // This ensures timing delays are properly accumulated
-  for (const edge of outgoingEdges) {
-    console.log(`[Compiler] Processing edge ${currentNodeId} -> ${edge.to} with currentTime: ${currentTime.toISOString()}`);
-    // Use the updated currentTime from the previous iteration
-    // This ensures sequential nodes get properly delayed times
+  // PARALLEL EXECUTION: When a node has multiple outgoing edges, all branches start from the SAME time
+  // This allows SMS and Email to be sent simultaneously
+  if (outgoingEdges.length > 1) {
+    // Multiple edges = parallel execution
+    // All branches start from the same currentTime
+    console.log(`[Compiler] PARALLEL EXECUTION: Processing ${outgoingEdges.length} branches from ${currentNodeId} starting at ${currentTime.toISOString()}`);
+    
+    const branchTimes: Date[] = [];
+    const parallelTime = new Date(currentTime); // Use the same starting time for all parallel branches
+    
+    for (const edge of outgoingEdges) {
+      console.log(`[Compiler] Processing parallel branch ${currentNodeId} -> ${edge.to} with startTime: ${parallelTime.toISOString()}`);
+      // Each branch gets its own visited set copy to allow parallel paths
+      // This prevents cycles within each branch while allowing the same node to be reached via different parallel paths
+      const branchVisited = new Set(visited);
+      const branchTime = walkGraph(spec, edge.to, parallelTime, context, branchVisited, jobs);
+      branchTimes.push(branchTime);
+      console.log(`[Compiler] Branch ${currentNodeId} -> ${edge.to} completed at: ${branchTime.toISOString()}`);
+    }
+    
+    // After all parallel branches complete, currentTime = max time from all branches
+    // This ensures sequential nodes after the parallel section start from the latest time
+    if (branchTimes.length > 0) {
+      const maxTime = new Date(Math.max(...branchTimes.map(t => t.getTime())));
+      currentTime = maxTime;
+      console.log(`[Compiler] PARALLEL EXECUTION complete: max time from ${outgoingEdges.length} branches = ${currentTime.toISOString()}`);
+    }
+  } else if (outgoingEdges.length === 1) {
+    // Single edge = sequential execution (normal flow)
+    const edge = outgoingEdges[0];
+    console.log(`[Compiler] Processing sequential edge ${currentNodeId} -> ${edge.to} with currentTime: ${currentTime.toISOString()}`);
     const timeBeforeRecursion = new Date(currentTime);
     currentTime = walkGraph(spec, edge.to, currentTime, context, visited, jobs);
     console.log(`[Compiler] After processing edge ${currentNodeId} -> ${edge.to}: currentTime ${timeBeforeRecursion.toISOString()} -> ${currentTime.toISOString()}`);
