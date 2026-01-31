@@ -165,7 +165,8 @@ export async function GET(request: NextRequest) {
           continue;
         }
 
-        console.log(`[Cron] Sending job ${job.id} (type: ${job.job_type || 'sms'}) scheduled for ${job.scheduled_for} (delay: ${Math.round((currentTime.getTime() - scheduledTime.getTime()) / 1000)}s)`);
+        const delaySeconds = Math.round((currentTime.getTime() - scheduledTime.getTime()) / 1000);
+        console.log(`[Cron] Sending job ${job.id} (type: ${job.job_type || 'sms'}, run_id: ${job.run_id}, node_id: ${job.node_id}) scheduled for ${job.scheduled_for} (delay: ${delaySeconds}s, ${delaySeconds > 0 ? 'LATE' : delaySeconds < -5 ? 'EARLY' : 'ON-TIME'})`);
 
         // Determine job type (default to 'sms' for backward compatibility)
         const jobType = job.job_type || 'sms';

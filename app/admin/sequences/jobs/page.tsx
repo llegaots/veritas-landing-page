@@ -481,9 +481,15 @@ function MessageJobsContent() {
               const isExpanded = expandedInvestors.has(investorKey);
               const { investorName, investorPhone, investorEmail, jobs: investorJobs } = investorData;
               const hasAnomalies = investorJobs.some(j => j.is_anomaly);
-              const sortedJobs = [...investorJobs].sort((a, b) => 
-                new Date(a.scheduled_for).getTime() - new Date(b.scheduled_for).getTime()
-              );
+              // Sort jobs by scheduled_for time (ascending - earliest first)
+              // Also sort by run_id to group jobs from the same sequence run together
+              const sortedJobs = [...investorJobs].sort((a, b) => {
+                // First sort by scheduled_for time
+                const timeDiff = new Date(a.scheduled_for).getTime() - new Date(b.scheduled_for).getTime();
+                if (timeDiff !== 0) return timeDiff;
+                // If same time, sort by run_id to keep jobs from same run together
+                return a.run_id.localeCompare(b.run_id);
+              });
               
               // Get unique sequences for this investor
               const sequences = Array.from(new Set(investorJobs.map(j => j.sequence_name).filter(Boolean)));

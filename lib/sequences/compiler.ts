@@ -283,9 +283,11 @@ function walkGraph(
       // Each branch gets its own visited set copy to allow parallel paths
       // This prevents cycles within each branch while allowing the same node to be reached via different parallel paths
       const branchVisited = new Set(visited);
-      const branchTime = walkGraph(spec, edge.to, parallelTime, context, branchVisited, jobs);
+      // IMPORTANT: Each parallel branch starts from the SAME time (parallelTime)
+      // This ensures parallel nodes execute simultaneously
+      const branchTime = walkGraph(spec, edge.to, new Date(parallelTime), context, branchVisited, jobs);
       branchTimes.push(branchTime);
-      console.log(`[Compiler] Branch ${currentNodeId} -> ${edge.to} completed at: ${branchTime.toISOString()}`);
+      console.log(`[Compiler] Branch ${currentNodeId} -> ${edge.to} completed at: ${branchTime.toISOString()} (started at ${parallelTime.toISOString()})`);
     }
     
     // After all parallel branches complete, currentTime = max time from all branches
