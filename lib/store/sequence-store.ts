@@ -199,47 +199,52 @@ export const useSequenceStore = create<SequenceStore>((set, get) => ({
         }
       }
       
-      // Validate the updated spec
+      // Only validate if sequence is active - don't validate drafts during editing
+      const isDraft = updatedSpec.metadata?.status === 'draft' || updatedSpec.metadata?.status === undefined;
+      
+      // For draft sequences, skip validation entirely - user is still building
+      // Validation will only happen when trying to activate the sequence
+      if (isDraft) {
+        // Always allow changes for draft sequences - no validation needed
+        console.log('[Store] applyOps: Draft sequence - skipping validation, allowing changes');
+        set({ 
+          spec: updatedSpec, 
+          pendingOps: [],
+          error: null, // Never show errors for draft sequences
+        });
+        return;
+      }
+      
+      // Only validate active sequences
       const { validateSequenceSpec } = require('../sequences/validation');
       const validation = validateSequenceSpec(updatedSpec);
       
-      const isDraft = updatedSpec.metadata?.status === 'draft' || updatedSpec.metadata?.status === undefined;
-      
-      console.log('[Store] applyOps: Validation result:', {
+      console.log('[Store] applyOps: Active sequence validation:', {
         valid: validation.valid,
         errors: validation.errors,
         warnings: validation.warnings,
-        status: updatedSpec.metadata?.status,
-        isDraft,
         finalNodes: updatedSpec.nodes.length,
         finalEdges: updatedSpec.edges.length,
       });
       
-      // For draft sequences, always allow changes (user is still building)
-      // Only block for active sequences with validation errors
-      if (!validation.valid && !isDraft) {
-        // Only block if sequence is active and has errors
-        console.error('[Store] applyOps: Validation failed for active sequence, errors:', validation.errors);
+      // For active sequences, show errors but still allow changes (user might be fixing issues)
+      if (!validation.valid) {
+        console.warn('[Store] applyOps: Active sequence has validation errors:', validation.errors);
+        // Show error but still apply changes (user might be fixing the issues)
         set({
           error: `Validation failed: ${validation.errors.join(', ')}`,
-          spec: updatedSpec, // Still set the spec even if validation fails
+          spec: updatedSpec,
           pendingOps: [],
         });
         return;
       }
       
-      // For draft sequences, always allow changes (even with validation errors)
-      // User can fix issues before activating
-      if (isDraft && validation.errors.length > 0) {
-        console.warn('[Store] applyOps: Validation errors for draft sequence (allowing):', validation.errors);
-      }
-      
-      // Always apply changes for draft sequences, or if validation passed
-      console.log('[Store] applyOps: Setting updated spec with', updatedSpec.nodes.length, 'nodes');
+      // Validation passed for active sequence
+      console.log('[Store] applyOps: Active sequence validation passed');
       set({ 
         spec: updatedSpec, 
         pendingOps: [],
-        error: isDraft ? null : (validation.valid ? null : `Validation failed: ${validation.errors.join(', ')}`), // Only show errors for active sequences
+        error: null,
       });
     } catch (error) {
       console.error('[Store] applyOps: Error applying patches:', error);

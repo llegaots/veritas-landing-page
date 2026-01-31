@@ -56,6 +56,26 @@ export async function PATCH(
     const currentStatus = version.spec_jsonb.metadata?.status || 'draft';
     const newStatus = currentStatus === 'active' ? 'draft' : 'active';
 
+    // If activating (draft -> active), validate the sequence first
+    if (newStatus === 'active' && currentStatus === 'draft') {
+      const { validateSequenceSpec } = require('@/lib/sequences/validation');
+      const validation = validateSequenceSpec(version.spec_jsonb);
+      
+      if (!validation.valid) {
+        return new Response(
+          JSON.stringify({
+            error: 'Cannot activate sequence: validation failed',
+            validationErrors: validation.errors,
+            validationWarnings: validation.warnings,
+          }),
+          {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' },
+          }
+        );
+      }
+    }
+
     // Update the spec metadata
     const updatedSpec = {
       ...version.spec_jsonb,

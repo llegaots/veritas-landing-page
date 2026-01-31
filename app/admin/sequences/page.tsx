@@ -44,6 +44,13 @@ function SequencesPageContent() {
     }
   }, [searchParams, setPassword, password, loadSpec, sequenceId]);
 
+  // Sync sequence name from spec when it loads
+  useEffect(() => {
+    if (spec?.metadata?.name) {
+      setSequenceName(spec.metadata.name);
+    }
+  }, [spec?.metadata?.name]);
+
   // Initialize empty sequence when switching to manual mode (only if no sequence is loaded)
   // IMPORTANT: Only initialize if spec is completely null/empty, don't overwrite existing specs
   useEffect(() => {
@@ -65,9 +72,54 @@ function SequencesPageContent() {
     console.log('[Save] Node IDs:', currentSpec.nodes.map(n => `${n.type}:${n.id}`));
     console.log('[Save] Positions:', Object.keys(currentSpec.ui?.positions || {}));
 
+    // VALIDATE BEFORE SAVING - show errors only when saving
+    const { validateSequenceSpec } = require('@/lib/sequences/validation');
+    const validation = validateSequenceSpec(currentSpec);
+    
+    if (!validation.valid) {
+      const errorMessage = `Cannot save sequence: ${validation.errors.join(', ')}`;
+      console.error('[Save] Validation failed:', validation.errors);
+      alert(errorMessage);
+      return; // Don't save if validation fails
+    }
+    
+    if (validation.warnings.length > 0) {
+      console.warn('[Save] Validation warnings:', validation.warnings);
+      // Show warnings but allow saving
+      const continueSave = confirm(
+        `⚠️ Warnings:\n${validation.warnings.join('\n')}\n\nContinue saving anyway?`
+      );
+      if (!continueSave) {
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       if (sequenceId) {
+        // Update sequence name in database if it changed
+        const sequenceResponse = await fetch(
+          `/api/sequences?id=${sequenceId}&key=${encodeURIComponent(password)}`
+        );
+        if (sequenceResponse.ok) {
+          const sequenceData = await sequenceResponse.json();
+          const currentDbName = sequenceData.sequence?.name;
+          const newName = currentSpec.metadata?.name;
+          
+          if (currentDbName !== newName && newName) {
+            // Update sequence name in database
+            await fetch(
+              `/api/sequences?id=${sequenceId}&key=${encodeURIComponent(password)}`,
+              {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: newName }),
+              }
+            );
+            console.log('[Save] Updated sequence name in database:', newName);
+          }
+        }
+        
         // Update existing sequence
         const response = await fetch(
           `/api/sequences/${sequenceId}/versions?key=${encodeURIComponent(password)}`,

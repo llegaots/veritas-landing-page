@@ -209,6 +209,73 @@ export function WorkflowDiagram() {
 
   // Track pending connections to prevent them from being overwritten
   const pendingConnectionsRef = useRef<Set<string>>(new Set());
+  
+  // Handle node deletions - remove from spec immediately
+  const handleNodesChange = useCallback((changes: any[]) => {
+    if (!spec) {
+      onNodesChange(changes);
+      return;
+    }
+    
+    // Check for node deletions
+    const deletions = changes.filter(c => c.type === 'remove' && c.id);
+    if (deletions.length > 0) {
+      const patches: any[] = [];
+      
+      for (const deletion of deletions) {
+        const nodeId = deletion.id;
+        // Convert step ID back to node ID if needed
+        const actualNodeId = nodeId.startsWith('step_') 
+          ? nodeId.replace(/^step_/, '')
+          : nodeId;
+        
+        // Don't allow deleting trigger or end nodes
+        if (actualNodeId === 'trigger' || actualNodeId === 'end') {
+          console.warn('[WorkflowDiagram] Cannot delete trigger or end node');
+          continue;
+        }
+        
+        // Find node index in spec
+        const nodeIndex = spec.nodes.findIndex(n => n.id === actualNodeId);
+        if (nodeIndex !== -1) {
+          patches.push({
+            op: 'remove' as const,
+            path: `/nodes/${nodeIndex}`,
+          });
+          console.log('[WorkflowDiagram] Removing node:', actualNodeId);
+        }
+        
+        // Remove all edges connected to this node
+        const edgesToRemove = spec.edges.filter(
+          e => e.from === actualNodeId || e.to === actualNodeId
+        );
+        // Remove edges in reverse order to maintain indices
+        edgesToRemove.sort((a, b) => {
+          const aIndex = spec.edges.indexOf(a);
+          const bIndex = spec.edges.indexOf(b);
+          return bIndex - aIndex;
+        });
+        for (const edge of edgesToRemove) {
+          const edgeIndex = spec.edges.indexOf(edge);
+          if (edgeIndex !== -1) {
+            patches.push({
+              op: 'remove' as const,
+              path: `/edges/${edgeIndex}`,
+            });
+            console.log('[WorkflowDiagram] Removing edge:', edge.from, '→', edge.to);
+          }
+        }
+      }
+      
+      if (patches.length > 0) {
+        console.log('[WorkflowDiagram] Applying', patches.length, 'deletion patches');
+        applyOps(patches);
+      }
+    }
+    
+    // Apply other node changes (React Flow internal)
+    onNodesChange(changes);
+  }, [spec, applyOps, onNodesChange]);
 
   // Update when graph changes - but preserve positions during drag
   useEffect(() => {
@@ -408,33 +475,23 @@ export function WorkflowDiagram() {
       },
     };
     
+    // PARALLEL CONNECTIONS: Allow multiple edges from the same source
+    // Just add the new edge without removing existing ones
     setEdges(((eds: Edge[]) => {
-      // Remove any existing edges from the same source first
-      const filtered = eds.filter(e => e.source !== connection.source);
-      return [...filtered, newEdge];
+      // Check if this exact edge already exists
+      const exactDuplicate = eds.some(
+        e => e.source === connection.source && e.target === connection.target
+      );
+      if (exactDuplicate) {
+        console.log('[WorkflowDiagram] Exact duplicate edge, skipping');
+        return eds;
+      }
+      // Add the new edge (keep all existing edges, including parallel ones)
+      return [...eds, newEdge];
     }) as any);
     
-    // If source already has an outgoing edge, remove it first (replace connection)
-    // This allows disconnecting from one node and connecting to another
-    // Find ALL edges from this source
-    const existingEdges = currentSpec.edges
-      .map((e, idx) => ({ edge: e, index: idx }))
-      .filter(({ edge }) => edge.from === sourceNodeId);
-    
+    // Add the new edge to the spec (don't remove existing edges - allow parallel connections)
     const patches: any[] = [];
-    
-    // Remove existing edges from this source (in reverse order to maintain indices)
-    if (existingEdges.length > 0) {
-      console.log('[WorkflowDiagram] Removing', existingEdges.length, 'existing edge(s) from', sourceNodeId);
-      // Sort by index descending so we remove from end first
-      existingEdges.sort((a, b) => b.index - a.index);
-      for (const { index } of existingEdges) {
-        patches.push({
-          op: 'remove' as const,
-          path: `/edges/${index}`,
-        });
-      }
-    }
     
     // Add new edge
     patches.push({
@@ -514,7 +571,7 @@ export function WorkflowDiagram() {
       <ReactFlow
         nodes={nodes}
         edges={edges}
-        onNodesChange={onNodesChange}
+        onNodesChange={handleNodesChange}
         onEdgesChange={handleEdgesChange}
         onConnect={onConnect}
         onNodeClick={onNodeClick}

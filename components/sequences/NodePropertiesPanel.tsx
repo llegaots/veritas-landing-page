@@ -263,6 +263,59 @@ export function NodePropertiesPanel() {
           </CardHeader>
           <CardContent className="p-4 flex-1 overflow-y-auto">
             <div className="space-y-4">
+              {/* Available Variables */}
+              {spec?.variables && Object.keys(spec.variables).length > 0 && (
+                <div>
+                  <Label className="text-xs font-medium text-gray-700 mb-2 block">
+                    Available Variables (Click to Add)
+                  </Label>
+                  <div className="flex flex-wrap gap-2 p-2 bg-gray-50 rounded-lg border border-gray-200">
+                    {Object.keys(spec.variables).map((varName) => {
+                      const fieldId = spec.variables[varName];
+                      const INVESTOR_FIELDS: Record<string, string> = {
+                        investor_name: 'Investor Name',
+                        email_address: 'Email',
+                        phone_number: 'Phone',
+                        status: 'Status',
+                        investor_type: 'Type',
+                        amount_dollars: 'Amount',
+                        deal: 'Deal',
+                        source: 'Source',
+                        investor_notes: 'Notes',
+                      };
+                      const fieldLabel = INVESTOR_FIELDS[fieldId] || fieldId;
+                      
+                      return (
+                        <Button
+                          key={varName}
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const variableText = `{{${varName}}}`;
+                            // Check which field is focused, otherwise default to HTML
+                            const subjectInput = document.querySelector('input[placeholder*="subject"]') as HTMLInputElement;
+                            const htmlTextarea = document.querySelector('textarea[placeholder*="HTML"]') as HTMLTextAreaElement;
+                            
+                            if (subjectInput && document.activeElement === subjectInput) {
+                              setEmailSubject(prev => prev + variableText);
+                            } else if (htmlTextarea && document.activeElement === htmlTextarea) {
+                              setEmailHtml(prev => prev + variableText);
+                            } else {
+                              // Default to HTML content
+                              setEmailHtml(prev => prev + variableText);
+                            }
+                          }}
+                          className="text-xs cursor-pointer border-blue-200 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-all"
+                          title={`Click to add {{${varName}}} (maps to ${fieldLabel}). Inserts into the focused field (Subject or HTML), or HTML by default.`}
+                        >
+                          {`{{${varName}}}`}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               <div>
                 <Label className="text-sm font-medium text-gray-700 mb-2 block">
                   Subject
@@ -270,7 +323,7 @@ export function NodePropertiesPanel() {
                 <Input
                   value={emailSubject}
                   onChange={(e) => setEmailSubject(e.target.value)}
-                  placeholder="Email subject line"
+                  placeholder="Email subject line. Use {{FirstName}}, {{PropertyName}}, etc."
                   className="w-full border-gray-200 hover:border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 rounded-lg transition-all duration-200 text-gray-900"
                 />
               </div>
@@ -282,11 +335,18 @@ export function NodePropertiesPanel() {
                 <Textarea
                   value={emailHtml}
                   onChange={(e) => setEmailHtml(e.target.value)}
-                  placeholder="<html>...</html> or HTML content"
+                  placeholder="<html>...</html> or HTML content. Use {{FirstName}}, {{PropertyName}}, etc."
                   className="w-full min-h-[300px] font-mono text-sm border-gray-200 hover:border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 rounded-lg transition-all duration-200 text-gray-900"
+                  onFocus={(e) => {
+                    // When HTML is focused, clicking variable buttons will insert there
+                    e.currentTarget.setAttribute('data-focused', 'true');
+                  }}
+                  onBlur={(e) => {
+                    e.currentTarget.removeAttribute('data-focused');
+                  }}
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Enter HTML content. Variables like {'{{'}investor_name{'}}'} will be replaced.
+                  Type variables like {'{{'}FirstName{'}}'} or click variable buttons above. Variables will be replaced with investor data.
                 </p>
               </div>
 
@@ -332,6 +392,129 @@ export function NodePropertiesPanel() {
                 <p className="text-xs text-gray-500 mt-1">
                   Wait time before sending this email (after previous step)
                 </p>
+              </div>
+
+              {/* Variable Mapping Section */}
+              <div className="border-t border-gray-200 pt-4">
+                <Button
+                  variant="ghost"
+                  onClick={() => setShowVariableMapping(!showVariableMapping)}
+                  className="w-full justify-between p-2 hover:bg-gray-50 cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <Settings className="h-4 w-4 text-gray-600" />
+                    <span className="text-sm font-medium text-gray-700">Map Variables</span>
+                  </div>
+                  {showVariableMapping ? (
+                    <ChevronUp className="h-4 w-4 text-gray-600" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-gray-600" />
+                  )}
+                </Button>
+                
+                {showVariableMapping && (
+                  <div className="mt-3 space-y-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                    {/* Current Mappings */}
+                    {spec?.variables && Object.keys(spec.variables).length > 0 && (
+                      <div>
+                        <Label className="text-xs font-medium text-gray-700 mb-2 block">
+                          Current Mappings
+                        </Label>
+                        <div className="space-y-1">
+                          {Object.entries(spec.variables).map(([varName, fieldId]) => {
+                            const INVESTOR_FIELDS: Record<string, string> = {
+                              investor_name: 'Investor Name',
+                              email_address: 'Email',
+                              phone_number: 'Phone',
+                              status: 'Status',
+                              investor_type: 'Type',
+                              amount_dollars: 'Amount',
+                              deal: 'Deal',
+                              source: 'Source',
+                              investor_notes: 'Notes',
+                            };
+                            const fieldLabel = INVESTOR_FIELDS[fieldId] || fieldId;
+                            
+                            return (
+                              <div
+                                key={varName}
+                                className="flex items-center justify-between p-2 bg-white rounded border border-gray-200 text-xs"
+                              >
+                                <div>
+                                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 mr-2">
+                                    {`{{${varName}}}`}
+                                  </Badge>
+                                  <span className="text-gray-600">→ {fieldLabel}</span>
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => {
+                                    const newMappings = { ...spec.variables };
+                                    delete newMappings[varName];
+                                    applyOps([{
+                                      op: 'replace' as const,
+                                      path: '/variables',
+                                      value: newMappings,
+                                    }]);
+                                  }}
+                                  className="h-5 w-5 p-0 cursor-pointer hover:bg-red-50 hover:text-red-600"
+                                >
+                                  <X className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Add New Mapping */}
+                    <div>
+                      <Label className="text-xs font-medium text-gray-700 mb-2 block">
+                        Add New Variable
+                      </Label>
+                      <div className="space-y-2">
+                        <Input
+                          value={newVariableName}
+                          onChange={(e) => setNewVariableName(e.target.value)}
+                          placeholder="Variable name (e.g., FirstName)"
+                          className="text-xs border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 text-gray-900"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && newVariableName && selectedField) {
+                              handleAddVariable();
+                            }
+                          }}
+                        />
+                        <Select value={selectedField} onValueChange={setSelectedField}>
+                          <SelectTrigger className="text-xs border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer text-gray-900">
+                            <SelectValue placeholder="Select investor field" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="investor_name">Investor Name</SelectItem>
+                            <SelectItem value="email_address">Email Address</SelectItem>
+                            <SelectItem value="phone_number">Phone Number</SelectItem>
+                            <SelectItem value="status">Status</SelectItem>
+                            <SelectItem value="investor_type">Investor Type</SelectItem>
+                            <SelectItem value="amount_dollars">Amount ($)</SelectItem>
+                            <SelectItem value="deal">Deal</SelectItem>
+                            <SelectItem value="source">Source</SelectItem>
+                            <SelectItem value="investor_notes">Investor Notes</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          onClick={handleAddVariable}
+                          disabled={!newVariableName.trim() || !selectedField}
+                          size="sm"
+                          className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white cursor-pointer text-xs"
+                        >
+                          <Plus className="h-3 w-3 mr-1" />
+                          Add Variable
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <Button
