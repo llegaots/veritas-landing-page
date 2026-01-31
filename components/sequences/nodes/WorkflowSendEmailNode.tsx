@@ -15,7 +15,20 @@ export function WorkflowSendEmailNode(props: NodeProps) {
   const isSelected = selectedNodeId === props.id;
 
   // Calculate timeline label
-  const timelineInfo = spec ? calculateTimeline(spec, props.id) : null;
+  // Convert step ID (step_send_email_123) back to node ID (send_email_123) for timeline calculation
+  const nodeIdForTimeline = props.id.startsWith('step_') 
+    ? props.id.replace(/^step_/, '')
+    : props.id;
+  const timelineInfo = spec ? calculateTimeline(spec, nodeIdForTimeline) : null;
+  
+  // Debug logging
+  if (spec && !timelineInfo) {
+    console.log('[WorkflowSendEmailNode] Timeline calculation returned null for:', {
+      stepId: props.id,
+      nodeId: nodeIdForTimeline,
+      specNodes: spec.nodes.map(n => n.id),
+    });
+  }
 
   // Truncate subject for display
   const subject = ('subject' in node ? node.subject : '') || '';

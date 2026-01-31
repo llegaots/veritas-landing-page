@@ -21,11 +21,17 @@ export function calculateTimeline(
 ): TimelineInfo | null {
   // Find the node
   const node = spec.nodes.find(n => n.id === nodeId);
-  if (!node) return null;
+  if (!node) {
+    console.log('[Timeline] Node not found:', nodeId, 'Available nodes:', spec.nodes.map(n => n.id));
+    return null;
+  }
 
   // Start from trigger and walk the path to this node
   const triggerNode = spec.nodes.find(n => n.type === 'trigger');
-  if (!triggerNode) return null;
+  if (!triggerNode) {
+    console.log('[Timeline] No trigger node found');
+    return null;
+  }
 
   // If this is the trigger, it's at the start
   if (nodeId === triggerNode.id) {
@@ -38,9 +44,15 @@ export function calculateTimeline(
 
   // Find path from trigger to this node
   const path = findPath(spec, triggerNode.id, nodeId);
-  if (!path || path.length === 0) return null;
+  if (!path || path.length === 0) {
+    console.log('[Timeline] No path found from trigger to:', nodeId);
+    return null;
+  }
+  
+  console.log('[Timeline] Path found:', path, 'for node:', nodeId);
 
   // Calculate cumulative timing along the path
+  // Include timing from all nodes BEFORE the target node, plus the target node itself
   let totalMinutes = 0;
   
   for (let i = 1; i < path.length; i++) {
@@ -70,7 +82,7 @@ export function calculateTimeline(
       }
     }
 
-    // If we've reached the target node, stop
+    // If we've reached the target node, stop (after including its timing)
     if (currentNodeId === nodeId) {
       break;
     }
@@ -81,17 +93,21 @@ export function calculateTimeline(
   const totalDays = totalHours / 24;
 
   // Generate label
+  // Round up to the next hour/day for display
   let label: string;
   if (totalDays >= 1) {
-    const dayNumber = Math.floor(totalDays) + 1; // Day 1, Day 2, etc.
+    const dayNumber = Math.ceil(totalDays); // Round up: 1.1 days = DAY 2
     label = `DAY ${dayNumber}`;
   } else if (totalHours >= 1) {
-    const hourNumber = Math.floor(totalHours) + 1; // HOUR 1, HOUR 2, etc.
+    const hourNumber = Math.ceil(totalHours); // Round up: 1.1 hours = HOUR 2
     label = `HOUR ${hourNumber}`;
-  } else {
-    // Less than 1 hour - show minutes
-    const minuteNumber = Math.floor(totalMinutes) + 1;
+  } else if (totalMinutes > 0) {
+    // Less than 1 hour - show minutes (round up)
+    const minuteNumber = Math.ceil(totalMinutes);
     label = `MIN ${minuteNumber}`;
+  } else {
+    // No timing - show as immediate
+    label = 'NOW';
   }
 
   return {

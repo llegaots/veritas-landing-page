@@ -13,7 +13,20 @@ export function WorkflowSendSmsNode(props: NodeProps) {
   const isSelected = selectedNodeId === props.id;
 
   // Calculate timeline label
-  const timelineInfo = spec ? calculateTimeline(spec, props.id) : null;
+  // Convert step ID (step_send_sms_123) back to node ID (send_sms_123) for timeline calculation
+  const nodeIdForTimeline = props.id.startsWith('step_') 
+    ? props.id.replace(/^step_/, '')
+    : props.id;
+  const timelineInfo = spec ? calculateTimeline(spec, nodeIdForTimeline) : null;
+  
+  // Debug logging
+  if (spec && !timelineInfo) {
+    console.log('[WorkflowSendSmsNode] Timeline calculation returned null for:', {
+      stepId: props.id,
+      nodeId: nodeIdForTimeline,
+      specNodes: spec.nodes.map(n => n.id),
+    });
+  }
 
   // Truncate message for display (2-4 lines)
   const message = step.message || '';
