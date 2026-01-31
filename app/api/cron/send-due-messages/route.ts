@@ -178,6 +178,11 @@ export async function GET(request: NextRequest) {
             throw new Error('Email job missing required fields: email_address, email_subject, or email_html');
           }
 
+          // Log HTML content length for debugging
+          const htmlLength = job.email_html?.length || 0;
+          const htmlPreview = job.email_html?.substring(0, 100) || '';
+          console.log(`[Cron] Email job ${job.id} HTML content: ${htmlLength} chars, preview: ${htmlPreview}...`);
+
           sendResult = await sendEmail({
             to: job.email_address,
             subject: job.email_subject,

@@ -201,16 +201,21 @@ async function sendViaSmtp(options: EmailSendOptions): Promise<EmailSendResult> 
           return subject;
         };
         
+        // Ensure HTML content is complete and not truncated
+        const htmlContent = options.html || '';
+        console.log(`[Gmail API] HTML content length: ${htmlContent.length} chars`);
+        console.log(`[Gmail API] HTML preview (first 200 chars): ${htmlContent.substring(0, 200)}`);
+        console.log(`[Gmail API] HTML preview (last 200 chars): ${htmlContent.substring(Math.max(0, htmlContent.length - 200))}`);
+        
         const emailContent = [
           `From: ${fromEmail}`,
           `To: ${options.to}`,
           `Subject: ${encodeSubject(options.subject)}`,
           `MIME-Version: 1.0`,
           `Content-Type: text/html; charset=utf-8`,
-          `Content-Transfer-Encoding: quoted-printable`,
           options.replyTo ? `Reply-To: ${options.replyTo}` : '',
           '',
-          options.html,
+          htmlContent,
         ].filter(Boolean).join('\r\n');
         
         // Encode message in base64url format (Gmail API requirement)
