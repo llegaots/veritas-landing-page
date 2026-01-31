@@ -63,18 +63,14 @@ function parseDuration(duration: string, phoneNumber?: string): number {
   // Handle "Day 1", "Day 2", "After Day 2", etc.
   // These are RELATIVE delays, just like "1 minutes" or "6 hours"
   // "After Day 2" means "2 days delay from the previous node"
-  // In test mode, days are converted to minutes for faster testing
+  // Use ACTUAL timing even in test mode (no conversion to minutes)
   const dayMatch = normalized.match(/(?:after\s+)?day\s+(\d+)/i);
   if (dayMatch) {
     const dayNumber = parseInt(dayMatch[1], 10);
     // Treat as relative delay: "Day 2" = 2 days delay, "Day 1" = 1 day delay
     const days = dayNumber;
-    const TEST_PHONE = '4385017336';
-    const isTestPhone = phoneNumber && (
-      phoneNumber.includes(TEST_PHONE) || 
-      phoneNumber.replace(/\D/g, '').includes(TEST_PHONE)
-    );
-    return days * (isTestPhone ? 60 * 1000 : 24 * 60 * 60 * 1000);
+    // Always use actual days (24 hours per day) - no test mode conversion
+    return days * 24 * 60 * 60 * 1000;
   }
   
   // Handle standard duration formats
@@ -88,25 +84,20 @@ function parseDuration(duration: string, phoneNumber?: string): number {
   const amount = parseInt(match[1], 10);
   const unit = match[2];
 
-  // TEST MODE: Convert hours/days to minutes for test phone number
-  const TEST_PHONE = '4385017336';
-  const isTestPhone = phoneNumber && (
-    phoneNumber.includes(TEST_PHONE) || 
-    phoneNumber.replace(/\D/g, '').includes(TEST_PHONE)
-  );
-  
+  // Use ACTUAL timing - no test mode conversion
+  // Test mode only restricts which phone numbers receive messages, not timing
   const multipliers: Record<string, number> = {
     minute: 60 * 1000,
     minutes: 60 * 1000,
     min: 60 * 1000,
     mins: 60 * 1000,
     m: 60 * 1000,
-    hour: isTestPhone ? 60 * 1000 : 60 * 60 * 1000, // Convert hours to minutes for test
-    hours: isTestPhone ? 60 * 1000 : 60 * 60 * 1000,
-    h: isTestPhone ? 60 * 1000 : 60 * 60 * 1000,
-    day: isTestPhone ? 60 * 1000 : 24 * 60 * 60 * 1000, // Convert days to minutes for test
-    days: isTestPhone ? 60 * 1000 : 24 * 60 * 60 * 1000,
-    d: isTestPhone ? 60 * 1000 : 24 * 60 * 60 * 1000,
+    hour: 60 * 60 * 1000,
+    hours: 60 * 60 * 1000,
+    h: 60 * 60 * 1000,
+    day: 24 * 60 * 60 * 1000,
+    days: 24 * 60 * 60 * 1000,
+    d: 24 * 60 * 60 * 1000,
   };
 
   return amount * (multipliers[unit] || 60 * 60 * 1000);
