@@ -24,42 +24,17 @@ export interface EmailSendResult {
  */
 export async function sendEmail(options: EmailSendOptions): Promise<EmailSendResult> {
   const provider = process.env.EMAIL_PROVIDER || 'resend';
-  
-  console.log(`[Email] Using provider: ${provider}`);
-  console.log(`[Email] EMAIL_PROVIDER env var: ${process.env.EMAIL_PROVIDER || 'not set (defaulting to resend)'}`);
-  console.log(`[Email] GMAIL_REFRESH_TOKEN: ${process.env.GMAIL_REFRESH_TOKEN ? 'set' : 'not set'}`);
 
-  try {
-    let result: EmailSendResult;
-    switch (provider) {
-      case 'resend':
-        result = await sendViaResend(options);
-        break;
-      case 'gmail':
-      case 'smtp':
-        result = await sendViaSmtp(options);
-        break;
-      case 'mock':
-        result = await sendViaMock(options);
-        break;
-      default:
-        throw new Error(`Unsupported email provider: ${provider}`);
-    }
-    
-    console.log(`[Email] Send result:`, {
-      success: result.success,
-      status: result.status,
-      messageId: result.messageId,
-      error: result.error,
-    });
-    
-    return result;
-  } catch (error) {
-    console.error(`[Email] Unexpected error in sendEmail:`, error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-    };
+  switch (provider) {
+    case 'resend':
+      return sendViaResend(options);
+    case 'gmail':
+    case 'smtp':
+      return sendViaSmtp(options);
+    case 'mock':
+      return sendViaMock(options);
+    default:
+      throw new Error(`Unsupported email provider: ${provider}`);
   }
 }
 
@@ -101,12 +76,34 @@ async function sendViaResend(options: EmailSendOptions): Promise<EmailSendResult
     const { Resend } = await import('resend');
     const resend = new Resend(apiKey);
 
+    // Ensure HTML content is complete and not truncated
+    let htmlContent = options.html || '';
+    
+    // Wrap HTML in proper email structure if it's not already wrapped
+    // Some email clients require full HTML document structure
+    if (!htmlContent.trim().toLowerCase().startsWith('<!doctype') && !htmlContent.trim().toLowerCase().startsWith('<html')) {
+      htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+</head>
+<body style="margin: 0; padding: 0; background-color: #f4f4f4;">
+${htmlContent}
+</body>
+</html>`;
+    }
+
     console.log('[Resend] Sending email:', {
       to: options.to,
       from: fromEmail,
       subject: options.subject,
-      htmlLength: options.html.length,
+      originalHtmlLength: options.html.length,
+      wrappedHtmlLength: htmlContent.length,
     });
+    console.log(`[Resend] HTML preview (first 200 chars): ${htmlContent.substring(0, 200)}`);
+    console.log(`[Resend] HTML preview (last 200 chars): ${htmlContent.substring(Math.max(0, htmlContent.length - 200))}`);
 
     // Ensure proper UTF-8 encoding for subject line
     const encodeSubject = (subject: string): string => {
@@ -118,7 +115,7 @@ async function sendViaResend(options: EmailSendOptions): Promise<EmailSendResult
       from: fromEmail,
       to: options.to,
       subject: encodeSubject(options.subject),
-      html: options.html,
+      html: htmlContent,
     };
     
     if (options.text) {
@@ -229,73 +226,26 @@ async function sendViaSmtp(options: EmailSendOptions): Promise<EmailSendResult> 
         // Ensure HTML content is complete and not truncated
         let htmlContent = options.html || '';
         
-        // Validate HTML structure
-        const hasOpeningTable = htmlContent.includes('<table');
-        const hasClosingTable = htmlContent.includes('</table>');
-        const tableCount = (htmlContent.match(/<table/g) || []).length;
-        const closingTableCount = (htmlContent.match(/<\/table>/g) || []).length;
-        
-        console.log(`[Gmail API] HTML validation:`, {
-          length: htmlContent.length,
-          hasOpeningTable,
-          hasClosingTable,
-          tableCount,
-          closingTableCount,
-          firstChars: htmlContent.substring(0, 100),
-          lastChars: htmlContent.substring(Math.max(0, htmlContent.length - 100)),
-        });
-        
-        // Check if HTML appears truncated (missing closing tags)
-        if (tableCount > closingTableCount) {
-          console.warn(`[Gmail API] WARNING: HTML appears incomplete - ${tableCount} opening <table> tags but only ${closingTableCount} closing </table> tags`);
-        }
-        
-        // Ensure HTML table structure is complete for email clients
-        // Some email clients require explicit <tbody> tags
-        if (htmlContent.includes('<table') && !htmlContent.includes('<tbody')) {
-          // Add <tbody> wrapper if missing (email clients need it)
-          htmlContent = htmlContent.replace(
-            /(<table[^>]*>)(\s*)(<tr)/gi,
-            '$1<tbody>$2$3'
-          );
-          htmlContent = htmlContent.replace(
-            /(<\/tr>)(\s*)(<\/table>)/gi,
-            '$1</tbody>$2$3'
-          );
-        }
-        
         // Wrap HTML in proper email structure if it's not already wrapped
         // Some email clients require full HTML document structure
         if (!htmlContent.trim().toLowerCase().startsWith('<!doctype') && !htmlContent.trim().toLowerCase().startsWith('<html')) {
-          // Ensure the HTML is wrapped in a proper document structure
           htmlContent = `<!DOCTYPE html>
-<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-  <!--[if mso]>
-  <noscript>
-    <xml>
-      <o:OfficeDocumentSettings>
-        <o:PixelsPerInch>96</o:PixelsPerInch>
-      </o:OfficeDocumentSettings>
-    </xml>
-  </noscript>
-  <![endif]-->
 </head>
-<body style="margin: 0; padding: 0; background-color: #f4f4f4; font-family: Arial, sans-serif;">
+<body style="margin: 0; padding: 0; background-color: #f4f4f4;">
 ${htmlContent}
 </body>
 </html>`;
         }
         
-        console.log(`[Gmail API] Final HTML content length: ${htmlContent.length} chars`);
-        console.log(`[Gmail API] HTML preview (first 300 chars): ${htmlContent.substring(0, 300)}`);
-        console.log(`[Gmail API] HTML preview (last 300 chars): ${htmlContent.substring(Math.max(0, htmlContent.length - 300))}`);
+        console.log(`[Gmail API] HTML content length: ${htmlContent.length} chars`);
+        console.log(`[Gmail API] HTML preview (first 200 chars): ${htmlContent.substring(0, 200)}`);
+        console.log(`[Gmail API] HTML preview (last 200 chars): ${htmlContent.substring(Math.max(0, htmlContent.length - 200))}`);
         
-        // Construct email message - use simple HTML format for better compatibility
-        // Gmail API works best with simple, direct HTML emails
         const emailContent = [
           `From: ${fromEmail}`,
           `To: ${options.to}`,
@@ -307,63 +257,19 @@ ${htmlContent}
           htmlContent,
         ].filter(Boolean).join('\r\n');
         
-        // Verify email content length before encoding
-        console.log(`[Gmail API] Full email content length: ${emailContent.length} chars`);
-        console.log(`[Gmail API] Email content starts with: ${emailContent.substring(0, 200)}`);
-        console.log(`[Gmail API] Email content ends with: ${emailContent.substring(Math.max(0, emailContent.length - 200))}`);
-        
-        // Check for any null bytes or invalid characters that might cause issues
-        const hasNullBytes = emailContent.includes('\0');
-        const hasInvalidChars = /[\x00-\x08\x0B-\x0C\x0E-\x1F]/.test(emailContent);
-        if (hasNullBytes || hasInvalidChars) {
-          console.warn(`[Gmail API] WARNING: Email content contains invalid characters!`);
-        }
-        
         // Encode message in base64url format (Gmail API requirement)
-        // Use UTF-8 encoding to preserve all characters
-        const emailBuffer = Buffer.from(emailContent, 'utf-8');
-        console.log(`[Gmail API] Email buffer length: ${emailBuffer.length} bytes`);
-        
-        // Check if buffer is too large (Gmail API has a 35MB limit for the entire message)
-        const maxSize = 35 * 1024 * 1024; // 35MB
-        if (emailBuffer.length > maxSize) {
-          console.error(`[Gmail API] ERROR: Email content exceeds Gmail API size limit (${emailBuffer.length} bytes > ${maxSize} bytes)`);
-        }
-        
-        const encodedMessage = emailBuffer
+        const encodedMessage = Buffer.from(emailContent)
           .toString('base64')
           .replace(/\+/g, '-')
           .replace(/\//g, '_')
           .replace(/=+$/, '');
         
-        console.log(`[Gmail API] Encoded message length: ${encodedMessage.length} chars`);
-        
-        // Verify the encoded message can be decoded back correctly
-        try {
-          const decodedTest = Buffer.from(encodedMessage.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf-8');
-          console.log(`[Gmail API] Decode test: original=${emailContent.length} chars, decoded=${decodedTest.length} chars, match=${emailContent === decodedTest}`);
-          if (emailContent !== decodedTest) {
-            console.error(`[Gmail API] WARNING: Encoded message does not decode correctly!`);
-            // Find where they differ
-            for (let i = 0; i < Math.min(emailContent.length, decodedTest.length); i++) {
-              if (emailContent[i] !== decodedTest[i]) {
-                console.error(`[Gmail API] First difference at position ${i}: original="${emailContent.substring(i, i + 50)}" vs decoded="${decodedTest.substring(i, i + 50)}"`);
-                break;
-              }
-            }
-          }
-        } catch (e) {
-          console.error(`[Gmail API] Error testing decode:`, e);
-        }
-        
-    console.log('[Gmail API] Sending email:', {
-      to: options.to,
-      from: fromEmail,
-      subject: options.subject,
-      originalHtmlLength: options.html?.length || 0,
-      finalHtmlLength: htmlContent.length,
-      htmlContentDifference: htmlContent.length - (options.html?.length || 0),
-    });
+        console.log('[Gmail API] Sending email:', {
+          to: options.to,
+          from: fromEmail,
+          subject: options.subject,
+          htmlLength: options.html.length,
+        });
         
         const response = await gmail.users.messages.send({
           userId: 'me',
