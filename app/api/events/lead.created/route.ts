@@ -145,6 +145,22 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // Check if a run already exists for this lead + sequence combination
+      // This prevents duplicate runs if the webhook is called multiple times
+      const { data: existingRun } = await supabase
+        .from('sequence_runs')
+        .select('id')
+        .eq('sequence_version_id', version.id)
+        .eq('lead_id', lead_id.toString())
+        .eq('status', 'active')
+        .limit(1)
+        .single();
+      
+      if (existingRun) {
+        console.log(`[lead.created] ⏭️  Skipping sequence ${sequence.id} - run already exists for this lead (run_id: ${existingRun.id})`);
+        continue;
+      }
+
       // Create sequence run
       console.log(`[lead.created] 🚀 Creating run for sequence ${sequence.id} (${spec.metadata?.name || 'unnamed'})`);
       const { data: run, error: runError } = await supabase
