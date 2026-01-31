@@ -61,19 +61,14 @@ function parseDuration(duration: string, phoneNumber?: string): number {
   const normalized = duration.toLowerCase().trim();
   
   // Handle "Day 1", "Day 2", "After Day 2", etc.
-  // These are ABSOLUTE days from the start, not relative to previous node
-  // "After Day X" means "X days from sequence start"
-  const dayMatch = normalized.match(/(?:after\s+)?day\s+(\d+)/);
+  // These are RELATIVE delays, just like "1 minutes" or "6 hours"
+  // "After Day 2" means "2 days delay from the previous node"
+  // In test mode, days are converted to minutes for faster testing
+  const dayMatch = normalized.match(/(?:after\s+)?day\s+(\d+)/i);
   if (dayMatch) {
     const dayNumber = parseInt(dayMatch[1], 10);
-    if (dayNumber === 1) {
-      return 0; // Day 1 = immediate (0 delay from start)
-    }
-    // For Day 2+, calculate as (dayNumber - 1) days from start
-    // NOTE: This is an ABSOLUTE time, but we're using it as a relative delay
-    // The compiler should handle this differently - this is a bug!
-    // For now, we'll treat it as relative delay, but this needs to be fixed
-    const days = dayNumber - 1;
+    // Treat as relative delay: "Day 2" = 2 days delay, "Day 1" = 1 day delay
+    const days = dayNumber;
     const TEST_PHONE = '4385017336';
     const isTestPhone = phoneNumber && (
       phoneNumber.includes(TEST_PHONE) || 

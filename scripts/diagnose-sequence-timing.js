@@ -20,14 +20,14 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 function parseDuration(duration, phoneNumber) {
   const normalized = duration.toLowerCase().trim();
   
-  // Handle "Day 1", "Day 2", etc.
-  const dayMatch = normalized.match(/^day\s+(\d+)$/);
+  // Handle "Day 1", "Day 2", "After Day 2", etc.
+  // These are RELATIVE delays, just like "1 minutes" or "6 hours"
+  // "After Day 2" means "2 days delay from the previous node"
+  const dayMatch = normalized.match(/(?:after\s+)?day\s+(\d+)/i);
   if (dayMatch) {
     const dayNumber = parseInt(dayMatch[1], 10);
-    if (dayNumber === 1) {
-      return 0; // Day 1 = immediate
-    }
-    const days = dayNumber - 1;
+    // Treat as relative delay: "Day 2" = 2 days delay, "Day 1" = 1 day delay
+    const days = dayNumber;
     const TEST_PHONE = '4385017336';
     const isTestPhone = phoneNumber && (
       phoneNumber.includes(TEST_PHONE) || 
