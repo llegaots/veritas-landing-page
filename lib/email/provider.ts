@@ -204,25 +204,56 @@ async function sendViaSmtp(options: EmailSendOptions): Promise<EmailSendResult> 
         // Ensure HTML content is complete and not truncated
         let htmlContent = options.html || '';
         
+        // Validate HTML structure
+        const hasOpeningTable = htmlContent.includes('<table');
+        const hasClosingTable = htmlContent.includes('</table>');
+        const tableCount = (htmlContent.match(/<table/g) || []).length;
+        const closingTableCount = (htmlContent.match(/<\/table>/g) || []).length;
+        
+        console.log(`[Gmail API] HTML validation:`, {
+          length: htmlContent.length,
+          hasOpeningTable,
+          hasClosingTable,
+          tableCount,
+          closingTableCount,
+          firstChars: htmlContent.substring(0, 100),
+          lastChars: htmlContent.substring(Math.max(0, htmlContent.length - 100)),
+        });
+        
+        // Check if HTML appears truncated (missing closing tags)
+        if (tableCount > closingTableCount) {
+          console.warn(`[Gmail API] WARNING: HTML appears incomplete - ${tableCount} opening <table> tags but only ${closingTableCount} closing </table> tags`);
+        }
+        
         // Wrap HTML in proper email structure if it's not already wrapped
         // Some email clients require full HTML document structure
         if (!htmlContent.trim().toLowerCase().startsWith('<!doctype') && !htmlContent.trim().toLowerCase().startsWith('<html')) {
+          // Ensure the HTML is wrapped in a proper document structure
           htmlContent = `<!DOCTYPE html>
-<html lang="en">
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <!--[if mso]>
+  <noscript>
+    <xml>
+      <o:OfficeDocumentSettings>
+        <o:PixelsPerInch>96</o:PixelsPerInch>
+      </o:OfficeDocumentSettings>
+    </xml>
+  </noscript>
+  <![endif]-->
 </head>
-<body style="margin: 0; padding: 0; background-color: #f4f4f4;">
+<body style="margin: 0; padding: 0; background-color: #f4f4f4; font-family: Arial, sans-serif;">
 ${htmlContent}
 </body>
 </html>`;
         }
         
-        console.log(`[Gmail API] HTML content length: ${htmlContent.length} chars`);
-        console.log(`[Gmail API] HTML preview (first 200 chars): ${htmlContent.substring(0, 200)}`);
-        console.log(`[Gmail API] HTML preview (last 200 chars): ${htmlContent.substring(Math.max(0, htmlContent.length - 200))}`);
+        console.log(`[Gmail API] Final HTML content length: ${htmlContent.length} chars`);
+        console.log(`[Gmail API] HTML preview (first 300 chars): ${htmlContent.substring(0, 300)}`);
+        console.log(`[Gmail API] HTML preview (last 300 chars): ${htmlContent.substring(Math.max(0, htmlContent.length - 300))}`);
         
         // Construct email message with proper MIME structure
         // Use multipart/alternative for better email client compatibility
