@@ -102,7 +102,7 @@ export function FilterBar({
                 <div className="flex items-center gap-1.5 mt-1">
                   <Clock className="h-3 w-3 text-gray-400" />
                   <p className="text-xs text-gray-500">
-                    Last updated: {lastUpdated.toLocaleTimeString()}
+                    Last updated: {lastUpdated.toLocaleTimeString('en-US', { timeZone: 'America/New_York' })}
                   </p>
                 </div>
               )}

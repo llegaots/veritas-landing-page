@@ -126,3 +126,4 @@ Make sure `EMAIL_FROM` in your `.env.local` is set to `lucas@neptaai.com`.
 
 The OAuth2 method (Option 1 or 2) is the easiest - just like N8N! 🎉
 
+

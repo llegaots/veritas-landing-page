@@ -34,11 +34,15 @@ export function formatTime(seconds: number): string {
   return `${hours}h ${remainingMinutes}m`
 }
 
+// EST timezone constant
+const EST_TIMEZONE = 'America/New_York';
+
 export function formatDate(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
+    timeZone: EST_TIMEZONE,
   })
 }
 
@@ -48,6 +52,7 @@ export function formatDateTime(timestamp: number): string {
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone: EST_TIMEZONE,
   })
 }
 
@@ -69,6 +74,43 @@ export function formatRelativeTime(timestamp: number): string {
     return `${minutes}m ago`
   }
   return 'Just now'
+}
+
+/**
+ * Format a date in EST timezone using Intl.DateTimeFormat
+ * Useful for consistent EST display across the app
+ */
+export function formatDateEST(date: Date | string | number, options?: Intl.DateTimeFormatOptions): string {
+  const d = typeof date === 'string' || typeof date === 'number' ? new Date(date) : date;
+  return d.toLocaleString('en-US', {
+    timeZone: EST_TIMEZONE,
+    ...options,
+  });
+}
+
+/**
+ * Format date and time in EST (similar to date-fns format with 'PPpp')
+ */
+export function formatDateTimeEST(date: Date | string | number): string {
+  return formatDateEST(date, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
+}
+
+/**
+ * Format date only in EST (similar to date-fns format with 'PP')
+ */
+export function formatDateOnlyEST(date: Date | string | number): string {
+  return formatDateEST(date, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
 }
 
 

@@ -187,9 +187,9 @@ function SequencesListContent() {
                   <div>
                     <CardTitle className="text-lg font-semibold text-gray-900">{sequence.name}</CardTitle>
                     <p className="text-sm text-gray-500 mt-1">
-                      Created: {new Date(sequence.created_at).toLocaleDateString()}
+                      Created: {new Date(sequence.created_at).toLocaleDateString('en-US', { timeZone: 'America/New_York' })}
                       {sequence.updated_at && (
-                        <> • Updated: {new Date(sequence.updated_at).toLocaleDateString()}</>
+                        <> • Updated: {new Date(sequence.updated_at).toLocaleDateString('en-US', { timeZone: 'America/New_York' })}</>
                       )}
                     </p>
                     <div className="flex items-center gap-2 mt-1">

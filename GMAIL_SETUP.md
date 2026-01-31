@@ -96,3 +96,4 @@ If you need to send more emails, consider:
 3. Create a test sequence with an email node
 4. Trigger the sequence and check your inbox!
 
+

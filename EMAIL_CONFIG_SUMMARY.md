@@ -48,3 +48,4 @@ After deployment, check Vercel logs:
 - ✅ Should see: `[Gmail API] Email sent` for emails to `lucaslegatos123@gmail.com`
 - ❌ Should see: `[EMAIL] Skipping email` for any other addresses
 
+

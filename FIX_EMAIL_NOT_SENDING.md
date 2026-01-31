@@ -77,3 +77,4 @@ After setting `EMAIL_TEST_MODE=false`, you can test by:
 2. Checking Vercel logs for `[Gmail API] Email sent` or `[Resend] Email sent`
 3. Checking your inbox for the email
 
+

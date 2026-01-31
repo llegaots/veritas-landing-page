@@ -59,3 +59,4 @@ console.log('4. Copy the NEW Client ID and Secret');
 console.log('5. Update .env.local with the NEW credentials');
 console.log('6. Restart your dev server\n');
 
+

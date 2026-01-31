@@ -69,3 +69,4 @@ GOOGLE_REDIRECT_URI=https://veritas-landing-page.vercel.app/api/auth/google/call
 
 The redirect URI must match EXACTLY what Google expects!
 
+

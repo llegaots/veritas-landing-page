@@ -386,13 +386,13 @@ function InvestorsPageContent() {
       accessor: (row) =>
         row.created_time ? (
           <span className="text-sm text-gray-600">
-            {new Date(row.created_time).toLocaleString(undefined, {
+            {new Date(row.created_time).toLocaleString('en-US', {
               month: 'short',
               day: 'numeric',
               year: 'numeric',
               hour: '2-digit',
               minute: '2-digit',
-              timeZoneName: 'short',
+              timeZone: 'America/New_York',
             })}
           </span>
         ) : (

@@ -115,3 +115,4 @@ Make sure to update `EMAIL_FROM` in your `.env.local` to `lucas@neptaai.com` bef
 - Microsoft 365: 10,000/day
 - Resend: 10,000/month (free tier)
 
+

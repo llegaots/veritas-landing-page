@@ -86,3 +86,4 @@ node scripts/test-cron-sending.js
 node -e "const { createClient } = require('@supabase/supabase-js'); require('dotenv').config({ path: '.env.local' }); const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY); const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString(); supabase.from('message_jobs').select('*').gte('created_at', fiveMinutesAgo).order('created_at', { ascending: false }).then(({data, error}) => { if (error) { console.error('Error:', error); return; } console.log('Recent jobs:', data.length); data.forEach(job => { console.log(\`- \${job.message_text?.substring(0, 40)}... | Scheduled: \${job.scheduled_for} | Sent: \${job.sent_at || 'Not yet'}\`); }); });"
 ```
 
+

@@ -34,3 +34,4 @@ CREATE INDEX IF NOT EXISTS idx_message_jobs_type ON message_jobs(job_type);
 -- Update existing jobs to have job_type = 'sms' (default)
 UPDATE message_jobs SET job_type = 'sms' WHERE job_type IS NULL;
 
+

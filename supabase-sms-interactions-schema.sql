@@ -24,3 +24,4 @@ ALTER TABLE investors
 -- Create index for intent score
 CREATE INDEX IF NOT EXISTS idx_investors_intent_score ON investors(intent_score);
 
+

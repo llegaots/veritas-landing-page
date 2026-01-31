@@ -26,3 +26,4 @@ console.log('   - Must be https:// (not http://)');
 console.log('   - Must match EXACTLY (case-sensitive)');
 console.log('   - Wait 1-2 minutes after saving in Google Console');
 
+

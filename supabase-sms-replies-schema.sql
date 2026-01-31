@@ -26,3 +26,4 @@ ALTER TABLE message_jobs
 
 CREATE INDEX IF NOT EXISTS idx_message_jobs_replied ON message_jobs(replied_at) WHERE replied_at IS NOT NULL;
 
+

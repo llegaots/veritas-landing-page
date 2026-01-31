@@ -7,3 +7,4 @@ ALTER TABLE investors
 -- Create index for quick lookups
 CREATE INDEX IF NOT EXISTS idx_investors_calendly_booking ON investors(calendly_booking_date) WHERE calendly_booking_date IS NOT NULL;
 
+

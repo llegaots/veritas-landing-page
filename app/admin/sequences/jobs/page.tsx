@@ -27,6 +27,7 @@ import {
   Play
 } from 'lucide-react';
 import { formatDistanceToNow, format, differenceInSeconds, differenceInMinutes } from 'date-fns';
+import { formatDateTimeEST, formatDateOnlyEST } from '@/lib/admin/format';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Calendar as CalendarIcon, Filter, X } from 'lucide-react';
@@ -740,12 +741,12 @@ function MessageJobsContent() {
                                         <p className="text-sm text-gray-700 mt-1">
                                           <strong>Booked by:</strong> {interaction.metadata.name}
                                           {interaction.metadata.start_time && (
-                                            <> • <strong>Date:</strong> {format(new Date(interaction.metadata.start_time), 'PPpp')}</>
+                                            <> • <strong>Date:</strong> {formatDateTimeEST(interaction.metadata.start_time)}</>
                                           )}
                                         </p>
                                       )}
                                       <p className="text-xs text-gray-500 mt-1">
-                                        {format(new Date(interaction.created_at), 'PPpp')}
+                                        {formatDateTimeEST(interaction.created_at)}
                                       </p>
                                     </div>
                                   </div>
@@ -799,12 +800,12 @@ function MessageJobsContent() {
                                   <div className="text-xs text-gray-500 space-y-1">
                                     <p>
                                       <strong>Scheduled:</strong>{' '}
-                                      {format(scheduled, 'PPpp')}
+                                      {formatDateTimeEST(scheduled)}
                                     </p>
                                     {sent && (
                                       <p>
                                         <strong>Sent:</strong>{' '}
-                                        {format(sent, 'PPpp')}
+                                        {formatDateTimeEST(sent)}
                                         {job.timing_accuracy_ms !== null && (
                                           <span className={`ml-2 ${
                                             job.timing_status === 'on-time' ? 'text-green-600' :
@@ -893,7 +894,7 @@ function MessageJobsContent() {
                                       <div key={reply.id} className="bg-white p-2 rounded border border-blue-100">
                                         <p className="text-sm text-gray-900">{reply.message_body}</p>
                                         <p className="text-xs text-gray-500 mt-1">
-                                          {format(new Date(reply.received_at), 'PPpp')}
+                                          {formatDateTimeEST(reply.received_at)}
                                         </p>
                                       </div>
                                     ))}

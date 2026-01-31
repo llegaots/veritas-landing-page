@@ -47,3 +47,4 @@ Make sure these are also set in Vercel:
 
 **That's it!** After setting `EMAIL_TEST_MODE=false` and redeploying, emails should start sending.
 
+

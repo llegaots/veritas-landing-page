@@ -147,3 +147,4 @@ EMAIL_TEST_ADDRESSES=lucaslegatos123@gmail.com
 
 That's it! Your sequences can now send both SMS and Email at the correct times! 🎉
 
+

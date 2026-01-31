@@ -205,3 +205,4 @@ Once localhost testing works:
 
 **Ready to test?** Start with the mock provider to verify everything works, then switch to real email sending!
 
+
