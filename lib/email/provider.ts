@@ -255,38 +255,26 @@ ${htmlContent}
         console.log(`[Gmail API] HTML preview (first 300 chars): ${htmlContent.substring(0, 300)}`);
         console.log(`[Gmail API] HTML preview (last 300 chars): ${htmlContent.substring(Math.max(0, htmlContent.length - 300))}`);
         
-        // Construct email message with proper MIME structure
-        // Use multipart/alternative for better email client compatibility
-        const boundary = `----=_Part_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-        
+        // Construct email message - use simple HTML format for better compatibility
+        // Gmail API works best with simple, direct HTML emails
         const emailContent = [
           `From: ${fromEmail}`,
           `To: ${options.to}`,
           `Subject: ${encodeSubject(options.subject)}`,
           `MIME-Version: 1.0`,
-          `Content-Type: multipart/alternative; boundary="${boundary}"`,
+          `Content-Type: text/html; charset=utf-8`,
           options.replyTo ? `Reply-To: ${options.replyTo}` : '',
           '',
-          `--${boundary}`,
-          `Content-Type: text/plain; charset=utf-8`,
-          `Content-Transfer-Encoding: quoted-printable`,
-          '',
-          options.text || 'This email requires HTML support.',
-          '',
-          `--${boundary}`,
-          `Content-Type: text/html; charset=utf-8`,
-          `Content-Transfer-Encoding: quoted-printable`,
-          '',
           htmlContent,
-          '',
-          `--${boundary}--`,
         ].filter(Boolean).join('\r\n');
         
         // Verify email content length before encoding
         console.log(`[Gmail API] Full email content length: ${emailContent.length} chars`);
-        console.log(`[Gmail API] Email content ends with: ${emailContent.substring(Math.max(0, emailContent.length - 100))}`);
+        console.log(`[Gmail API] Email content starts with: ${emailContent.substring(0, 150)}`);
+        console.log(`[Gmail API] Email content ends with: ${emailContent.substring(Math.max(0, emailContent.length - 150))}`);
         
         // Encode message in base64url format (Gmail API requirement)
+        // Use UTF-8 encoding to preserve all characters
         const emailBuffer = Buffer.from(emailContent, 'utf-8');
         console.log(`[Gmail API] Email buffer length: ${emailBuffer.length} bytes`);
         
@@ -297,6 +285,17 @@ ${htmlContent}
           .replace(/=+$/, '');
         
         console.log(`[Gmail API] Encoded message length: ${encodedMessage.length} chars`);
+        
+        // Verify the encoded message can be decoded back correctly
+        try {
+          const decodedTest = Buffer.from(encodedMessage.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf-8');
+          console.log(`[Gmail API] Decode test: original=${emailContent.length} chars, decoded=${decodedTest.length} chars, match=${emailContent === decodedTest}`);
+          if (emailContent !== decodedTest) {
+            console.error(`[Gmail API] WARNING: Encoded message does not decode correctly!`);
+          }
+        } catch (e) {
+          console.error(`[Gmail API] Error testing decode:`, e);
+        }
         
         console.log('[Gmail API] Sending email:', {
           to: options.to,
