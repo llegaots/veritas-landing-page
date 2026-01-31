@@ -203,17 +203,23 @@ export const useSequenceStore = create<SequenceStore>((set, get) => ({
       const { validateSequenceSpec } = require('../sequences/validation');
       const validation = validateSequenceSpec(updatedSpec);
       
+      const isDraft = updatedSpec.metadata?.status === 'draft' || updatedSpec.metadata?.status === undefined;
+      
       console.log('[Store] applyOps: Validation result:', {
         valid: validation.valid,
         errors: validation.errors,
+        warnings: validation.warnings,
+        status: updatedSpec.metadata?.status,
+        isDraft,
         finalNodes: updatedSpec.nodes.length,
         finalEdges: updatedSpec.edges.length,
       });
       
-      if (!validation.valid) {
-        console.error('[Store] applyOps: Validation failed, errors:', validation.errors);
-        // Don't reload from server - that would overwrite changes
-        // Just show the error but keep the spec
+      // For draft sequences, always allow changes (user is still building)
+      // Only block for active sequences with validation errors
+      if (!validation.valid && !isDraft) {
+        // Only block if sequence is active and has errors
+        console.error('[Store] applyOps: Validation failed for active sequence, errors:', validation.errors);
         set({
           error: `Validation failed: ${validation.errors.join(', ')}`,
           spec: updatedSpec, // Still set the spec even if validation fails
@@ -222,8 +228,19 @@ export const useSequenceStore = create<SequenceStore>((set, get) => ({
         return;
       }
       
+      // For draft sequences, always allow changes (even with validation errors)
+      // User can fix issues before activating
+      if (isDraft && validation.errors.length > 0) {
+        console.warn('[Store] applyOps: Validation errors for draft sequence (allowing):', validation.errors);
+      }
+      
+      // Always apply changes for draft sequences, or if validation passed
       console.log('[Store] applyOps: Setting updated spec with', updatedSpec.nodes.length, 'nodes');
-      set({ spec: updatedSpec, pendingOps: [] });
+      set({ 
+        spec: updatedSpec, 
+        pendingOps: [],
+        error: isDraft ? null : (validation.valid ? null : `Validation failed: ${validation.errors.join(', ')}`), // Only show errors for active sequences
+      });
     } catch (error) {
       console.error('[Store] applyOps: Error applying patches:', error);
       set({
