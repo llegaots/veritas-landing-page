@@ -246,23 +246,36 @@ ${htmlContent}
         console.log(`[Gmail API] HTML preview (first 200 chars): ${htmlContent.substring(0, 200)}`);
         console.log(`[Gmail API] HTML preview (last 200 chars): ${htmlContent.substring(Math.max(0, htmlContent.length - 200))}`);
         
-        const emailContent = [
+        // Build email message in RFC 2822 format
+        // Ensure proper line breaks and encoding
+        const headers = [
           `From: ${fromEmail}`,
           `To: ${options.to}`,
           `Subject: ${encodeSubject(options.subject)}`,
           `MIME-Version: 1.0`,
-          `Content-Type: text/html; charset=utf-8`,
+          `Content-Type: text/html; charset=UTF-8`,
           options.replyTo ? `Reply-To: ${options.replyTo}` : '',
-          '',
-          htmlContent,
-        ].filter(Boolean).join('\r\n');
+        ].filter(Boolean);
+        
+        // Join headers and body with proper line breaks
+        // Use \r\n for email format (RFC 2822)
+        const emailContent = headers.join('\r\n') + '\r\n\r\n' + htmlContent;
+        
+        // Verify the full content before encoding
+        console.log(`[Gmail API] Full email content length: ${emailContent.length} chars`);
+        console.log(`[Gmail API] Email content ends with: ${emailContent.substring(Math.max(0, emailContent.length - 100))}`);
         
         // Encode message in base64url format (Gmail API requirement)
-        const encodedMessage = Buffer.from(emailContent, 'utf-8')
+        // Use utf-8 encoding explicitly to ensure no character loss
+        const emailBuffer = Buffer.from(emailContent, 'utf-8');
+        const encodedMessage = emailBuffer
           .toString('base64')
           .replace(/\+/g, '-')
           .replace(/\//g, '_')
           .replace(/=+$/, '');
+        
+        console.log(`[Gmail API] Buffer length: ${emailBuffer.length} bytes`);
+        console.log(`[Gmail API] Encoded message length: ${encodedMessage.length} chars`);
         
         console.log('[Gmail API] Sending email:', {
           to: options.to,
