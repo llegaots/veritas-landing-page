@@ -46,7 +46,8 @@ export async function GET(request: NextRequest) {
           )
         )
       `)
-      .order('scheduled_for', { ascending: false });
+      .order('scheduled_for', { ascending: false }) // Newest first for display
+      .order('run_id', { ascending: true }); // Then by run_id for consistency
 
     if (filter === 'pending') {
       query = query.is('sent_at', null);
