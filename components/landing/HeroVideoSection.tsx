@@ -7,12 +7,13 @@ import { track } from '@/lib/tracking'
 export function HeroVideoSection() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const lastTimeRef = useRef(0)
-  const [isPlaying, setIsPlaying] = useState(true)
+  const [isPlaying, setIsPlaying] = useState(false)
 
   const togglePlayPause = () => {
     const video = videoRef.current
     if (!video) return
     if (video.paused) {
+      video.muted = false
       video.play().catch(() => {})
     } else {
       video.pause()
@@ -22,7 +23,6 @@ export function HeroVideoSection() {
   useEffect(() => {
     const video = videoRef.current
     if (!video) return
-    video.play().catch(() => {})
     const blockSeek = () => {
       video.currentTime = lastTimeRef.current
     }
@@ -77,11 +77,14 @@ export function HeroVideoSection() {
                   src="/veritas-video.mp4"
                   className="absolute inset-0 w-full h-full object-cover"
                   playsInline
-                  autoPlay
+                  muted
                   controls
                   controlsList="nodownload"
                   preload="auto"
-                  onPlay={() => setIsPlaying(true)}
+                  onPlay={() => {
+                    videoRef.current && (videoRef.current.muted = false)
+                    setIsPlaying(true)
+                  }}
                   onPause={() => setIsPlaying(false)}
                   onEnded={() => setIsPlaying(false)}
                 />
