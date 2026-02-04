@@ -88,9 +88,9 @@ export function HeroVideoSection() {
                   onPause={() => setIsPlaying(false)}
                   onEnded={() => setIsPlaying(false)}
                 />
-                {/* Center play/pause icon like YouTube - click to toggle */}
+                {/* Center play/pause icon like YouTube - desktop only (native controls on mobile avoid duplicate) */}
                 <div
-                  className="absolute inset-0 bottom-12 flex items-center justify-center cursor-pointer"
+                  className="absolute inset-0 bottom-12 hidden md:flex items-center justify-center cursor-pointer"
                   onClick={togglePlayPause}
                   onKeyDown={(e) => e.key === 'Enter' && togglePlayPause()}
                   role="button"
