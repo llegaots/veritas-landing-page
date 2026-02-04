@@ -1,9 +1,42 @@
 'use client'
 
 import { motion } from 'framer-motion'
+import { useRef, useEffect, useState } from 'react'
 import { track } from '@/lib/tracking'
 
 export function HeroVideoSection() {
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const lastTimeRef = useRef(0)
+  const [isPlaying, setIsPlaying] = useState(true)
+
+  const togglePlayPause = () => {
+    const video = videoRef.current
+    if (!video) return
+    if (video.paused) {
+      video.play().catch(() => {})
+    } else {
+      video.pause()
+    }
+  }
+
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+    video.play().catch(() => {})
+    const blockSeek = () => {
+      video.currentTime = lastTimeRef.current
+    }
+    const saveTime = () => {
+      lastTimeRef.current = video.currentTime
+    }
+    video.addEventListener('seeking', blockSeek)
+    video.addEventListener('timeupdate', saveTime)
+    return () => {
+      video.removeEventListener('seeking', blockSeek)
+      video.removeEventListener('timeupdate', saveTime)
+    }
+  }, [])
+
   const handleCTAClick = () => {
     track('cta_click', { cta: 'schedule_demo', location: 'hero_section' })
     window.dispatchEvent(new CustomEvent('cta_click'))
@@ -31,21 +64,48 @@ export function HeroVideoSection() {
               Edmonds, Washington • Passive Investment Opportunity
             </motion.p>
             
-            {/* Video Embed - Not Full Width */}
+            {/* Video - Autoplay, pause/mute controls, no seeking */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
               className="mx-auto max-w-4xl"
             >
-              <div className="relative aspect-video w-full rounded-lg overflow-hidden shadow-2xl">
-                <iframe
-                  src="https://www.youtube.com/embed/Xw4lx8UMobg"
-                  title="Horizon Park Apartments Investment Opportunity"
-                  className="absolute inset-0 w-full h-full"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                  allowFullScreen
-                ></iframe>
+              <div className="hero-video relative aspect-video w-full rounded-lg overflow-hidden shadow-2xl cursor-pointer group">
+                <video
+                  ref={videoRef}
+                  src="/veritas-video.mp4"
+                  className="absolute inset-0 w-full h-full object-cover"
+                  playsInline
+                  autoPlay
+                  controls
+                  controlsList="nodownload"
+                  preload="auto"
+                  onPlay={() => setIsPlaying(true)}
+                  onPause={() => setIsPlaying(false)}
+                  onEnded={() => setIsPlaying(false)}
+                />
+                {/* Center play/pause icon like YouTube - click to toggle */}
+                <div
+                  className="absolute inset-0 bottom-12 flex items-center justify-center cursor-pointer"
+                  onClick={togglePlayPause}
+                  onKeyDown={(e) => e.key === 'Enter' && togglePlayPause()}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={isPlaying ? 'Pause' : 'Play'}
+                >
+                  <div className={`w-20 h-20 rounded-full bg-black/50 flex items-center justify-center transition-opacity duration-200 ${isPlaying ? 'opacity-0 group-hover:opacity-100' : 'opacity-100'}`}>
+                    {isPlaying ? (
+                      <svg className="w-10 h-10 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-10 h-10 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M8 5v14l11-7z" />
+                      </svg>
+                    )}
+                  </div>
+                </div>
               </div>
             </motion.div>
           </div>

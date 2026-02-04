@@ -88,4 +88,22 @@
   .animate-accordion-up {
     animation: accordion-up 0.2s ease-out;
   }
+
+  /* Hide video timeline/seek bar and gradient overlay in hero */
+  .hero-video video::-webkit-media-controls-timeline {
+    display: none !important;
+  }
+  .hero-video video::-webkit-media-controls-enclosure {
+    overflow: hidden !important;
+    background: transparent !important;
+  }
+  .hero-video video::-webkit-media-controls-panel {
+    width: calc(100% + 32px) !important;
+    background: transparent !important;
+    background-image: none !important;
+  }
+  .hero-video video::-webkit-media-controls {
+    background: transparent !important;
+    background-image: none !important;
+  }
 }
