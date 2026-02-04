@@ -3,6 +3,7 @@
 
 import { SequenceSpec, SequenceNode, SendSmsNode, SendEmailNode, WaitNode, ConditionNode } from './spec';
 import { getOutgoingEdges } from './spec';
+import { snapToSendingWindow } from './send-window';
 
 export interface JobContext {
   lead_id: string;
@@ -180,18 +181,24 @@ function walkGraph(
       scheduledTime = new Date(currentTime); // Explicitly use currentTime (no delay)
     }
     console.log(`  - Message: ${renderedContent.substring(0, 50)}...`);
-    
+
+    // Snap to sending window (9 AM - 7 PM Eastern); roll over to next day if outside
+    const windowedTime = snapToSendingWindow(scheduledTime);
+    if (windowedTime.getTime() !== scheduledTime.getTime()) {
+      console.log(`  - Outside send window: snapped ${scheduledTime.toISOString()} -> ${windowedTime.toISOString()}`);
+    }
+
     jobs.push({
       run_id: context.run_id as string,
       node_id: currentNodeId,
       job_type: 'sms',
       phone_number: context.phone,
       message_text: renderedContent,
-      scheduled_for: scheduledTime.toISOString(),
+      scheduled_for: windowedTime.toISOString(),
     });
     
-    // Update currentTime to the scheduled time of this message
-    currentTime = new Date(scheduledTime);
+    // Update currentTime to the windowed scheduled time (used for next node's delay)
+    currentTime = new Date(windowedTime);
     console.log(`  - Updated currentTime to scheduled time: ${currentTime.toISOString()}`);
   } else if (node.type === 'send_email') {
     const emailNode = node as SendEmailNode;
@@ -226,7 +233,13 @@ function walkGraph(
     }
     console.log(`  - Subject: ${renderedSubject}`);
     console.log(`  - HTML length: ${renderedHtml.length} chars`);
-    
+
+    // Snap to sending window (9 AM - 7 PM Eastern); roll over to next day if outside
+    const windowedTime = snapToSendingWindow(scheduledTime);
+    if (windowedTime.getTime() !== scheduledTime.getTime()) {
+      console.log(`  - Outside send window: snapped ${scheduledTime.toISOString()} -> ${windowedTime.toISOString()}`);
+    }
+
     jobs.push({
       run_id: context.run_id as string,
       node_id: currentNodeId,
@@ -235,11 +248,11 @@ function walkGraph(
       email_subject: renderedSubject,
       email_html: renderedHtml,
       email_text: renderedText,
-      scheduled_for: scheduledTime.toISOString(),
+      scheduled_for: windowedTime.toISOString(),
     });
     
-    // Update currentTime to the scheduled time of this message
-    currentTime = new Date(scheduledTime);
+    // Update currentTime to the windowed scheduled time (used for next node's delay)
+    currentTime = new Date(windowedTime);
     console.log(`  - Updated currentTime to scheduled time: ${currentTime.toISOString()}`);
   } else if (node.type === 'wait') {
     // Keep wait node support for backward compatibility, but prefer SMS timing

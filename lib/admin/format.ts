@@ -89,7 +89,8 @@ export function formatDateEST(date: Date | string | number, options?: Intl.DateT
 }
 
 /**
- * Format date and time in EST (similar to date-fns format with 'PPpp')
+ * Format date and time in Eastern (EST/EDT)
+ * Uses America/New_York for consistent display across the app (e.g. SMS log page)
  */
 export function formatDateTimeEST(date: Date | string | number): string {
   return formatDateEST(date, {
@@ -99,6 +100,7 @@ export function formatDateTimeEST(date: Date | string | number): string {
     hour: '2-digit',
     minute: '2-digit',
     hour12: true,
+    timeZoneName: 'short', // e.g. "EST" or "EDT"
   });
 }
 

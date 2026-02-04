@@ -20,6 +20,9 @@
 # production
 /build
 
+# local node install (when using embedded node)
+node-v*/
+
 # misc
 .DS_Store
 *.pem

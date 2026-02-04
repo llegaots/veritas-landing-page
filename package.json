@@ -12,7 +12,8 @@
     "test:ui": "vitest --ui",
     "test:run": "vitest run",
     "sync:airtable": "node scripts/sync-to-airtable.js",
-    "import:airtable": "node scripts/import-airtable-to-supabase.js"
+    "import:airtable": "node scripts/import-airtable-to-supabase.js",
+    "extract:poster": "node scripts/extract-video-poster.js"
   },
   "dependencies": {
     "@langchain/langgraph": "^1.1.2",

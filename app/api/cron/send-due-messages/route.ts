@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { sendSms } from '@/lib/sms/provider';
 import { sendEmail } from '@/lib/email/provider';
+import { isWithinSendingWindow } from '@/lib/sequences/send-window';
 
 // Force Node.js runtime (not Edge)
 export const runtime = 'nodejs';
@@ -76,7 +77,16 @@ export async function GET(request: NextRequest) {
 
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
   const now = new Date();
-  const nowISO = now.toISOString();
+
+  // Only send during the allowed window: 9 AM - 7 PM Eastern
+  if (!isWithinSendingWindow(now)) {
+    console.log(`[Cron] Outside sending window (9 AM - 7 PM Eastern). Current time (Eastern): ${now.toLocaleString('en-US', { timeZone: 'America/New_York' })}. Skipping.`);
+    return NextResponse.json({
+      success: true,
+      processed: 0,
+      message: 'Outside sending window (9 AM - 7 PM Eastern)',
+    });
+  }
 
   try {
     // Use FOR UPDATE SKIP LOCKED to prevent double-sends
