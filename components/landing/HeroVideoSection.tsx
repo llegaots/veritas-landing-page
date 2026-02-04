@@ -6,7 +6,6 @@ import { track } from '@/lib/tracking'
 
 export function HeroVideoSection() {
   const videoRef = useRef<HTMLVideoElement>(null)
-  const lastTimeRef = useRef(0)
   const [isPlaying, setIsPlaying] = useState(false)
 
   const togglePlayPause = () => {
@@ -19,23 +18,6 @@ export function HeroVideoSection() {
       video.pause()
     }
   }
-
-  useEffect(() => {
-    const video = videoRef.current
-    if (!video) return
-    const blockSeek = () => {
-      video.currentTime = lastTimeRef.current
-    }
-    const saveTime = () => {
-      lastTimeRef.current = video.currentTime
-    }
-    video.addEventListener('seeking', blockSeek)
-    video.addEventListener('timeupdate', saveTime)
-    return () => {
-      video.removeEventListener('seeking', blockSeek)
-      video.removeEventListener('timeupdate', saveTime)
-    }
-  }, [])
 
   useEffect(() => {
     const video = videoRef.current
