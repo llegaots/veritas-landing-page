@@ -40,7 +40,7 @@ export function HeroVideoSection() {
   useEffect(() => {
     const video = videoRef.current
     if (!video) return
-    const capturePoster = () => {
+    const captureCleanPoster = () => {
       try {
         if (video.videoWidth > 0 && video.videoHeight > 0) {
           const canvas = document.createElement('canvas')
@@ -49,32 +49,25 @@ export function HeroVideoSection() {
           const ctx = canvas.getContext('2d')
           if (ctx) {
             ctx.drawImage(video, 0, 0)
-            video.poster = canvas.toDataURL('image/jpeg', 0.85)
+            video.poster = canvas.toDataURL('image/jpeg', 0.9)
           }
         }
       } catch {
-        // Ignore capture errors (e.g. CORS, codec)
+        /* ignore */
       }
     }
-    const onReady = () => {
+    const onSeeked = () => captureCleanPoster()
+    const tryCapture = () => {
+      if (!video.paused) return
       video.currentTime = 0
-    }
-    const onSeeked = () => {
-      capturePoster()
-      video.removeEventListener('seeked', onSeeked)
-    }
-    if (video.readyState >= 2 && video.videoWidth > 0) {
-      onReady()
       video.addEventListener('seeked', onSeeked, { once: true })
+    }
+    if (video.readyState >= 2) {
+      tryCapture()
     } else {
-      video.addEventListener('loadeddata', () => {
-        onReady()
-        video.addEventListener('seeked', onSeeked, { once: true })
-      }, { once: true })
+      video.addEventListener('loadeddata', tryCapture, { once: true })
     }
-    return () => {
-      video.removeEventListener('seeked', onSeeked)
-    }
+    return () => video.removeEventListener('seeked', onSeeked)
   }, [])
 
   const handleCTAClick = () => {
@@ -115,7 +108,7 @@ export function HeroVideoSection() {
                 <video
                   ref={videoRef}
                   src="/veritas-video.mp4"
-                  poster="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 9' fill='%231e293b'%3E%3Crect width='16' height='9'/%3E%3C/svg%3E"
+                  poster="/veritas-video-poster.png"
                   className="absolute inset-0 w-full h-full object-cover"
                   playsInline
                   muted
