@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { processLeadCreated } from '@/lib/sequences/process-lead-created';
 
 // Force Node.js runtime (not Edge)
 export const runtime = 'nodejs';
@@ -182,7 +183,22 @@ export async function POST(request: NextRequest) {
                 
                 // Trigger SMS if status is now "New Lead" (either new record or status changed)
                 if (event === 'records.create' || oldRecord?.status?.toLowerCase().trim() !== 'new lead') {
-                  await triggerSmsForInvestor(mappedRecord, existing.id);
+                  await processLeadCreated(
+                    {
+                      lead_id: `investor_${existing.id}`,
+                      phone: mappedRecord.phone_number,
+                      email: mappedRecord.email_address || undefined,
+                      attributes: {
+                        investor_id: existing.id,
+                        FirstName: mappedRecord.investor_name?.split(' ')[0] || 'Investor',
+                        FullName: mappedRecord.investor_name || 'Investor',
+                        PropertyName: mappedRecord.property_name || mappedRecord.deal || 'Horizontal Parks',
+                        CalendarLink: 'https://calendly.com/alex-veritasequitypartners/15-minute-intro-call',
+                        source: mappedRecord.source ?? undefined,
+                      },
+                    },
+                    supabase
+                  );
                 }
               }
             }
@@ -204,9 +220,23 @@ export async function POST(request: NextRequest) {
                   .select('id')
                   .eq('airtable_id', mappedRecord.airtable_id)
                   .single();
-                
                 if (newRecord) {
-                  await triggerSmsForInvestor(mappedRecord, newRecord.id);
+                  await processLeadCreated(
+                    {
+                      lead_id: `investor_${newRecord.id}`,
+                      phone: mappedRecord.phone_number,
+                      email: mappedRecord.email_address || undefined,
+                      attributes: {
+                        investor_id: newRecord.id,
+                        FirstName: mappedRecord.investor_name?.split(' ')[0] || 'Investor',
+                        FullName: mappedRecord.investor_name || 'Investor',
+                        PropertyName: mappedRecord.property_name || mappedRecord.deal || 'Horizontal Parks',
+                        CalendarLink: 'https://calendly.com/alex-veritasequitypartners/15-minute-intro-call',
+                        source: mappedRecord.source ?? undefined,
+                      },
+                    },
+                    supabase
+                  );
                 }
               }
             }
@@ -262,34 +292,4 @@ export async function GET(request: NextRequest) {
   });
 }
 
-/**
- * Helper to trigger SMS sequence for investor
- */
-async function triggerSmsForInvestor(investorData: any, investorId: number) {
-  try {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-    const webhookSecret = process.env.WEBHOOK_SECRET || process.env.ADMIN_PASSWORD || 'veritas2024admin';
-
-    await fetch(`${baseUrl}/api/webhooks/investor-created`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-webhook-secret': webhookSecret,
-      },
-      body: JSON.stringify({
-        investor: {
-          id: investorId,
-          investor_name: investorData.investor_name,
-          phone_number: investorData.phone_number,
-          email_address: investorData.email_address,
-          status: investorData.status,
-          property_name: investorData.property_name || investorData.deal,
-        },
-      }),
-    });
-  } catch (err) {
-    console.error('Error triggering SMS for investor:', err);
-    // Don't fail the sync if SMS trigger fails
-  }
-}
 
