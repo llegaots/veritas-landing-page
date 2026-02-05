@@ -223,7 +223,7 @@ export async function POST(request: NextRequest) {
       console.log('[investor-created] Created new investor:', investorId);
     }
 
-    // Prepare investor data for SMS trigger
+    // Prepare investor data for SMS trigger (include source for audience filtering)
     const investorData = {
       id: investorId.toString(),
       investor_name: mappedRecord.investor_name,
@@ -231,6 +231,7 @@ export async function POST(request: NextRequest) {
       email_address: mappedRecord.email_address,
       status: mappedRecord.status,
       property_name: mappedRecord.property_name || mappedRecord.deal,
+      source: mappedRecord.source || null,
     };
 
     // Only trigger SMS for investors with status "New Lead"
@@ -245,8 +246,21 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Trigger SMS sequence (only for "New Lead" status - already checked above)
-    console.log('[investor-created] Triggering SMS sequence for investor:', {
+    // CRITICAL: Do NOT call triggerSmsSequenceForInvestor when we just INSERTED.
+    // The Supabase DB trigger (AFTER INSERT) already calls lead.created - calling again
+    // would create duplicate runs and duplicate SMS. Only trigger from webhook when
+    // we did an UPDATE (e.g. status changed to New Lead) - the DB trigger doesn't fire on UPDATE.
+    if (wasNewRecord) {
+      return NextResponse.json({
+        success: true,
+        message: 'Investor synced. SMS sequence will be triggered by database trigger (avoids duplicates).',
+        investor_id: investorId,
+        was_new_record: true,
+      });
+    }
+
+    // For UPDATES: trigger SMS here (DB trigger only fires on INSERT)
+    console.log('[investor-created] Triggering SMS sequence for investor (update to New Lead):', {
       id: investorData.id,
       name: investorData.investor_name,
       phone: investorData.phone_number,
@@ -260,14 +274,14 @@ export async function POST(request: NextRequest) {
       email_address: investorData.email_address,
       property_name: investorData.property_name,
       status: investorData.status,
+      source: investorData.source,
     }, {
-      onlyIfStatus: 'New Lead', // Double-check, though we already filtered above
+      onlyIfStatus: 'New Lead',
     });
 
     console.log('[investor-created] Result:', result);
 
     if (!result.success) {
-      // If skipped, return success with skip message
       if (result.skipped) {
         return NextResponse.json({
           success: true,
@@ -276,13 +290,8 @@ export async function POST(request: NextRequest) {
           investor_id: investorData.id,
         });
       }
-      
-      // Otherwise return error
       return NextResponse.json(
-        { 
-          error: result.error || 'Failed to trigger SMS sequence',
-          investor_id: investorData.id,
-        },
+        { error: result.error || 'Failed to trigger SMS sequence', investor_id: investorData.id },
         { status: 500 }
       );
     }

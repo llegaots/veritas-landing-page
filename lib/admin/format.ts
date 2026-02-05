@@ -37,6 +37,22 @@ export function formatTime(seconds: number): string {
 // EST timezone constant
 const EST_TIMEZONE = 'America/New_York';
 
+/**
+ * Parse a date string as UTC. Supabase/PostgreSQL may return timestamp columns
+ * without the 'Z' suffix, causing JS to interpret as local time. Scheduled times
+ * are stored in UTC, so we force UTC parsing when no timezone is present.
+ */
+export function parseAsUTC(date: Date | string | number): Date {
+  if (date instanceof Date) return date;
+  if (typeof date === 'number') return new Date(date);
+  const str = String(date).trim();
+  if (!str) return new Date(NaN);
+  // Already has timezone: Z or +/-offset
+  if (/[Zz]|[+-]\d{2}:?\d{2}$/.test(str)) return new Date(str);
+  // No timezone: treat as UTC (scheduled_for, sent_at are stored in UTC)
+  return new Date(str + 'Z');
+}
+
 export function formatDate(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString('en-US', {
     month: 'short',
@@ -81,7 +97,7 @@ export function formatRelativeTime(timestamp: number): string {
  * Useful for consistent EST display across the app
  */
 export function formatDateEST(date: Date | string | number, options?: Intl.DateTimeFormatOptions): string {
-  const d = typeof date === 'string' || typeof date === 'number' ? new Date(date) : date;
+  const d = parseAsUTC(date);
   return d.toLocaleString('en-US', {
     timeZone: EST_TIMEZONE,
     ...options,

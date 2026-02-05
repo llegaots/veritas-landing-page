@@ -71,7 +71,7 @@ function SequencesListContent() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this sequence?')) return;
+    if (!confirm('Are you sure you want to delete this sequence? This will remove it and its message jobs.')) return;
     
     try {
       const response = await fetch(
@@ -81,7 +81,8 @@ function SequencesListContent() {
       if (!response.ok) {
         throw new Error('Failed to delete sequence');
       }
-      await fetchSequences(); // Refresh list
+      // Remove from UI immediately so it disappears
+      setSequences((prev) => prev.filter((s) => s.id !== id));
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to delete sequence');
     }
@@ -238,7 +239,8 @@ function SequencesListContent() {
                       }}
                       className="border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 hover:text-red-700 transition-all duration-200 rounded-lg cursor-pointer"
                     >
-                      <Trash2 className="h-4 w-4" />
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete
                     </Button>
                   </div>
                 </div>

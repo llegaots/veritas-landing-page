@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useSequenceStore } from '@/lib/store/sequence-store';
 import { CopilotChat } from '@/components/sequences/CopilotChat';
@@ -10,7 +10,7 @@ import { NodePalette } from '@/components/sequences/NodePalette';
 import { NodePropertiesPanel } from '@/components/sequences/NodePropertiesPanel';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
-import { Save, Plus, Loader2, Bot, Hand, Settings, MessageSquare, BarChart3, ArrowLeft, Info, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { Save, Plus, Loader2, Bot, Hand, Settings, MessageSquare, BarChart3, ArrowLeft, Info, ChevronLeft, ChevronRight, X, Trash2 } from 'lucide-react';
 import { AdminSidebar } from '@/components/admin/AdminSidebar';
 import { createEmptySpec } from '@/lib/sequences/spec';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -19,6 +19,7 @@ import { Input } from '@/components/ui/input';
 
 function SequencesPageContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const { password, setPassword, sequenceId, loadSpec, spec, sendMessage, isLoading, setSpec, error, clearError, activeVersionId, selectedNodeId } = useSequenceStore();
   const [saving, setSaving] = useState(false);
   const [mode, setMode] = useState<'ai' | 'manual'>('manual'); // Default to manual
@@ -26,6 +27,25 @@ function SequencesPageContent() {
   const [triggerType, setTriggerType] = useState<'lead.created' | 'lead.demo_booked' | 'investor.matched' | 'manual'>('lead.created');
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDeleteSequence = async () => {
+    if (!sequenceId || !password) return;
+    if (!confirm('Are you sure you want to delete this sequence? This will remove it and its message jobs from the system.')) return;
+    setDeleting(true);
+    try {
+      const response = await fetch(
+        `/api/sequences?key=${encodeURIComponent(password)}&id=${sequenceId}`,
+        { method: 'DELETE' }
+      );
+      if (!response.ok) throw new Error('Failed to delete sequence');
+      router.push(`/admin/sequences/list?key=${encodeURIComponent(password)}`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete sequence');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   useEffect(() => {
     const key = searchParams.get('key');
@@ -303,33 +323,49 @@ function SequencesPageContent() {
                     size="sm"
                     className="border-gray-200 text-gray-700 hover:bg-purple-50 hover:border-purple-300 hover:text-purple-700 transition-all duration-200 rounded-lg cursor-pointer"
                   >
-                  View All
+                    View All
+                  </Button>
+                </Link>
+                <Button 
+                  variant="outline" 
+                  onClick={handleNew} 
+                  disabled={isLoading}
+                  size="sm"
+                  className="border-gray-200 text-gray-700 hover:bg-purple-50 hover:border-purple-300 hover:text-purple-700 transition-all duration-200 rounded-lg cursor-pointer"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  New
                 </Button>
-              </Link>
-              <Button 
-                variant="outline" 
-                onClick={handleNew} 
-                disabled={isLoading}
-                size="sm"
-                className="border-gray-200 text-gray-700 hover:bg-purple-50 hover:border-purple-300 hover:text-purple-700 transition-all duration-200 rounded-lg cursor-pointer"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                New
-              </Button>
-              <Button 
-                onClick={handleSave} 
-                disabled={!spec || saving || isLoading}
-                size="sm"
-                className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white shadow-md hover:shadow-lg transition-all duration-200 rounded-lg cursor-pointer"
-              >
-                {saving ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Save className="h-4 w-4 mr-2" />
+                <Button 
+                  onClick={handleSave} 
+                  disabled={!spec || saving || isLoading}
+                  size="sm"
+                  className="bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white shadow-md hover:shadow-lg transition-all duration-200 rounded-lg cursor-pointer"
+                >
+                  {saving ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4 mr-2" />
+                  )}
+                  Save
+                </Button>
+                {sequenceId && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleDeleteSequence}
+                    disabled={deleting}
+                    className="border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 hover:text-red-700 transition-all duration-200 rounded-lg cursor-pointer"
+                  >
+                    {deleting ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4 mr-2" />
+                    )}
+                    Delete
+                  </Button>
                 )}
-                Save
-              </Button>
-            </div>
+              </div>
           </div>
         </div>
 

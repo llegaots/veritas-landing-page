@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useSequenceStore } from '@/lib/store/sequence-store';
 import { SendSmsNode, SendEmailNode } from '@/lib/sequences/spec';
+import type { JSONPatchOperation } from '@/lib/sequences/patches';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -21,6 +22,8 @@ export function NodePropertiesPanel() {
   const [timingValue, setTimingValue] = useState('');
   const [timingUnit, setTimingUnit] = useState<'minutes' | 'hours' | 'days'>('hours');
   const [triggerType, setTriggerType] = useState<'lead.created' | 'lead.demo_booked' | 'investor.matched' | 'manual'>('lead.created');
+  const [sourceFilter, setSourceFilter] = useState<string>('');
+  const [availableSources, setAvailableSources] = useState<string[]>([]);
   const [showVariableMapping, setShowVariableMapping] = useState(false);
   const [newVariableName, setNewVariableName] = useState('');
   const [selectedField, setSelectedField] = useState<string>('');
@@ -88,10 +91,27 @@ export function NodePropertiesPanel() {
         setTimingValue('');
       }
     } else if (isTriggerNode && spec) {
-      // Load trigger type
+      // Load trigger type and filters
       setTriggerType(spec.trigger?.type || 'lead.created');
+      const currentSource = spec.trigger?.filters?.source;
+      setSourceFilter(typeof currentSource === 'string' ? currentSource : '');
     }
   }, [selectedNode, isSmsNode, isEmailNode, isTriggerNode, spec]);
+
+  // Fetch available sources when trigger node is selected (merge DB sources with common presets)
+  const { password } = useSequenceStore();
+  const PRESET_SOURCES = ['Meta ads', 'Calendly', 'Paid Ads', 'Organic', 'Referral'];
+  useEffect(() => {
+    if (!isTriggerNode || !password) return;
+    fetch(`/api/admin/sources?key=${encodeURIComponent(password)}`)
+      .then((res) => (res.ok ? res.json() : { sources: [] }))
+      .then((data) => {
+        const fromDb = data.sources || [];
+        const combined = [...new Set([...PRESET_SOURCES, ...fromDb])].sort();
+        setAvailableSources(combined);
+      })
+      .catch(() => setAvailableSources(PRESET_SOURCES));
+  }, [isTriggerNode, password]);
 
   // Don't render anything if no node is selected - parent will handle visibility
   if (!selectedNodeId) {
@@ -102,14 +122,29 @@ export function NodePropertiesPanel() {
   if (isTriggerNode) {
     const handleTriggerSave = () => {
       if (!spec) return;
-      
-      const patches = [{
-        op: 'replace' as const,
-        path: '/trigger/type',
-        value: triggerType,
-      }];
-      
-      console.log('[NodePropertiesPanel] Saving trigger type:', triggerType);
+
+      const patches: JSONPatchOperation[] = [
+        { op: 'replace', path: '/trigger/type', value: triggerType },
+      ];
+
+      // Audience filter: only run for specific source
+      const existingFilters = spec.trigger?.filters || {};
+      if (sourceFilter) {
+        patches.push({
+          op: 'replace',
+          path: '/trigger/filters',
+          value: { ...existingFilters, source: sourceFilter },
+        });
+      } else if (existingFilters.source !== undefined) {
+        const { source: _, ...rest } = existingFilters;
+        if (Object.keys(rest).length > 0) {
+          patches.push({ op: 'replace', path: '/trigger/filters', value: rest });
+        } else {
+          patches.push({ op: 'remove', path: '/trigger/filters' });
+        }
+      }
+
+      console.log('[NodePropertiesPanel] Saving trigger:', { triggerType, sourceFilter });
       applyOps(patches);
     };
 
@@ -153,6 +188,32 @@ export function NodePropertiesPanel() {
                   Choose when this sequence should start
                 </p>
               </div>
+              {triggerType === 'lead.created' && (
+                <div>
+                  <Label className="text-sm font-medium text-gray-700 mb-2 block">
+                    Target Audience
+                  </Label>
+                  <Select
+                    value={sourceFilter || '__all__'}
+                    onValueChange={(v) => setSourceFilter(v === '__all__' ? '' : v)}
+                  >
+                    <SelectTrigger className="w-full border-gray-200 hover:border-gray-300 focus:border-purple-500 focus:ring-2 focus:ring-purple-500 focus:ring-offset-0 rounded-lg bg-white transition-all duration-200 cursor-pointer text-gray-900">
+                      <SelectValue placeholder="All sources" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">All sources</SelectItem>
+                      {availableSources.map((s) => (
+                        <SelectItem key={s} value={s}>
+                          {s}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Only run for leads from this source (e.g. Meta ads)
+                  </p>
+                </div>
+              )}
               <Button
                 onClick={handleTriggerSave}
                 className="w-full bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white shadow-md hover:shadow-lg transition-all duration-200 rounded-lg cursor-pointer"

@@ -17,6 +17,7 @@ export function WorkflowTriggerNode(props: NodeProps) {
     'manual': 'Manual',
   };
   const triggerLabel = triggerLabels[triggerType] || triggerType;
+  const sourceFilter = spec?.trigger?.filters?.source;
 
   return (
     <div 
@@ -43,6 +44,12 @@ export function WorkflowTriggerNode(props: NodeProps) {
         <div className="text-xs text-purple-100 mt-1">
           {triggerLabel}
         </div>
+        {sourceFilter && (
+          <div className="text-xs text-purple-200 mt-1 flex items-center gap-1">
+            <span className="opacity-80">Only:</span>
+            <span className="font-medium">{sourceFilter}</span>
+          </div>
+        )}
       </div>
     </div>
   );

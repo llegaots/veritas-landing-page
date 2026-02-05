@@ -27,10 +27,10 @@ import {
   Play
 } from 'lucide-react';
 import { formatDistanceToNow, format, differenceInSeconds, differenceInMinutes } from 'date-fns';
-import { formatDateTimeEST, formatDateOnlyEST } from '@/lib/admin/format';
+import { formatDateTimeEST, formatDateOnlyEST, parseAsUTC } from '@/lib/admin/format';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { Calendar as CalendarIcon, Filter, X } from 'lucide-react';
+import { Calendar as CalendarIcon, Filter, X, ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
 import { AdminSidebar } from '@/components/admin/AdminSidebar';
 
 interface SMSReply {
@@ -87,6 +87,7 @@ interface MessageJob {
     status: string;
     started_at: string;
     context_jsonb: Record<string, any>;
+    sequence_id?: string | null;
   };
 }
 
@@ -113,11 +114,34 @@ function MessageJobsContent() {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'pending' | 'sent' | 'failed' | 'replied'>('all');
   const [expandedInvestors, setExpandedInvestors] = useState<Set<string>>(new Set());
+  const [expandedEmailPreviews, setExpandedEmailPreviews] = useState<Set<string>>(new Set());
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [sourceFilter, setSourceFilter] = useState<string>('');
   const [availableSources, setAvailableSources] = useState<string[]>([]);
   const [pausingRuns, setPausingRuns] = useState<Set<string>>(new Set());
+  const [deletingSequenceIds, setDeletingSequenceIds] = useState<Set<string>>(new Set());
+
+  const handleDeleteSequence = async (sequenceId: string) => {
+    if (!confirm('Delete this sequence? This will remove it and all its message jobs.')) return;
+    setDeletingSequenceIds((prev) => new Set(prev).add(sequenceId));
+    try {
+      const res = await fetch(
+        `/api/sequences?key=${encodeURIComponent(password)}&id=${sequenceId}`,
+        { method: 'DELETE' }
+      );
+      if (!res.ok) throw new Error('Failed to delete');
+      await fetchData();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete sequence');
+    } finally {
+      setDeletingSequenceIds((prev) => {
+        const next = new Set(prev);
+        next.delete(sequenceId);
+        return next;
+      });
+    }
+  };
 
   useEffect(() => {
     fetchData();
@@ -250,8 +274,8 @@ function MessageJobsContent() {
   // Sort investors by most recent message
   const sortedInvestors = useMemo(() => {
     return Array.from(jobsByInvestor.entries()).sort((a, b) => {
-      const aLatest = Math.max(...a[1].jobs.map(j => new Date(j.scheduled_for).getTime()));
-      const bLatest = Math.max(...b[1].jobs.map(j => new Date(j.scheduled_for).getTime()));
+      const aLatest = Math.max(...a[1].jobs.map(j => parseAsUTC(j.scheduled_for).getTime()));
+      const bLatest = Math.max(...b[1].jobs.map(j => parseAsUTC(j.scheduled_for).getTime()));
       return bLatest - aLatest;
     });
   }, [jobsByInvestor]);
@@ -264,6 +288,16 @@ function MessageJobsContent() {
       newExpanded.add(investorKey);
     }
     setExpandedInvestors(newExpanded);
+  };
+
+  const toggleEmailPreview = (jobId: string) => {
+    const next = new Set(expandedEmailPreviews);
+    if (next.has(jobId)) {
+      next.delete(jobId);
+    } else {
+      next.add(jobId);
+    }
+    setExpandedEmailPreviews(next);
   };
 
   const formatTiming = (job: MessageJob) => {
@@ -539,7 +573,7 @@ function MessageJobsContent() {
               // Also sort by run_id to group jobs from the same sequence run together
               const sortedJobs = [...investorJobs].sort((a, b) => {
                 // First sort by scheduled_for time
-                const timeDiff = new Date(a.scheduled_for).getTime() - new Date(b.scheduled_for).getTime();
+                const timeDiff = parseAsUTC(a.scheduled_for).getTime() - parseAsUTC(b.scheduled_for).getTime();
                 if (timeDiff !== 0) return timeDiff;
                 // If same time, sort by run_id to keep jobs from same run together
                 return a.run_id.localeCompare(b.run_id);
@@ -548,13 +582,29 @@ function MessageJobsContent() {
               // Get unique sequences for this investor
               const sequences = Array.from(new Set(investorJobs.map(j => j.sequence_name).filter(Boolean)));
               
-              // Get unique run IDs and their statuses
-              const runIds = Array.from(new Set(investorJobs.map(j => j.run_id).filter(Boolean)));
+              // Group runs by sequence so we show one control block per sequence (avoids duplicate buttons)
               const runStatuses = new Map<string, string>();
+              const runSequenceIds = new Map<string, string>();
+              const runSequenceNames = new Map<string, string>();
               investorJobs.forEach(job => {
                 if (job.run_id && job.sequence_runs?.status) {
                   runStatuses.set(job.run_id, job.sequence_runs.status);
                 }
+                if (job.run_id && job.sequence_runs?.sequence_id) {
+                  runSequenceIds.set(job.run_id, job.sequence_runs.sequence_id);
+                }
+                if (job.run_id && job.sequence_name) {
+                  runSequenceNames.set(job.run_id, job.sequence_name);
+                }
+              });
+              // Unique sequences: sequenceId -> { runIds, sequenceName }
+              const sequenceGroups = new Map<string, { runIds: string[]; sequenceName: string }>();
+              runSequenceIds.forEach((seqId, runId) => {
+                const name = runSequenceNames.get(runId) || seqId;
+                if (!sequenceGroups.has(seqId)) {
+                  sequenceGroups.set(seqId, { runIds: [], sequenceName: name });
+                }
+                sequenceGroups.get(seqId)!.runIds.push(runId);
               });
               
               // Get intent score and interactions from first job (all jobs have same investor data)
@@ -627,7 +677,7 @@ function MessageJobsContent() {
                           <p>
                             <strong>Status:</strong>{' '}
                             {investorJobs.filter(j => j.sent_at).length} sent,{' '}
-                            {investorJobs.filter(j => !j.sent_at && new Date(j.scheduled_for) > new Date()).length} pending,{' '}
+                            {investorJobs.filter(j => !j.sent_at && parseAsUTC(j.scheduled_for) > new Date()).length} pending,{' '}
                             {investorJobs.filter(j => j.error).length} failed
                             {investorJobs.filter(j => j.has_replies).length > 0 && (
                               <> • <span className="text-blue-600 font-medium">{investorJobs.filter(j => j.has_replies).length} with replies</span></>
@@ -643,38 +693,66 @@ function MessageJobsContent() {
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        {/* Pause/Resume buttons for each run */}
-                        {runIds.map(runId => {
-                          const runStatus = runStatuses.get(runId) || 'active';
-                          const isPaused = runStatus === 'paused';
-                          const isPausing = pausingRuns.has(runId);
-                          
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {/* One control group per sequence (labels prevent confusion when investor is in multiple sequences) */}
+                        {Array.from(sequenceGroups.entries()).map(([sequenceId, { runIds: seqRunIds, sequenceName }]) => {
+                          const isDeleting = deletingSequenceIds.has(sequenceId);
+                          const anyPaused = seqRunIds.some((rid) => runStatuses.get(rid) === 'paused');
+                          const anyPausing = seqRunIds.some((rid) => pausingRuns.has(rid));
+                          const handlePauseResume = async (e: React.MouseEvent) => {
+                            e.stopPropagation();
+                            if (anyPaused) {
+                              for (const rid of seqRunIds) {
+                                if (runStatuses.get(rid) === 'paused') await resumeSequenceRun(rid);
+                              }
+                            } else {
+                              for (const rid of seqRunIds) {
+                                if (runStatuses.get(rid) !== 'paused') await pauseSequenceRun(rid);
+                              }
+                            }
+                          };
                           return (
-                            <Button
-                              key={runId}
-                              variant={isPaused ? "default" : "outline"}
-                              size="sm"
-                              onClick={async (e) => {
-                                e.stopPropagation();
-                                if (isPaused) {
-                                  await resumeSequenceRun(runId);
-                                } else {
-                                  await pauseSequenceRun(runId);
-                                }
-                              }}
-                              disabled={isPausing}
-                              className={isPaused ? "bg-green-600 hover:bg-green-700 text-white" : ""}
+                            <div
+                              key={sequenceId}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-gray-50"
                             >
-                              {isPausing ? (
-                                <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                              ) : isPaused ? (
-                                <Play className="h-4 w-4 mr-1" />
-                              ) : (
-                                <Pause className="h-4 w-4 mr-1" />
-                              )}
-                              {isPaused ? 'Resume' : 'Pause'}
-                            </Button>
+                              <span className="text-xs font-medium text-gray-600 truncate max-w-[120px]" title={sequenceName}>
+                                {sequenceName}
+                              </span>
+                              <Button
+                                variant={anyPaused ? "default" : "outline"}
+                                size="sm"
+                                onClick={handlePauseResume}
+                                disabled={anyPausing}
+                                className={`h-7 text-xs ${anyPaused ? "bg-green-600 hover:bg-green-700 text-white" : ""}`}
+                              >
+                                {anyPausing ? (
+                                  <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                ) : anyPaused ? (
+                                  <Play className="h-3 w-3 mr-1" />
+                                ) : (
+                                  <Pause className="h-3 w-3 mr-1" />
+                                )}
+                                {anyPaused ? 'Resume' : 'Pause'}
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteSequence(sequenceId);
+                                }}
+                                disabled={isDeleting}
+                                className="h-7 text-xs border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 hover:text-red-700"
+                                title={`Delete ${sequenceName}`}
+                              >
+                                {isDeleting ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-3 w-3" />
+                                )}
+                              </Button>
+                            </div>
                           );
                         })}
                         <Button
@@ -765,8 +843,8 @@ function MessageJobsContent() {
                       <div className="space-y-3">
                         {sortedJobs.map((job) => {
                           const sequenceName = job.sequence_name || 'Unknown Sequence';
-                          const scheduled = new Date(job.scheduled_for);
-                          const sent = job.sent_at ? new Date(job.sent_at) : null;
+                          const scheduled = parseAsUTC(job.scheduled_for);
+                          const sent = job.sent_at ? parseAsUTC(job.sent_at) : null;
                           const isOverdue = !sent && scheduled <= new Date();
 
                           return (
@@ -827,31 +905,50 @@ function MessageJobsContent() {
                               </div>
                               {/* Message Content - SMS or Email */}
                               {job.job_type === 'email' ? (
-                                <div className="mt-3 space-y-3">
-                                  <div className="p-3 bg-white rounded border border-gray-200">
-                                    <p className="text-sm font-medium text-gray-700 mb-1">Subject:</p>
-                                    <p className="text-sm text-gray-900">
-                                      {job.email_subject || <span className="text-gray-400 italic">No subject</span>}
-                                    </p>
-                                  </div>
-                                  <div className="p-3 bg-white rounded border border-gray-200">
-                                    <p className="text-sm font-medium text-gray-700 mb-1">HTML Content:</p>
-                                    <div 
-                                      className="text-sm text-gray-900 prose prose-sm max-w-none"
-                                      dangerouslySetInnerHTML={{ __html: job.email_html || '' }}
-                                    />
-                                    {job.email_html && (
-                                      <p className="text-xs text-gray-400 mt-2">
-                                        {job.email_html.length} characters (HTML)
-                                      </p>
+                                <div className="mt-3">
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleEmailPreview(job.id)}
+                                    className="flex items-center gap-2 w-full text-left p-3 bg-white rounded border border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
+                                  >
+                                    {expandedEmailPreviews.has(job.id) ? (
+                                      <ChevronDown className="h-4 w-4 text-gray-500 shrink-0" />
+                                    ) : (
+                                      <ChevronRight className="h-4 w-4 text-gray-500 shrink-0" />
                                     )}
-                                  </div>
-                                  {job.email_text && (
-                                    <div className="p-3 bg-gray-50 rounded border border-gray-200">
-                                      <p className="text-sm font-medium text-gray-700 mb-1">Plain Text:</p>
-                                      <p className="text-sm text-gray-900 whitespace-pre-wrap">
-                                        {job.email_text}
-                                      </p>
+                                    <span className="text-sm font-medium text-gray-700">Email preview</span>
+                                    {!expandedEmailPreviews.has(job.id) && job.email_subject && (
+                                      <span className="text-sm text-gray-500 truncate"> — {job.email_subject}</span>
+                                    )}
+                                  </button>
+                                  {expandedEmailPreviews.has(job.id) && (
+                                    <div className="mt-2 space-y-3 p-3 bg-white rounded border border-gray-200 border-t-0">
+                                      <div>
+                                        <p className="text-sm font-medium text-gray-700 mb-1">Subject:</p>
+                                        <p className="text-sm text-gray-900">
+                                          {job.email_subject || <span className="text-gray-400 italic">No subject</span>}
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className="text-sm font-medium text-gray-700 mb-1">HTML Content:</p>
+                                        <div 
+                                          className="text-sm text-gray-900 prose prose-sm max-w-none"
+                                          dangerouslySetInnerHTML={{ __html: job.email_html || '' }}
+                                        />
+                                        {job.email_html && (
+                                          <p className="text-xs text-gray-400 mt-2">
+                                            {job.email_html.length} characters (HTML)
+                                          </p>
+                                        )}
+                                      </div>
+                                      {job.email_text && (
+                                        <div className="p-3 bg-gray-50 rounded border border-gray-200">
+                                          <p className="text-sm font-medium text-gray-700 mb-1">Plain Text:</p>
+                                          <p className="text-sm text-gray-900 whitespace-pre-wrap">
+                                            {job.email_text}
+                                          </p>
+                                        </div>
+                                      )}
                                     </div>
                                   )}
                                 </div>

@@ -127,6 +127,7 @@ export async function triggerSmsSequenceForInvestor(
     email_address?: string | null;
     property_name?: string;
     status?: string | null;
+    source?: string | null;
   },
   options?: {
     onlyIfStatus?: string;
@@ -165,6 +166,9 @@ export async function triggerSmsSequenceForInvestor(
     email: investor.email_address || undefined,
     investor_id: investor.id.toString(),
     property_name: investor.property_name,
+    attributes: {
+      source: investor.source ?? undefined,
+    },
   });
 }
 

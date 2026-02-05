@@ -130,17 +130,23 @@ export async function POST(request: NextRequest) {
 
       console.log(`[lead.created] ✅ Sequence ${sequence.id} trigger matches, creating run...`);
 
-      // Apply trigger filters if any
+      // Apply trigger filters if any (supports exact match and array "one of" match)
       if (spec.trigger.filters) {
         let matches = true;
         for (const [key, value] of Object.entries(spec.trigger.filters)) {
-          if (attributes[key] !== value) {
+          const attrVal = attributes[key];
+          if (Array.isArray(value)) {
+            if (!value.includes(attrVal)) {
+              matches = false;
+              break;
+            }
+          } else if (attrVal !== value) {
             matches = false;
             break;
           }
         }
         if (!matches) {
-          console.log(`[lead.created] ⏭️  Skipping sequence ${sequence.id} - trigger filters don't match`);
+          console.log(`[lead.created] ⏭️  Skipping sequence ${sequence.id} - trigger filters don't match (attributes: ${JSON.stringify(attributes)}, filters: ${JSON.stringify(spec.trigger.filters)})`);
           continue;
         }
       }
@@ -161,7 +167,7 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // Create sequence run
+      // Create sequence run (unique index on sequence_version_id+lead_id prevents race-condition duplicates)
       console.log(`[lead.created] 🚀 Creating run for sequence ${sequence.id} (${spec.metadata?.name || 'unnamed'})`);
       const { data: run, error: runError } = await supabase
         .from('sequence_runs')
@@ -182,6 +188,11 @@ export async function POST(request: NextRequest) {
         .single();
 
       if (runError) {
+        // Unique violation = another request already created this run, skip (avoids duplicate jobs)
+        if (runError.code === '23505') {
+          console.log(`[lead.created] ⏭️  Skipping sequence ${sequence.id} - run already exists (race condition)`);
+          continue;
+        }
         console.error('Error creating run:', runError);
         continue;
       }

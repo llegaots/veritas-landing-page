@@ -221,6 +221,7 @@ export async function GET(request: NextRequest) {
       const investorIntentScore = (investor?.intent_score ?? 0) as number;
       
       // Flatten the structure for easier access
+      const sequenceId = sequence?.id ?? null;
       const flattenedRun = run ? {
         id: run.id,
         lead_id: run.lead_id,
@@ -228,6 +229,7 @@ export async function GET(request: NextRequest) {
         status: run.status,
         started_at: run.started_at,
         context_jsonb: run.context_jsonb,
+        sequence_id: sequenceId,
       } : null;
 
       const replies = repliesMap.get(job.id) || [];
