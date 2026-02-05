@@ -1,0 +1,48 @@
+{
+  "trigger": {
+    "type": "manual"
+  },
+  "variables": {},
+  "nodes": [
+    {
+      "id": "trigger",
+      "type": "trigger"
+    },
+    {
+      "id": "msg1",
+      "type": "send_sms",
+      "content": "Welcome {{lead.first_name}}! Thanks for your interest."
+    },
+    {
+      "id": "end",
+      "type": "end"
+    }
+  ],
+  "edges": [
+    {
+      "from": "trigger",
+      "to": "msg1"
+    },
+    {
+      "from": "msg1",
+      "to": "end"
+    }
+  ],
+  "ui": {
+    "positions": {
+      "trigger": { "x": 100, "y": 100 },
+      "msg1": { "x": 100, "y": 200 },
+      "end": { "x": 100, "y": 300 }
+    },
+    "zoom": 1
+  },
+  "metadata": {
+    "name": "Minimal Test Sequence",
+    "status": "draft",
+    "version": 1,
+    "createdBy": "test",
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-01T00:00:00.000Z"
+  }
+}
+

@@ -1,0 +1,42 @@
+{
+  "trigger": {
+    "type": "manual"
+  },
+  "variables": {},
+  "nodes": [
+    {
+      "id": "trigger",
+      "type": "trigger"
+    },
+    {
+      "id": "trigger",
+      "type": "trigger"
+    },
+    {
+      "id": "orphan",
+      "type": "send_sms",
+      "content": "This node is not connected"
+    }
+  ],
+  "edges": [
+    {
+      "from": "trigger",
+      "to": "nonexistent"
+    }
+  ],
+  "ui": {
+    "positions": {
+      "trigger": { "x": 100, "y": 100 }
+    },
+    "zoom": 1
+  },
+  "metadata": {
+    "name": "Invalid Test Sequence",
+    "status": "draft",
+    "version": 1,
+    "createdBy": "test",
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-01T00:00:00.000Z"
+  }
+}
+

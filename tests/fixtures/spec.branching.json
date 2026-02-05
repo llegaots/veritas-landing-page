@@ -1,0 +1,86 @@
+{
+  "trigger": {
+    "type": "lead.created",
+    "filters": {
+      "source": "zillow"
+    }
+  },
+  "variables": {
+    "firstName": "{{lead.first_name}}",
+    "source": "{{lead.source}}"
+  },
+  "nodes": [
+    {
+      "id": "trigger",
+      "type": "trigger"
+    },
+    {
+      "id": "cond1",
+      "type": "condition",
+      "condition": {
+        "field": "lead.source",
+        "operator": "equals",
+        "value": "zillow"
+      },
+      "truePath": "msg_zillow",
+      "falsePath": "msg_other"
+    },
+    {
+      "id": "msg_zillow",
+      "type": "send_sms",
+      "content": "Hi {{lead.first_name}}, thanks for your interest from Zillow!"
+    },
+    {
+      "id": "msg_other",
+      "type": "send_sms",
+      "content": "Hi {{lead.first_name}}, thanks for your interest!"
+    },
+    {
+      "id": "end",
+      "type": "end"
+    }
+  ],
+  "edges": [
+    {
+      "from": "trigger",
+      "to": "cond1"
+    },
+    {
+      "from": "cond1",
+      "to": "msg_zillow",
+      "label": "true"
+    },
+    {
+      "from": "cond1",
+      "to": "msg_other",
+      "label": "false"
+    },
+    {
+      "from": "msg_zillow",
+      "to": "end"
+    },
+    {
+      "from": "msg_other",
+      "to": "end"
+    }
+  ],
+  "ui": {
+    "positions": {
+      "trigger": { "x": 100, "y": 100 },
+      "cond1": { "x": 100, "y": 200 },
+      "msg_zillow": { "x": 0, "y": 300 },
+      "msg_other": { "x": 200, "y": 300 },
+      "end": { "x": 100, "y": 400 }
+    },
+    "zoom": 1
+  },
+  "metadata": {
+    "name": "Branching Test Sequence",
+    "status": "draft",
+    "version": 1,
+    "createdBy": "test",
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-01T00:00:00.000Z"
+  }
+}
+

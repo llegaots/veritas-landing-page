@@ -1,0 +1,33 @@
+[
+  {
+    "op": "add",
+    "path": "/nodes/-",
+    "value": {
+      "id": "wait1",
+      "type": "wait",
+      "duration": "2 hours"
+    }
+  },
+  {
+    "op": "add",
+    "path": "/ui/positions/wait1",
+    "value": {
+      "x": 100,
+      "y": 250
+    }
+  },
+  {
+    "op": "replace",
+    "path": "/edges/0/to",
+    "value": "wait1"
+  },
+  {
+    "op": "add",
+    "path": "/edges/-",
+    "value": {
+      "from": "wait1",
+      "to": "msg1"
+    }
+  }
+]
+

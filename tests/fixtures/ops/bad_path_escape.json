@@ -1,0 +1,12 @@
+[
+  {
+    "op": "add",
+    "path": "/nodes/../../../etc/passwd",
+    "value": {
+      "id": "malicious",
+      "type": "send_sms",
+      "content": "hack"
+    }
+  }
+]
+
