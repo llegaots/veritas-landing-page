@@ -7,6 +7,7 @@ import { track } from '@/lib/tracking'
 export function HeroVideoSection() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [isPlaying, setIsPlaying] = useState(false)
+  const [ctaHref, setCtaHref] = useState('#booking-section')
 
   const togglePlayPause = () => {
     const video = videoRef.current
@@ -18,6 +19,13 @@ export function HeroVideoSection() {
       video.pause()
     }
   }
+
+  useEffect(() => {
+    // Set full URL for Meta Pixel detection
+    if (typeof window !== 'undefined') {
+      setCtaHref(`${window.location.origin}${window.location.pathname}#booking-section`)
+    }
+  }, [])
 
   useEffect(() => {
     const video = videoRef.current
@@ -147,12 +155,14 @@ export function HeroVideoSection() {
                 It's a personalized investor call where you'll receive detailed, actionable insights about <strong className="text-gray-900">Horizon Park Apartments</strong> from the team that's built a <strong className="text-gray-900">$50M+ portfolio</strong> and delivered <strong className="text-gray-900">32% lifetime annualized returns</strong> in the Pacific Northwest.
               </p>
               <a
-                href="#booking-section"
+                href={ctaHref}
                 onClick={(e) => {
                   e.preventDefault()
                   handleCTAClick()
                   document.getElementById('booking-section')?.scrollIntoView({ behavior: 'smooth' })
                 }}
+                data-cta="schedule_demo"
+                data-event="cta_click"
                 className="inline-block bg-orange-500 hover:bg-orange-600 text-white font-semibold text-lg sm:text-xl md:text-2xl lg:text-3xl px-6 py-4 sm:px-8 sm:py-5 md:px-12 md:py-6 lg:px-16 lg:py-8 rounded-lg transition-colors duration-200 shadow-lg"
               >
                 SHOW ME THE DEAL

@@ -3,10 +3,20 @@
 import { motion } from 'framer-motion'
 import Image from 'next/image'
 import { Star } from 'lucide-react'
+import { useState, useEffect } from 'react'
 import { BookingSection } from './BookingSection'
 import { track } from '@/lib/tracking'
 
 export function CaseStudiesSection() {
+  const [ctaHref, setCtaHref] = useState('#booking-section')
+
+  useEffect(() => {
+    // Set full URL for Meta Pixel detection
+    if (typeof window !== 'undefined') {
+      setCtaHref(`${window.location.origin}${window.location.pathname}#booking-section`)
+    }
+  }, [])
+
   const handleCTAClick = () => {
     track('cta_click', { cta: 'schedule_demo', location: 'case_studies_section' })
     window.dispatchEvent(new CustomEvent('cta_click'))
@@ -243,12 +253,14 @@ export function CaseStudiesSection() {
               className="mt-12 text-center"
             >
               <a
-                href="#booking-section"
+                href={ctaHref}
                 onClick={(e) => {
                   e.preventDefault()
                   handleCTAClick()
                   document.getElementById('booking-section')?.scrollIntoView({ behavior: 'smooth' })
                 }}
+                data-cta="schedule_demo"
+                data-event="cta_click"
                 className="inline-block bg-orange-500 hover:bg-orange-600 text-white font-semibold text-lg sm:text-xl md:text-2xl lg:text-3xl px-6 py-4 sm:px-8 sm:py-5 md:px-12 md:py-6 lg:px-16 lg:py-8 rounded-lg transition-colors duration-200 shadow-lg"
               >
                 SHOW ME THE DEAL
