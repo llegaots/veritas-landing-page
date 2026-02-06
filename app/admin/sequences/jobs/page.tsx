@@ -145,9 +145,6 @@ function MessageJobsContent() {
 
   useEffect(() => {
     fetchData();
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
   }, [filter, startDate, endDate, sourceFilter]);
 
   const fetchData = async () => {
@@ -582,29 +579,21 @@ function MessageJobsContent() {
               // Get unique sequences for this investor
               const sequences = Array.from(new Set(investorJobs.map(j => j.sequence_name).filter(Boolean)));
               
-              // Group runs by sequence so we show one control block per sequence (avoids duplicate buttons)
-              const runStatuses = new Map<string, string>();
-              const runSequenceIds = new Map<string, string>();
-              const runSequenceNames = new Map<string, string>();
+              // Group by sequence_id: one Pause/Resume/Delete per sequence (investor may be in multiple sequences)
+              const sequenceControls = new Map<string, { sequenceId: string; sequenceName: string; runId: string; status: string }>();
               investorJobs.forEach(job => {
-                if (job.run_id && job.sequence_runs?.status) {
-                  runStatuses.set(job.run_id, job.sequence_runs.status);
+                const seqId = job.sequence_runs?.sequence_id;
+                const runId = job.run_id;
+                const seqName = job.sequence_name || 'Unknown';
+                const status = job.sequence_runs?.status || 'active';
+                if (!seqId || !runId) return;
+                const existing = sequenceControls.get(seqId);
+                // Prefer active/paused runs over completed for Pause/Resume controls
+                const isActionable = status === 'active' || status === 'paused';
+                const existingActionable = existing && (existing.status === 'active' || existing.status === 'paused');
+                if (!existing || (isActionable && !existingActionable)) {
+                  sequenceControls.set(seqId, { sequenceId: seqId, sequenceName: seqName, runId, status });
                 }
-                if (job.run_id && job.sequence_runs?.sequence_id) {
-                  runSequenceIds.set(job.run_id, job.sequence_runs.sequence_id);
-                }
-                if (job.run_id && job.sequence_name) {
-                  runSequenceNames.set(job.run_id, job.sequence_name);
-                }
-              });
-              // Unique sequences: sequenceId -> { runIds, sequenceName }
-              const sequenceGroups = new Map<string, { runIds: string[]; sequenceName: string }>();
-              runSequenceIds.forEach((seqId, runId) => {
-                const name = runSequenceNames.get(runId) || seqId;
-                if (!sequenceGroups.has(seqId)) {
-                  sequenceGroups.set(seqId, { runIds: [], sequenceName: name });
-                }
-                sequenceGroups.get(seqId)!.runIds.push(runId);
               });
               
               // Get intent score and interactions from first job (all jobs have same investor data)
@@ -693,47 +682,43 @@ function MessageJobsContent() {
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {/* One control group per sequence (labels prevent confusion when investor is in multiple sequences) */}
-                        {Array.from(sequenceGroups.entries()).map(([sequenceId, { runIds: seqRunIds, sequenceName }]) => {
+                      <div className="flex items-center gap-3 flex-wrap">
+                        {/* One Pause/Resume + Delete per unique sequence (investor may be in multiple) */}
+                        {Array.from(sequenceControls.values()).map(({ sequenceId, sequenceName, runId, status }) => {
+                          const isPaused = status === 'paused';
+                          const isPausing = pausingRuns.has(runId);
                           const isDeleting = deletingSequenceIds.has(sequenceId);
-                          const anyPaused = seqRunIds.some((rid) => runStatuses.get(rid) === 'paused');
-                          const anyPausing = seqRunIds.some((rid) => pausingRuns.has(rid));
-                          const handlePauseResume = async (e: React.MouseEvent) => {
-                            e.stopPropagation();
-                            if (anyPaused) {
-                              for (const rid of seqRunIds) {
-                                if (runStatuses.get(rid) === 'paused') await resumeSequenceRun(rid);
-                              }
-                            } else {
-                              for (const rid of seqRunIds) {
-                                if (runStatuses.get(rid) !== 'paused') await pauseSequenceRun(rid);
-                              }
-                            }
-                          };
+                          
                           return (
                             <div
                               key={sequenceId}
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-gray-50"
+                              className="flex items-center gap-2 px-2 py-1 rounded-lg border border-gray-200 bg-gray-50/50"
                             >
                               <span className="text-xs font-medium text-gray-600 truncate max-w-[120px]" title={sequenceName}>
                                 {sequenceName}
                               </span>
                               <Button
-                                variant={anyPaused ? "default" : "outline"}
+                                variant={isPaused ? "default" : "outline"}
                                 size="sm"
-                                onClick={handlePauseResume}
-                                disabled={anyPausing}
-                                className={`h-7 text-xs ${anyPaused ? "bg-green-600 hover:bg-green-700 text-white" : ""}`}
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  if (isPaused) {
+                                    await resumeSequenceRun(runId);
+                                  } else {
+                                    await pauseSequenceRun(runId);
+                                  }
+                                }}
+                                disabled={isPausing}
+                                className={isPaused ? "bg-green-600 hover:bg-green-700 text-white shrink-0" : "shrink-0"}
                               >
-                                {anyPausing ? (
-                                  <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                                ) : anyPaused ? (
-                                  <Play className="h-3 w-3 mr-1" />
+                                {isPausing ? (
+                                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                                ) : isPaused ? (
+                                  <Play className="h-4 w-4 mr-1" />
                                 ) : (
-                                  <Pause className="h-3 w-3 mr-1" />
+                                  <Pause className="h-4 w-4 mr-1" />
                                 )}
-                                {anyPaused ? 'Resume' : 'Pause'}
+                                {isPaused ? 'Resume' : 'Pause'}
                               </Button>
                               <Button
                                 variant="outline"
@@ -743,13 +728,12 @@ function MessageJobsContent() {
                                   handleDeleteSequence(sequenceId);
                                 }}
                                 disabled={isDeleting}
-                                className="h-7 text-xs border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 hover:text-red-700"
-                                title={`Delete ${sequenceName}`}
+                                className="border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 hover:text-red-700 shrink-0"
                               >
                                 {isDeleting ? (
-                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                  <Loader2 className="h-4 w-4 animate-spin" />
                                 ) : (
-                                  <Trash2 className="h-3 w-3" />
+                                  <Trash2 className="h-4 w-4" />
                                 )}
                               </Button>
                             </div>

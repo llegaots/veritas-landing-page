@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import { processLeadCreated } from '@/lib/sequences/process-lead-created';
+import { triggerSmsSequenceForInvestor } from '@/lib/sequences/integration';
 
 // Force Node.js runtime (not Edge)
 export const runtime = 'nodejs';
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
   try {
     // Verify webhook authentication
     const webhookSecret = request.headers.get('x-webhook-secret');
-    const expectedSecret = process.env.WEBHOOK_SECRET || process.env.ADMIN_PASSWORD || 'veritas2024admin';
+    const expectedSecret = process.env.WEBHOOK_SECRET || process.env.ADMIN_PASSWORD;
     
     if (expectedSecret && webhookSecret !== expectedSecret) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -246,35 +246,52 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Process lead created in-process (no HTTP fetch - more reliable)
-    console.log('[investor-created] Processing lead.created for investor:', {
+    // CRITICAL: Do NOT call triggerSmsSequenceForInvestor when we just INSERTED.
+    // The Supabase DB trigger (AFTER INSERT) already calls lead.created - calling again
+    // would create duplicate runs and duplicate SMS. Only trigger from webhook when
+    // we did an UPDATE (e.g. status changed to New Lead) - the DB trigger doesn't fire on UPDATE.
+    if (wasNewRecord) {
+      return NextResponse.json({
+        success: true,
+        message: 'Investor synced. SMS sequence will be triggered by database trigger (avoids duplicates).',
+        investor_id: investorId,
+        was_new_record: true,
+      });
+    }
+
+    // For UPDATES: trigger SMS here (DB trigger only fires on INSERT)
+    console.log('[investor-created] Triggering SMS sequence for investor (update to New Lead):', {
       id: investorData.id,
+      name: investorData.investor_name,
       phone: investorData.phone_number,
       status: investorData.status,
     });
 
-    const result = await processLeadCreated(
-      {
-        lead_id: `investor_${investorData.id}`,
-        phone: investorData.phone_number,
-        email: investorData.email_address || undefined,
-        attributes: {
-          investor_id: investorData.id,
-          FirstName: investorData.investor_name?.split(' ')[0] || 'Investor',
-          FullName: investorData.investor_name || 'Investor',
-          PropertyName: investorData.property_name || 'Horizontal Parks',
-          CalendarLink: 'https://calendly.com/alex-veritasequitypartners/15-minute-intro-call',
-          source: investorData.source ?? undefined,
-        },
-      },
-      supabase
-    );
+    const result = await triggerSmsSequenceForInvestor({
+      id: investorData.id.toString(),
+      investor_name: investorData.investor_name,
+      phone_number: investorData.phone_number,
+      email_address: investorData.email_address,
+      property_name: investorData.property_name,
+      status: investorData.status,
+      source: investorData.source,
+    }, {
+      onlyIfStatus: 'New Lead',
+    });
 
     console.log('[investor-created] Result:', result);
 
     if (!result.success) {
+      if (result.skipped) {
+        return NextResponse.json({
+          success: true,
+          skipped: true,
+          message: result.error || 'SMS sequence skipped',
+          investor_id: investorData.id,
+        });
+      }
       return NextResponse.json(
-        { error: result.error || 'Failed to create SMS jobs', investor_id: investorData.id },
+        { error: result.error || 'Failed to trigger SMS sequence', investor_id: investorData.id },
         { status: 500 }
       );
     }

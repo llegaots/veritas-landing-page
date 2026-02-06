@@ -323,16 +323,25 @@ function walkGraph(
 }
 
 /**
+ * Options for compileSequenceToJobs (e.g. for preview/dry-run)
+ */
+export interface CompileOptions {
+  /** Override start time (default: now). Used for preview/simulation. */
+  startTime?: Date;
+}
+
+/**
  * Compile a SequenceSpec into message jobs
  */
 export function compileSequenceToJobs(
   spec: SequenceSpec,
   runId: string,
-  context: JobContext
+  context: JobContext,
+  options?: CompileOptions
 ): MessageJob[] {
   const jobs: MessageJob[] = [];
   const visited = new Set<string>();
-  const startTime = new Date();
+  const startTime = options?.startTime ? new Date(options.startTime) : new Date();
   
   // Add run_id to context
   const fullContext: JobContext & { run_id: string } = { ...context, run_id: runId };
