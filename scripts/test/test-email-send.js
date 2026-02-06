@@ -9,7 +9,7 @@ async function testEmail() {
   console.log('📧 Testing email sending...\n');
   
   // Check configuration
-  const emailProvider = process.env.EMAIL_PROVIDER || 'resend';
+  const emailProvider = process.env.EMAIL_PROVIDER || 'gmail';
   const gmailUser = process.env.GMAIL_USER;
   const gmailPassword = process.env.GMAIL_APP_PASSWORD;
   const emailFrom = process.env.EMAIL_FROM;

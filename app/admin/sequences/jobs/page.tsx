@@ -30,7 +30,7 @@ import { formatDistanceToNow, format, differenceInSeconds, differenceInMinutes }
 import { formatDateTimeEST, formatDateOnlyEST, parseAsUTC } from '@/lib/admin/format';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { Calendar as CalendarIcon, Filter, X, ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
+import { Calendar as CalendarIcon, Filter, X, ChevronDown, ChevronRight, Trash2, Mail } from 'lucide-react';
 import { AdminSidebar } from '@/components/admin/AdminSidebar';
 
 interface SMSReply {
@@ -91,7 +91,17 @@ interface MessageJob {
   };
 }
 
+interface TypeStats {
+  total: number;
+  sent: number;
+  pending: number;
+  failed: number;
+  replied?: number;
+}
+
 interface Stats {
+  sms?: TypeStats;
+  email?: TypeStats;
   total: number;
   sent: number;
   pending: number;
@@ -118,7 +128,10 @@ function MessageJobsContent() {
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
   const [sourceFilter, setSourceFilter] = useState<string>('');
+  const [jobTypeFilter, setJobTypeFilter] = useState<'all' | 'sms' | 'email'>('all');
+  const [sequenceFilter, setSequenceFilter] = useState<string>('');
   const [availableSources, setAvailableSources] = useState<string[]>([]);
+  const [availableSequences, setAvailableSequences] = useState<{ id: string; name: string }[]>([]);
   const [pausingRuns, setPausingRuns] = useState<Set<string>>(new Set());
   const [deletingSequenceIds, setDeletingSequenceIds] = useState<Set<string>>(new Set());
 
@@ -145,7 +158,7 @@ function MessageJobsContent() {
 
   useEffect(() => {
     fetchData();
-  }, [filter, startDate, endDate, sourceFilter]);
+  }, [filter, startDate, endDate, sourceFilter, jobTypeFilter, sequenceFilter]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -160,6 +173,8 @@ function MessageJobsContent() {
       if (startDate) params.append('startDate', startDate);
       if (endDate) params.append('endDate', endDate);
       if (sourceFilter) params.append('source', sourceFilter);
+      if (jobTypeFilter !== 'all') params.append('jobType', jobTypeFilter);
+      if (sequenceFilter) params.append('sequenceId', sequenceFilter);
 
       const response = await fetch(`/api/admin/message-jobs?${params.toString()}`);
 
@@ -175,6 +190,9 @@ function MessageJobsContent() {
       if (data.availableSources) {
         setAvailableSources(data.availableSources);
       }
+      if (data.availableSequences) {
+        setAvailableSequences(data.availableSequences);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data');
     } finally {
@@ -186,9 +204,11 @@ function MessageJobsContent() {
     setStartDate('');
     setEndDate('');
     setSourceFilter('');
+    setJobTypeFilter('all');
+    setSequenceFilter('');
   };
 
-  const hasActiveFilters = startDate || endDate || sourceFilter;
+  const hasActiveFilters = startDate || endDate || sourceFilter || jobTypeFilter !== 'all' || sequenceFilter;
 
   const pauseSequenceRun = async (runId: string) => {
     setPausingRuns(prev => new Set(prev).add(runId));
@@ -463,6 +483,33 @@ function MessageJobsContent() {
                 />
               </div>
 
+              {/* Job Type Filter */}
+              <Select value={jobTypeFilter} onValueChange={(v: 'all' | 'sms' | 'email') => setJobTypeFilter(v)}>
+                <SelectTrigger className="w-36 border-gray-200 rounded-lg">
+                  <SelectValue placeholder="Type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="sms">SMS Only</SelectItem>
+                  <SelectItem value="email">Email Only</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {/* Sequence Filter */}
+              <Select value={sequenceFilter || 'all'} onValueChange={(value) => setSequenceFilter(value === 'all' ? '' : value)}>
+                <SelectTrigger className="w-52 border-gray-200 rounded-lg">
+                  <SelectValue placeholder="All Sequences" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Sequences</SelectItem>
+                  {availableSequences.map((seq) => (
+                    <SelectItem key={seq.id} value={seq.id}>
+                      {seq.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
               {/* Source Filter */}
               <Select value={sourceFilter || 'all'} onValueChange={(value) => setSourceFilter(value === 'all' ? '' : value)}>
                 <SelectTrigger className="w-48 border-gray-200 rounded-lg">
@@ -494,36 +541,75 @@ function MessageJobsContent() {
           </CardContent>
         </Card>
 
-        {/* Stats Dashboard */}
+        {/* Stats Dashboard - Split by SMS and Email, static regardless of tab */}
         {stats && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-            <Card className="bg-white border-0 shadow-sm">
-              <CardContent className="p-4">
-                <div className="text-xs text-gray-500 mb-1">Total</div>
-                <div className="text-2xl font-bold text-gray-900">{stats.total}</div>
-              </CardContent>
-            </Card>
-            <Card className="bg-white border-0 shadow-sm border-l-4 border-l-green-500">
-              <CardContent className="p-4">
-                <div className="text-xs text-gray-500 mb-1">Sent</div>
-                <div className="text-2xl font-bold text-green-600">{stats.sent}</div>
-                <div className="text-xs text-gray-400 mt-1">
-                  {stats.total > 0 ? Math.round((stats.sent / stats.total) * 100) : 0}%
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="bg-white border-0 shadow-sm border-l-4 border-l-blue-500">
-              <CardContent className="p-4">
-                <div className="text-xs text-gray-500 mb-1">Pending</div>
-                <div className="text-2xl font-bold text-blue-600">{stats.pending}</div>
-              </CardContent>
-            </Card>
-            <Card className="bg-white border-0 shadow-sm border-l-4 border-l-red-500">
-              <CardContent className="p-4">
-                <div className="text-xs text-gray-500 mb-1">Failed</div>
-                <div className="text-2xl font-bold text-red-600">{stats.failed}</div>
-              </CardContent>
-            </Card>
+          <div className="space-y-4 mb-6">
+            <div className="flex items-center gap-2">
+              <MessageSquare className="h-4 w-4 text-purple-600" />
+              <span className="text-sm font-medium text-gray-700">SMS</span>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <Card className="bg-white border-0 shadow-sm">
+                <CardContent className="p-4">
+                  <div className="text-xs text-gray-500 mb-1">Total</div>
+                  <div className="text-2xl font-bold text-gray-900">{stats.sms?.total ?? 0}</div>
+                </CardContent>
+              </Card>
+              <Card className="bg-white border-0 shadow-sm border-l-4 border-l-green-500">
+                <CardContent className="p-4">
+                  <div className="text-xs text-gray-500 mb-1">Sent</div>
+                  <div className="text-2xl font-bold text-green-600">{stats.sms?.sent ?? 0}</div>
+                  <div className="text-xs text-gray-400 mt-1">
+                    {(stats.sms?.total ?? 0) > 0 ? Math.round(((stats.sms?.sent ?? 0) / (stats.sms?.total ?? 1)) * 100) : 0}%
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="bg-white border-0 shadow-sm border-l-4 border-l-blue-500">
+                <CardContent className="p-4">
+                  <div className="text-xs text-gray-500 mb-1">Pending</div>
+                  <div className="text-2xl font-bold text-blue-600">{stats.sms?.pending ?? 0}</div>
+                </CardContent>
+              </Card>
+              <Card className="bg-white border-0 shadow-sm border-l-4 border-l-red-500">
+                <CardContent className="p-4">
+                  <div className="text-xs text-gray-500 mb-1">Failed</div>
+                  <div className="text-2xl font-bold text-red-600">{stats.sms?.failed ?? 0}</div>
+                </CardContent>
+              </Card>
+            </div>
+            <div className="flex items-center gap-2">
+              <Mail className="h-4 w-4 text-blue-600" />
+              <span className="text-sm font-medium text-gray-700">Email</span>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <Card className="bg-white border-0 shadow-sm">
+                <CardContent className="p-4">
+                  <div className="text-xs text-gray-500 mb-1">Total</div>
+                  <div className="text-2xl font-bold text-gray-900">{stats.email?.total ?? 0}</div>
+                </CardContent>
+              </Card>
+              <Card className="bg-white border-0 shadow-sm border-l-4 border-l-green-500">
+                <CardContent className="p-4">
+                  <div className="text-xs text-gray-500 mb-1">Sent</div>
+                  <div className="text-2xl font-bold text-green-600">{stats.email?.sent ?? 0}</div>
+                  <div className="text-xs text-gray-400 mt-1">
+                    {(stats.email?.total ?? 0) > 0 ? Math.round(((stats.email?.sent ?? 0) / (stats.email?.total ?? 1)) * 100) : 0}%
+                  </div>
+                </CardContent>
+              </Card>
+              <Card className="bg-white border-0 shadow-sm border-l-4 border-l-blue-500">
+                <CardContent className="p-4">
+                  <div className="text-xs text-gray-500 mb-1">Pending</div>
+                  <div className="text-2xl font-bold text-blue-600">{stats.email?.pending ?? 0}</div>
+                </CardContent>
+              </Card>
+              <Card className="bg-white border-0 shadow-sm border-l-4 border-l-red-500">
+                <CardContent className="p-4">
+                  <div className="text-xs text-gray-500 mb-1">Failed</div>
+                  <div className="text-2xl font-bold text-red-600">{stats.email?.failed ?? 0}</div>
+                </CardContent>
+              </Card>
+            </div>
           </div>
         )}
 

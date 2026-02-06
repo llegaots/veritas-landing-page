@@ -149,6 +149,25 @@ export async function GET(request: NextRequest) {
           console.log(`[Cron] Skipping job ${job.id} - sequence run ${run.id} is ${run.status} (not active)`);
           continue;
         }
+
+        // If investor status is "Interested", pause the run and skip - STOP sending
+        if (run?.investor_id) {
+          const { data: investor } = await supabase
+            .from('investors')
+            .select('id, status')
+            .eq('id', run.investor_id)
+            .single();
+          const investorStatus = (investor?.status || '').toLowerCase().trim();
+          if (investorStatus === 'interested') {
+            await supabase
+              .from('sequence_runs')
+              .update({ status: 'paused', updated_at: new Date().toISOString() })
+              .eq('id', run.id)
+              .in('status', ['pending', 'active']);
+            console.log(`[Cron] Skipping job ${job.id} - investor ${run.investor_id} status is "Interested". Sequence run ${run.id} paused.`);
+            continue;
+          }
+        }
         
         // Double-check that this job is actually due (defensive check)
         const scheduledTime = new Date(job.scheduled_for);

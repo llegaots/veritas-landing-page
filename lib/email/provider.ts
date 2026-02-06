@@ -1,5 +1,5 @@
 // Email Provider Abstraction
-// Supports multiple providers (Resend, Gmail/SMTP, SendGrid, etc.) with a unified interface
+// Supports Gmail/SMTP with a unified interface
 
 export interface EmailSendOptions {
   to: string;
@@ -20,14 +20,12 @@ export interface EmailSendResult {
 
 /**
  * Send email via configured provider
- * Supports: 'resend', 'gmail' (SMTP), 'smtp', 'mock'
+ * Supports: 'gmail' (SMTP), 'smtp', 'mock'
  */
 export async function sendEmail(options: EmailSendOptions): Promise<EmailSendResult> {
-  const provider = process.env.EMAIL_PROVIDER || 'resend';
+  const provider = process.env.EMAIL_PROVIDER || 'gmail';
 
   switch (provider) {
-    case 'resend':
-      return sendViaResend(options);
     case 'gmail':
     case 'smtp':
       return sendViaSmtp(options);
@@ -35,123 +33,6 @@ export async function sendEmail(options: EmailSendOptions): Promise<EmailSendRes
       return sendViaMock(options);
     default:
       throw new Error(`Unsupported email provider: ${provider}`);
-  }
-}
-
-/**
- * Send email via Resend
- */
-async function sendViaResend(options: EmailSendOptions): Promise<EmailSendResult> {
-  const apiKey = process.env.RESEND_API_KEY;
-  const fromEmail = options.from || process.env.EMAIL_FROM || 'alex@veritasequitypartners.com';
-
-  if (!apiKey) {
-    return {
-      success: false,
-      error: 'Resend API key not configured',
-    };
-  }
-
-  // TEST MODE: Only send emails to test email addresses (if enabled)
-  // Default to true for safety - only send to test addresses unless explicitly disabled
-  const testMode = process.env.EMAIL_TEST_MODE !== 'false'; // Default to true
-  const TEST_EMAILS = (process.env.EMAIL_TEST_ADDRESSES || 'lucaslegatos123@gmail.com').split(',').map(e => e.trim());
-  
-  if (testMode) {
-    const isTestEmail = TEST_EMAILS.some(testEmail => 
-      options.to.toLowerCase().includes(testEmail.toLowerCase())
-    );
-    
-    if (!isTestEmail) {
-      console.log(`[EMAIL] Skipping email to ${options.to} - only sending to test emails ${TEST_EMAILS.join(', ')} during testing`);
-      return {
-        success: false,
-        error: `Email blocked: Only test email addresses (${TEST_EMAILS.join(', ')}) allowed during testing. Set EMAIL_TEST_MODE=false to allow all emails.`,
-      };
-    }
-  }
-
-  try {
-    // Dynamic import to avoid bundling Resend in client
-    const { Resend } = await import('resend');
-    const resend = new Resend(apiKey);
-
-    // Ensure HTML content is complete and not truncated
-    let htmlContent = options.html || '';
-    
-    // Wrap HTML in proper email structure if it's not already wrapped
-    // Some email clients require full HTML document structure
-    if (!htmlContent.trim().toLowerCase().startsWith('<!doctype') && !htmlContent.trim().toLowerCase().startsWith('<html')) {
-      htmlContent = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-</head>
-<body style="margin: 0; padding: 0; background-color: #f4f4f4;">
-${htmlContent}
-</body>
-</html>`;
-    }
-
-    console.log('[Resend] Sending email:', {
-      to: options.to,
-      from: fromEmail,
-      subject: options.subject,
-      originalHtmlLength: options.html.length,
-      wrappedHtmlLength: htmlContent.length,
-    });
-    console.log(`[Resend] HTML preview (first 200 chars): ${htmlContent.substring(0, 200)}`);
-    console.log(`[Resend] HTML preview (last 200 chars): ${htmlContent.substring(Math.max(0, htmlContent.length - 200))}`);
-
-    // Ensure proper UTF-8 encoding for subject line
-    const encodeSubject = (subject: string): string => {
-      // Resend handles UTF-8 automatically, but ensure it's a valid string
-      return subject;
-    };
-    
-    const emailOptions: any = {
-      from: fromEmail,
-      to: options.to,
-      subject: encodeSubject(options.subject),
-      html: htmlContent,
-    };
-    
-    if (options.text) {
-      emailOptions.text = options.text;
-    }
-    
-    if (options.replyTo) {
-      emailOptions.replyTo = options.replyTo;
-    }
-    
-    const { data, error } = await resend.emails.send(emailOptions);
-
-    if (error) {
-      console.error('[Resend] Error sending email:', error);
-      return {
-        success: false,
-        error: error.message || 'Unknown Resend error',
-      };
-    }
-
-    console.log('[Resend] Email sent:', {
-      id: data?.id,
-      to: options.to,
-    });
-
-    return {
-      success: true,
-      status: 'sent',
-      messageId: data?.id,
-    };
-  } catch (error) {
-    console.error('[Resend] Error sending email:', error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown Resend error',
-    };
   }
 }
 

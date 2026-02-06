@@ -170,6 +170,23 @@ export async function POST(request: NextRequest) {
               results.errors.push(`Update failed for ${mappedRecord.airtable_id}: ${error.message}`);
             } else {
               results.updated++;
+
+              // If status changed to "Interested", pause all active sequence runs - STOP sending
+              if (mappedRecord.status?.toLowerCase().trim() === 'interested') {
+                const { data: activeRuns } = await supabase
+                  .from('sequence_runs')
+                  .select('id')
+                  .eq('investor_id', existing.id)
+                  .in('status', ['pending', 'active']);
+                if (activeRuns && activeRuns.length > 0) {
+                  const runIds = activeRuns.map((r: { id: string }) => r.id);
+                  await supabase
+                    .from('sequence_runs')
+                    .update({ status: 'paused', updated_at: new Date().toISOString() })
+                    .in('id', runIds);
+                  console.log(`[airtable-sync] Paused ${runIds.length} sequence run(s) - investor ${existing.id} status set to Interested`);
+                }
+              }
               
               // Trigger SMS if status changed to "New Lead"
               if (mappedRecord.status?.toLowerCase().trim() === 'new lead' && mappedRecord.phone_number) {

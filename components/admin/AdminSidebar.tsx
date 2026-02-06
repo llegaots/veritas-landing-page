@@ -13,8 +13,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Menu,
-  X,
-  Zap
+  X
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -60,11 +59,6 @@ export function AdminSidebar({ password = '' }: AdminSidebarProps) {
       name: 'SMS Logs',
       href: `/admin/sequences/jobs?key=${encodeURIComponent(key)}`,
       icon: Activity,
-    },
-    {
-      name: 'SMS Flow Debug',
-      href: `/admin/sequences/preview?key=${encodeURIComponent(key)}`,
-      icon: Zap,
     },
     {
       name: 'Email Setup',

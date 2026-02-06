@@ -16,15 +16,16 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
-  const filter = request.nextUrl.searchParams.get('filter') || 'all';
+  const statusFilter = request.nextUrl.searchParams.get('filter') || 'all'; // Tab: pending/sent/failed/replied
+  const jobType = request.nextUrl.searchParams.get('jobType') || 'all'; // all | sms | email
+  const sequenceId = request.nextUrl.searchParams.get('sequenceId') || '';
   const limit = parseInt(request.nextUrl.searchParams.get('limit') || '1000', 10);
   const startDate = request.nextUrl.searchParams.get('startDate');
   const endDate = request.nextUrl.searchParams.get('endDate');
   const sourceFilter = request.nextUrl.searchParams.get('source');
-  const repliedFilter = request.nextUrl.searchParams.get('replied') === 'true';
 
   try {
-    // Enhanced query with joins to get sequence names
+    // Fetch ALL jobs matching jobType, sequenceId, date, source (no status filter - stats need full set)
     let query = supabase
       .from('message_jobs')
       .select(`
@@ -46,17 +47,13 @@ export async function GET(request: NextRequest) {
           )
         )
       `)
-      .order('scheduled_for', { ascending: false }) // Newest first for display
-      .order('run_id', { ascending: true }); // Then by run_id for consistency
+      .order('scheduled_for', { ascending: false })
+      .order('run_id', { ascending: true });
 
-    if (filter === 'pending') {
-      query = query.is('sent_at', null);
-    } else if (filter === 'sent') {
-      query = query.not('sent_at', 'is', null).is('error', null);
-    } else if (filter === 'failed') {
-      query = query.not('error', 'is', null);
-    } else if (filter === 'replied') {
-      query = query.not('replied_at', 'is', null);
+    if (jobType === 'sms') {
+      query = query.or('job_type.is.null,job_type.eq.sms');
+    } else if (jobType === 'email') {
+      query = query.eq('job_type', 'email');
     }
 
     // Apply date filters
@@ -132,6 +129,16 @@ export async function GET(request: NextRequest) {
       filteredData = filteredData.filter((job: any) => {
         const run = Array.isArray(job.sequence_runs) ? job.sequence_runs[0] : job.sequence_runs;
         return run?.investor_id && matchingInvestorIds.has(run.investor_id);
+      });
+    }
+
+    // Filter by sequence if sequenceId provided
+    if (sequenceId) {
+      filteredData = filteredData.filter((job: any) => {
+        const run = Array.isArray(job.sequence_runs) ? job.sequence_runs[0] : job.sequence_runs;
+        const version = Array.isArray(run?.sequence_versions) ? run?.sequence_versions[0] : run?.sequence_versions;
+        const seq = Array.isArray(version?.sequences) ? version?.sequences[0] : version?.sequences;
+        return seq?.id === sequenceId;
       });
     }
 
@@ -257,32 +264,73 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // Calculate summary stats
+    // Helper: resolve job type (legacy jobs may not have job_type)
+    const getJobType = (j: any) => j.job_type || (j.phone_number ? 'sms' : 'email');
+
+    // Stats: computed from FULL set (not filtered by status tab), split by SMS and Email
+    const allJobs = jobs;
+    const smsJobs = allJobs.filter((j: any) => getJobType(j) === 'sms');
+    const emailJobs = allJobs.filter((j: any) => getJobType(j) === 'email');
+    const calcStats = (arr: any[]) => ({
+      total: arr.length,
+      sent: arr.filter((j: any) => j.sent_at).length,
+      pending: arr.filter((j: any) => !j.sent_at && new Date(j.scheduled_for) > now).length,
+      failed: arr.filter((j: any) => j.error).length,
+      replied: arr.filter((j: any) => j.has_replies).length,
+    });
     const stats = {
-      total: jobs.length,
-      sent: jobs.filter((j: any) => j.sent_at).length,
-      pending: jobs.filter((j: any) => !j.sent_at && new Date(j.scheduled_for) > now).length,
-      overdue: jobs.filter((j: any) => !j.sent_at && new Date(j.scheduled_for) <= now).length,
-      failed: jobs.filter((j: any) => j.error).length,
-      anomalies: jobs.filter((j: any) => j.is_anomaly).length,
-      on_time: jobs.filter((j: any) => j.timing_status === 'on-time').length,
-      late: jobs.filter((j: any) => j.timing_status === 'late').length,
-      replied: jobs.filter((j: any) => j.has_replies).length,
+      sms: calcStats(smsJobs),
+      email: calcStats(emailJobs),
+      total: allJobs.length,
+      sent: allJobs.filter((j: any) => j.sent_at).length,
+      pending: allJobs.filter((j: any) => !j.sent_at && new Date(j.scheduled_for) > now).length,
+      overdue: allJobs.filter((j: any) => !j.sent_at && new Date(j.scheduled_for) <= now).length,
+      failed: allJobs.filter((j: any) => j.error).length,
+      anomalies: allJobs.filter((j: any) => j.is_anomaly).length,
+      on_time: allJobs.filter((j: any) => j.timing_status === 'on-time').length,
+      late: allJobs.filter((j: any) => j.timing_status === 'late').length,
+      replied: allJobs.filter((j: any) => j.has_replies).length,
     };
 
-    // Count unique investors
+    // Apply status tab filter to jobs list only (stats stay full)
+    let jobsToReturn = allJobs;
+    if (statusFilter === 'pending') {
+      jobsToReturn = allJobs.filter((j: any) => !j.sent_at && new Date(j.scheduled_for) > now);
+    } else if (statusFilter === 'sent') {
+      jobsToReturn = allJobs.filter((j: any) => j.sent_at && !j.error);
+    } else if (statusFilter === 'failed') {
+      jobsToReturn = allJobs.filter((j: any) => j.error);
+    } else if (statusFilter === 'replied') {
+      jobsToReturn = allJobs.filter((j: any) => j.has_replies);
+    }
+
+    // Unique sequences for filter dropdown (from jobs + sequences table for empty state)
+    const sequenceMap = new Map<string, string>();
+    allJobs.forEach((j: any) => {
+      const name = j.sequence_name || 'Unknown';
+      const id = j.sequence_runs?.sequence_id;
+      if (id && !sequenceMap.has(id)) sequenceMap.set(id, name);
+    });
+    if (sequenceMap.size === 0) {
+      const { data: seqs } = await supabase.from('sequences').select('id, name');
+      (seqs || []).forEach((s: any) => sequenceMap.set(s.id, s.name || 'Unknown'));
+    }
+    const availableSequences = Array.from(sequenceMap.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+
+    // Count unique investors from returned jobs
     const uniqueInvestors = new Set(
-      jobs
+      jobsToReturn
         .map((j: any) => j.sequence_runs?.investor_id)
         .filter((id: any) => id !== null && id !== undefined)
     );
 
     return NextResponse.json({ 
-      jobs,
+      jobs: jobsToReturn,
       stats,
-      runs: Array.from(new Set(jobs.map((j: any) => j.run_id))).length,
+      runs: Array.from(new Set(jobsToReturn.map((j: any) => j.run_id))).length,
       investors: uniqueInvestors.size,
       availableSources: uniqueSources,
+      availableSequences,
     });
   } catch (error) {
     console.error('Error in GET /api/admin/message-jobs:', error);

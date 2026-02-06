@@ -8,7 +8,7 @@ This application includes:
 - **Landing Page**: Beautiful, modern landing page for investment opportunities (Horizon Park Apartments)
 - **Admin Panel**: Full-featured admin interface for managing investors, sequences, and analytics
 - **Sequence Builder**: Visual workflow builder for creating automated SMS/email sequences
-- **Automation**: Automated message sending via Twilio (SMS) and Gmail API/Resend (Email)
+- **Automation**: Automated message sending via Twilio (SMS) and Gmail API (Email)
 - **Analytics**: Visitor tracking, lead management, and sequence performance metrics
 
 ## Features
@@ -33,7 +33,7 @@ This application includes:
 - **Icons**: Lucide React
 - **Database**: Supabase (PostgreSQL)
 - **SMS**: Twilio
-- **Email**: Gmail API (OAuth2) / Resend
+- **Email**: Gmail API (OAuth2)
 - **State Management**: Zustand
 - **Graph Visualization**: React Flow, ELK.js
 - **AI**: OpenAI (for sequence generation)
@@ -77,7 +77,6 @@ Required environment variables (see `.env.local.example`):
 - `GMAIL_REFRESH_TOKEN` - Gmail OAuth refresh token (for email)
 - `GOOGLE_CLIENT_ID` - Google OAuth client ID
 - `GOOGLE_CLIENT_SECRET` - Google OAuth client secret
-- `RESEND_API_KEY` - Resend API key (alternative email provider)
 - `OPENAI_API_KEY` - OpenAI API key (for AI sequence generation)
 - `ADMIN_PASSWORD` - Admin panel password
 

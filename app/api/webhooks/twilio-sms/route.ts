@@ -46,18 +46,19 @@ export async function POST(request: NextRequest) {
 
     // Find the most recent message job sent to this number
     // Look for messages sent in the last 30 days
+    // Try multiple phone formats (Twilio can send +15551234567, we may store 5551234567 or +15551234567)
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     const { data: messageJob } = await supabase
       .from('message_jobs')
       .select('id, phone_number, sent_at, run_id')
-      .eq('phone_number', fromNumber)
+      .or(`phone_number.eq.${fromNumber},phone_number.eq.+${normalizedPhone},phone_number.eq.${normalizedPhone}`)
       .not('sent_at', 'is', null)
       .gte('sent_at', thirtyDaysAgo.toISOString())
       .order('sent_at', { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
 
     // Check if this is a STOP request
     const isStopRequest = /^\s*(stop|unsubscribe|opt.?out|cancel|end|quit)\s*$/i.test(messageBody.trim());
@@ -218,6 +219,31 @@ export async function POST(request: NextRequest) {
         .from('message_jobs')
         .update({ replied_at: new Date().toISOString() })
         .eq('id', messageJob.id);
+    }
+
+    // Pause the sequence run when someone replies (so we don't keep auto-sending)
+    if (investor?.id) {
+      const { data: activeRuns } = await supabase
+        .from('sequence_runs')
+        .select('id')
+        .eq('investor_id', investor.id)
+        .in('status', ['pending', 'active']);
+
+      if (activeRuns && activeRuns.length > 0) {
+        const runIds = activeRuns.map((r: { id: string }) => r.id);
+        await supabase
+          .from('sequence_runs')
+          .update({ status: 'paused', updated_at: new Date().toISOString() })
+          .in('id', runIds);
+        console.log(`[Twilio SMS] Paused ${runIds.length} sequence run(s) due to reply`);
+      }
+    } else if (messageJob?.run_id) {
+      await supabase
+        .from('sequence_runs')
+        .update({ status: 'paused', updated_at: new Date().toISOString() })
+        .eq('id', messageJob.run_id)
+        .in('status', ['pending', 'active']);
+      console.log(`[Twilio SMS] Paused sequence run ${messageJob.run_id} due to reply`);
     }
 
     // Return TwiML response (Twilio expects this)

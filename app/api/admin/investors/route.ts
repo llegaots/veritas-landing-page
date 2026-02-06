@@ -248,6 +248,25 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
+    // If status changed to "Interested", pause all active sequence runs - STOP sending
+    const newStatus = (filteredUpdates.status ?? updated?.status ?? '').toString().toLowerCase().trim();
+    if (newStatus === 'interested') {
+      const { data: activeRuns } = await supabase
+        .from('sequence_runs')
+        .select('id')
+        .eq('investor_id', id)
+        .in('status', ['pending', 'active']);
+
+      if (activeRuns && activeRuns.length > 0) {
+        const runIds = activeRuns.map((r: { id: string }) => r.id);
+        await supabase
+          .from('sequence_runs')
+          .update({ status: 'paused', updated_at: new Date().toISOString() })
+          .in('id', runIds);
+        console.log(`[admin/investors] Paused ${runIds.length} sequence run(s) - investor ${id} status set to Interested`);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       investor: updated,
