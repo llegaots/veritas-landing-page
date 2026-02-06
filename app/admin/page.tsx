@@ -4,13 +4,7 @@ import { useEffect, useState, Suspense, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { FilterBar } from '@/components/admin/FilterBar'
 import { LeadsDashboard } from '@/components/admin/LeadsDashboard'
-import { HealthMetrics } from '@/components/admin/HealthMetrics'
-import { QuickInsights } from '@/components/admin/QuickInsights'
-import { FunnelChart } from '@/components/admin/FunnelChart'
-import { TimeDistributionChart } from '@/components/admin/TimeDistributionChart'
-import { DataTable } from '@/components/admin/DataTable'
 import { VisitorDrawer } from '@/components/admin/VisitorDrawer'
-import { EmptyState } from '@/components/admin/EmptyState'
 import { Toaster } from '@/components/admin/Toast'
 import { useToast } from '@/hooks/use-toast'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -19,20 +13,11 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import {
-  calculateKPITrends,
-  splitEventsByPeriod,
-  getDefaultDateRange,
-} from '@/lib/admin/trends'
-import { applyFilters, FilterState } from '@/lib/admin/filters'
-import { generateInsights } from '@/lib/admin/insights'
-import {
-  formatNumber,
-  formatPercent,
-  formatTime,
-  formatDateTime,
-} from '@/lib/admin/format'
-import { Event, VisitorProfile, TableColumn, KPITrend } from '@/lib/admin/types'
+import { getDefaultDateRange } from '@/lib/admin/trends'
+import { FilterState } from '@/lib/admin/filters'
+import { formatDateTime } from '@/lib/admin/format'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { Event, VisitorProfile } from '@/lib/admin/types'
 import Link from 'next/link'
 import { BarChart3, Users, Activity, TrendingUp, ArrowRight, Sparkles } from 'lucide-react'
 import { AdminSidebar } from '@/components/admin/AdminSidebar'
@@ -49,6 +34,15 @@ interface Stats {
     early_exits: number
   }
   events_by_type: Record<string, number>
+  timeline_by_day?: Array<{
+    date: string
+    label: string
+    visitors: number
+    page_views: number
+    early_exits: number
+    cta_clicks: number
+    demo_booked: number
+  }>
   scroll_depth: {
     scroll_25: number
     scroll_50: number
@@ -101,19 +95,24 @@ function AdminDashboardContent() {
   const [activeTab, setActiveTab] = useState('leads')
 
   useEffect(() => {
-    const key = searchParams.get('key')
+    const key = searchParams.get('key') || password
     if (key) {
       setPassword(key)
       setAuthenticated(true)
-      fetchStats(key)
+      fetchStats(key, filters.dateRange)
     }
-  }, [searchParams])
+  }, [searchParams, filters.dateRange])
 
-  const fetchStats = async (key: string) => {
+  const fetchStats = async (key: string, dateRange?: { start: Date; end: Date }) => {
     setLoading(true)
     setError(null)
     try {
-      const response = await fetch(`/api/admin/stats?key=${encodeURIComponent(key)}`)
+      const params = new URLSearchParams({ key })
+      if (dateRange) {
+        params.set('startDate', dateRange.start.toISOString())
+        params.set('endDate', dateRange.end.toISOString())
+      }
+      const response = await fetch(`/api/admin/stats?${params.toString()}`)
       if (!response.ok) {
         if (response.status === 401) {
           setError('Invalid password')
@@ -145,7 +144,7 @@ function AdminDashboardContent() {
 
   const handleRefresh = () => {
     if (password) {
-      fetchStats(password)
+      fetchStats(password, filters.dateRange)
       toast({
         title: 'Refreshing...',
         description: 'Data is being updated',
@@ -187,158 +186,6 @@ function AdminDashboardContent() {
     })
   }
 
-  // Calculate trends from recent_events
-  const trends = useMemo(() => {
-    if (!stats?.recent_events) return null
-
-    const events = stats.recent_events as Event[]
-    const { current, previous } = splitEventsByPeriod(
-      events,
-      filters.dateRange.start,
-      filters.dateRange.end
-    )
-
-    return {
-      totalEvents: calculateKPITrends(
-        current,
-        previous,
-        (e) => e.length
-      ),
-      uniqueVisitors: calculateKPITrends(
-        current,
-        previous,
-        (e) => new Set(e.map((ev) => ev.anonymous_id)).size
-      ),
-      returnVisitors: calculateKPITrends(
-        current,
-        previous,
-        (e) => {
-          const pageViews = e.filter((ev) => ev.event === 'page_view')
-          const visitorCounts = new Map<string, number>()
-          pageViews.forEach((ev) => {
-            visitorCounts.set(ev.anonymous_id, (visitorCounts.get(ev.anonymous_id) || 0) + 1)
-          })
-          return Array.from(visitorCounts.values()).filter((count) => count > 1).length
-        }
-      ),
-      avgTime: calculateKPITrends(
-        current,
-        previous,
-        (e) => {
-          const timeEvents = e.filter((ev) => ev.event === 'time_on_page')
-          if (timeEvents.length === 0) return 0
-          const total = timeEvents.reduce((sum, ev) => sum + (ev.properties?.seconds || 0), 0)
-          return Math.round(total / timeEvents.length)
-        }
-      ),
-      conversionRate: calculateKPITrends(
-        current,
-        previous,
-        (e) => {
-          const ctaClicks = e.filter((ev) => ev.event === 'cta_click').length
-          const demoBooked = e.filter((ev) => ev.event === 'demo_booked').length
-          return ctaClicks > 0 ? (demoBooked / ctaClicks) * 100 : 0
-        }
-      ),
-      quickExitRate: calculateKPITrends(
-        current,
-        previous,
-        (e) => {
-          const pageViews = e.filter((ev) => ev.event === 'page_view').length
-          const quickExits = e.filter((ev) => ev.event === 'quick_exit').length
-          return pageViews > 0 ? (quickExits / pageViews) * 100 : 0
-        }
-      ),
-      returnVisitorRate: calculateKPITrends(
-        current,
-        previous,
-        (e) => {
-          const pageViews = e.filter((ev) => ev.event === 'page_view')
-          const visitorCounts = new Map<string, number>()
-          pageViews.forEach((ev) => {
-            visitorCounts.set(ev.anonymous_id, (visitorCounts.get(ev.anonymous_id) || 0) + 1)
-          })
-          const totalVisitors = visitorCounts.size
-          const returnVisitors = Array.from(visitorCounts.values()).filter((count) => count > 1).length
-          return totalVisitors > 0 ? (returnVisitors / totalVisitors) * 100 : 0
-        }
-      ),
-    }
-  }, [stats?.recent_events, filters.dateRange])
-
-  // Calculate top drivers (event type changes)
-  const topDrivers = useMemo(() => {
-    if (!stats?.recent_events) return []
-    const events = stats.recent_events as Event[]
-    const { current, previous } = splitEventsByPeriod(
-      events,
-      filters.dateRange.start,
-      filters.dateRange.end
-    )
-
-    const currentCounts: Record<string, number> = {}
-    const previousCounts: Record<string, number> = {}
-
-    current.forEach((e) => {
-      currentCounts[e.event] = (currentCounts[e.event] || 0) + 1
-    })
-    previous.forEach((e) => {
-      previousCounts[e.event] = (previousCounts[e.event] || 0) + 1
-    })
-
-    const changes = Object.keys({ ...currentCounts, ...previousCounts }).map((event) => {
-      const currentVal = currentCounts[event] || 0
-      const previousVal = previousCounts[event] || 0
-      const delta = currentVal - previousVal
-      const deltaPercent = previousVal > 0 ? (delta / previousVal) * 100 : 0
-
-      const trend: 'up' | 'down' | 'neutral' = delta > 0 ? 'up' : delta < 0 ? 'down' : 'neutral'
-
-      return {
-        event,
-        current: currentVal,
-        previous: previousVal,
-        delta,
-        deltaPercent,
-        trend,
-      }
-    })
-
-    return changes
-      .filter((c) => Math.abs(c.delta) > 0)
-      .sort((a, b) => Math.abs(b.deltaPercent) - Math.abs(a.deltaPercent))
-      .slice(0, 5)
-  }, [stats?.recent_events, filters.dateRange])
-
-  // Generate insights
-  const insights = useMemo(() => {
-    if (!stats?.recent_events) return []
-    const events = stats.recent_events as Event[]
-    const { current, previous } = splitEventsByPeriod(
-      events,
-      filters.dateRange.start,
-      filters.dateRange.end
-    )
-    return generateInsights(current, previous, stats)
-  }, [stats, filters.dateRange])
-
-  // Calculate funnel data
-  const funnelData = useMemo(() => {
-    if (!stats) return null
-
-    const pageViews = stats.events_by_type['page_view'] || 0
-    const scroll75 = stats.scroll_depth.scroll_75
-    const ctaClicks = stats.events_by_type['cta_click'] || 0
-    const demoBooked = stats.events_by_type['demo_booked'] || 0
-
-    return [
-      { label: 'Page Views', value: pageViews, color: '#8b5cf6' },
-      { label: '75% Scroll', value: scroll75, color: '#a855f7' },
-      { label: 'CTA Clicks', value: ctaClicks, color: '#c084fc' },
-      { label: 'Demo Booked', value: demoBooked, color: '#d8b4fe' },
-    ]
-  }, [stats])
-
   // Prepare visitor profiles for drawer
   const visitorProfiles = useMemo(() => {
     if (!stats) return new Map<string, VisitorProfile>()
@@ -365,14 +212,6 @@ function AdminDashboardContent() {
 
     return profiles
   }, [stats])
-
-  const handleVisitorClick = (visitor: any) => {
-    const profile = visitorProfiles.get(visitor.anonymous_id)
-    if (profile) {
-      setSelectedVisitor(profile)
-      setDrawerOpen(true)
-    }
-  }
 
   const handleLeadClick = (lead: VisitorProfile) => {
     setSelectedVisitor(lead)
@@ -401,90 +240,6 @@ function AdminDashboardContent() {
       events: visitorProfiles.get(user.anonymous_id)?.events || [],
     })) as VisitorProfile[]
   }, [stats, visitorProfiles])
-
-  // Table columns for All Visitors (in Analytics tab)
-  const allVisitorsColumns: TableColumn<any>[] = [
-    {
-      id: 'name',
-      header: 'Name / ID',
-      accessor: (row) => (
-        <span className={row.name ? 'font-semibold text-gray-900' : 'font-mono text-sm text-gray-600'}>
-          {row.name || `${row.anonymous_id.substring(0, 20)}...`}
-        </span>
-      ),
-      sortable: true,
-    },
-    {
-      id: 'page_views',
-      header: 'Views',
-      accessor: (row) => <span className="font-medium text-gray-700">{row.page_views}</span>,
-      sortable: true,
-    },
-    {
-      id: 'return_visits',
-      header: 'Returns',
-      accessor: (row) => <span className="text-gray-600">{row.return_visits}</span>,
-      sortable: true,
-    },
-    {
-      id: 'scroll',
-      header: 'Scroll',
-      accessor: (row) => (
-        <div className="flex gap-1.5">
-          {row.scroll_25 > 0 && (
-            <Badge className="bg-purple-100 text-purple-700 border-0 text-xs font-medium px-2 py-0.5">
-              25
-            </Badge>
-          )}
-          {row.scroll_50 > 0 && (
-            <Badge className="bg-purple-200 text-purple-800 border-0 text-xs font-medium px-2 py-0.5">
-              50
-            </Badge>
-          )}
-          {row.scroll_75 > 0 && (
-            <Badge className="bg-purple-500 text-white border-0 text-xs font-medium px-2 py-0.5">
-              75
-            </Badge>
-          )}
-        </div>
-      ),
-    },
-    {
-      id: 'cta_clicks',
-      header: 'CTA',
-      accessor: (row) => <span className="text-gray-600">{row.cta_clicks}</span>,
-      sortable: true,
-    },
-    {
-      id: 'demo_booked',
-      header: 'Demo',
-      accessor: (row) =>
-        row.demo_booked > 0 ? (
-          <Badge className="bg-green-100 text-green-700 border-0 font-medium">
-            ✓
-          </Badge>
-        ) : (
-          <span className="text-gray-400">-</span>
-        ),
-      sortable: true,
-    },
-    {
-      id: 'avg_time_on_page',
-      header: 'Avg Time',
-      accessor: (row) => <span className="text-gray-600">{formatTime(row.avg_time_on_page)}</span>,
-      sortable: true,
-    },
-    {
-      id: 'intent_score',
-      header: 'Intent',
-      accessor: (row) => (
-        <span className={row.intent_score >= 0 ? 'text-purple-600 font-bold' : 'text-red-500 font-bold'}>
-          {row.intent_score}
-        </span>
-      ),
-      sortable: true,
-    },
-  ]
 
   if (!authenticated) {
     return (
@@ -576,18 +331,12 @@ function AdminDashboardContent() {
           <>
             {/* Modern Tab Navigation */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
-              <TabsList className="bg-gray-100 p-1 rounded-xl border-0 w-full max-w-md grid grid-cols-3">
+              <TabsList className="bg-gray-100 p-1 rounded-xl border-0 w-full max-w-md grid grid-cols-2">
                 <TabsTrigger 
                   value="leads" 
                   className="data-[state=active]:bg-white data-[state=active]:text-purple-600 data-[state=active]:shadow-sm rounded-lg font-medium transition-all duration-200 cursor-pointer"
                 >
                   Leads
-                </TabsTrigger>
-                <TabsTrigger 
-                  value="analytics"
-                  className="data-[state=active]:bg-white data-[state=active]:text-purple-600 data-[state=active]:shadow-sm rounded-lg font-medium transition-all duration-200 cursor-pointer"
-                >
-                  Analytics
                 </TabsTrigger>
                 <TabsTrigger 
                   value="activity"
@@ -599,25 +348,77 @@ function AdminDashboardContent() {
 
               {/* Leads Tab */}
               <TabsContent value="leads" className="space-y-6 mt-6">
-                <HealthMetrics
-                  conversionRate={stats.summary.conversion_rate_percent}
-                  conversionTrend={trends?.conversionRate}
-                  quickExitRate={stats.summary.quick_exit_rate_percent}
-                  quickExitTrend={trends?.quickExitRate}
-                  avgTimeOnPage={stats.summary.avg_time_on_page_seconds}
-                  avgTimeTrend={trends?.avgTime}
-                  returnVisitorRate={
-                    stats.summary.unique_visitors > 0
-                      ? (stats.summary.return_visitors / stats.summary.unique_visitors) * 100
-                      : 0
-                  }
-                  returnVisitorTrend={trends?.returnVisitorRate}
-                />
+                {/* Simple KPI Row */}
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <Card className="bg-white border-0 shadow-sm rounded-xl">
+                    <CardContent className="p-4">
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Visitors</p>
+                      <p className="text-2xl font-bold text-gray-900">{stats.summary.unique_visitors}</p>
+                    </CardContent>
+                    <div className="h-1 bg-purple-500" />
+                  </Card>
+                  <Card className="bg-white border-0 shadow-sm rounded-xl">
+                    <CardContent className="p-4">
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Page Views</p>
+                      <p className="text-2xl font-bold text-gray-900">{stats.events_by_type['page_view'] || 0}</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-white border-0 shadow-sm rounded-xl">
+                    <CardContent className="p-4">
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Early Exits</p>
+                      <p className="text-2xl font-bold text-gray-900">{stats.summary.early_exits}</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-white border-0 shadow-sm rounded-xl">
+                    <CardContent className="p-4">
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">CTA Clicks</p>
+                      <p className="text-2xl font-bold text-gray-900">{stats.events_by_type['cta_click'] || 0}</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="bg-white border-0 shadow-sm rounded-xl">
+                    <CardContent className="p-4">
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Demo Booked</p>
+                      <p className="text-2xl font-bold text-gray-900">{stats.events_by_type['demo_booked'] || 0}</p>
+                    </CardContent>
+                  </Card>
+                </div>
 
-                <QuickInsights
-                  insights={insights}
-                  topDrivers={topDrivers}
-                />
+                {/* Timeline by Day/Month */}
+                {stats.timeline_by_day && stats.timeline_by_day.length > 0 && (
+                  <Card className="bg-white border-0 shadow-sm rounded-xl overflow-hidden">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-semibold text-gray-900">Visitors over time</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={stats.timeline_by_day} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                            <XAxis
+                              dataKey="label"
+                              tick={{ fontSize: 11 }}
+                              stroke="#9ca3af"
+                            />
+                            <YAxis tick={{ fontSize: 11 }} stroke="#9ca3af" allowDecimals={false} />
+                            <Tooltip
+                              contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb' }}
+                              formatter={(value: number) => [value, 'Visitors']}
+                              labelFormatter={(label) => label}
+                            />
+                            <Line
+                              type="monotone"
+                              dataKey="visitors"
+                              stroke="#8b5cf6"
+                              strokeWidth={2}
+                              dot={{ fill: '#8b5cf6', r: 3 }}
+                              activeDot={{ r: 5 }}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
 
                 <LeadsDashboard
                   leads={leads}
@@ -626,129 +427,6 @@ function AdminDashboardContent() {
                   onTag={handleTag}
                   onExport={handleExport}
                 />
-              </TabsContent>
-
-              {/* Analytics Tab */}
-              <TabsContent value="analytics" className="space-y-6 mt-6">
-                {/* KPI Cards with Purple Theme */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <Card className="bg-white border-0 shadow-sm hover:shadow-md transition-shadow duration-200 rounded-xl overflow-hidden group cursor-pointer">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                        Total Events
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-3xl font-bold text-gray-900">{stats.summary.total_events}</div>
-                    </CardContent>
-                    <div className="h-1 bg-gradient-to-r from-purple-500 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                  </Card>
-                  <Card className="bg-white border-0 shadow-sm hover:shadow-md transition-shadow duration-200 rounded-xl overflow-hidden group cursor-pointer">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                        Unique Visitors
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-3xl font-bold text-purple-600">{stats.summary.unique_visitors}</div>
-                    </CardContent>
-                    <div className="h-1 bg-gradient-to-r from-purple-500 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                  </Card>
-                  <Card className="bg-white border-0 shadow-sm hover:shadow-md transition-shadow duration-200 rounded-xl overflow-hidden group cursor-pointer">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                        Return Visitors
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-3xl font-bold text-purple-700">{stats.summary.return_visitors}</div>
-                    </CardContent>
-                    <div className="h-1 bg-gradient-to-r from-purple-500 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                  </Card>
-                  <Card className="bg-white border-0 shadow-sm hover:shadow-md transition-shadow duration-200 rounded-xl overflow-hidden group cursor-pointer">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                        Avg Time
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-3xl font-bold text-gray-900">{stats.summary.avg_time_on_page_seconds}s</div>
-                    </CardContent>
-                    <div className="h-1 bg-gradient-to-r from-purple-500 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                  </Card>
-                </div>
-
-                {/* Funnel Chart */}
-                {funnelData && (
-                  <FunnelChart steps={funnelData} title="Conversion Funnel" />
-                )}
-
-                {/* Engagement Section */}
-                <Tabs defaultValue="scroll" className="bg-white rounded-xl shadow-sm border-0 p-6">
-                  <TabsList className="bg-gray-100 p-1 rounded-lg mb-6">
-                    <TabsTrigger 
-                      value="scroll"
-                      className="data-[state=active]:bg-white data-[state=active]:text-purple-600 rounded-md font-medium cursor-pointer"
-                    >
-                      Scroll Depth
-                    </TabsTrigger>
-                    <TabsTrigger 
-                      value="time"
-                      className="data-[state=active]:bg-white data-[state=active]:text-purple-600 rounded-md font-medium cursor-pointer"
-                    >
-                      Time Distribution
-                    </TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="scroll" className="mt-0">
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="text-center p-6 bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl border border-purple-200 hover:shadow-md transition-shadow">
-                        <p className="text-4xl font-bold text-purple-700">
-                          {stats.scroll_depth.scroll_25}
-                        </p>
-                        <p className="text-sm font-semibold text-purple-600 mt-2">25% Scroll</p>
-                        <p className="text-xs text-gray-500 mt-1">+1 Intent Score</p>
-                      </div>
-                      <div className="text-center p-6 bg-gradient-to-br from-purple-100 to-purple-200 rounded-xl border border-purple-300 hover:shadow-md transition-shadow">
-                        <p className="text-4xl font-bold text-purple-800">
-                          {stats.scroll_depth.scroll_50}
-                        </p>
-                        <p className="text-sm font-semibold text-purple-700 mt-2">50% Scroll</p>
-                        <p className="text-xs text-gray-500 mt-1">+2 Intent Score</p>
-                      </div>
-                      <div className="text-center p-6 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl border-0 hover:shadow-lg transition-shadow text-white">
-                        <p className="text-4xl font-bold text-white">
-                          {stats.scroll_depth.scroll_75}
-                        </p>
-                        <p className="text-sm font-semibold text-purple-100 mt-2">75% Scroll</p>
-                        <p className="text-xs text-purple-200 mt-1">+3 Intent Score</p>
-                      </div>
-                    </div>
-                  </TabsContent>
-                  <TabsContent value="time" className="mt-0">
-                    <TimeDistributionChart
-                      timeEvents={
-                        stats.recent_events
-                          .filter((e) => e.event === 'time_on_page')
-                          .map((e) => ({ seconds: e.properties?.seconds || 0 }))
-                      }
-                    />
-                  </TabsContent>
-                </Tabs>
-
-                {/* All Visitors Table */}
-                {stats.per_user_stats.length > 0 ? (
-                  <DataTable
-                    data={stats.per_user_stats}
-                    columns={allVisitorsColumns}
-                    onRowClick={handleVisitorClick}
-                    pageSize={20}
-                  />
-                ) : (
-                  <EmptyState
-                    title="No visitors"
-                    description="No visitor data available yet."
-                  />
-                )}
               </TabsContent>
 
               {/* Activity Tab */}

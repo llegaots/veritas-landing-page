@@ -197,6 +197,61 @@ function processEventsIntoStats(events: any[]) {
     .sort((a, b) => b.timestamp - a.timestamp)
     .slice(0, 100);
 
+  // Timeline by day (last 14 days) - for day/month chart
+  const dayMap = new Map<string, {
+    date: string;
+    label: string;
+    visitors: Set<string>;
+    page_views: number;
+    early_exits: number;
+    cta_clicks: number;
+    demo_booked: number;
+  }>();
+  const now = Date.now();
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    d.setHours(0, 0, 0, 0);
+    const dateStr = d.toISOString().split('T')[0];
+    const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    dayMap.set(dateStr, {
+      date: dateStr,
+      label,
+      visitors: new Set(),
+      page_views: 0,
+      early_exits: 0,
+      cta_clicks: 0,
+      demo_booked: 0,
+    });
+  }
+  parsedEvents.forEach((e) => {
+    const d = new Date(e.timestamp);
+    const dateStr = d.toISOString().split('T')[0];
+    const row = dayMap.get(dateStr);
+    if (!row) return;
+    if (e.event === 'page_view') {
+      row.visitors.add(e.anonymous_id);
+      row.page_views++;
+    } else if (e.event === 'quick_exit' || (e.event === 'time_on_page' && (e.properties?.seconds || 0) < 10)) {
+      row.early_exits++;
+    } else if (e.event === 'cta_click') {
+      row.cta_clicks++;
+    } else if (e.event === 'demo_booked') {
+      row.demo_booked++;
+    }
+  });
+  const timeline_by_day = Array.from(dayMap.values())
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((row) => ({
+      date: row.date,
+      label: row.label,
+      visitors: row.visitors.size,
+      page_views: row.page_views,
+      early_exits: row.early_exits,
+      cta_clicks: row.cta_clicks,
+      demo_booked: row.demo_booked,
+    }));
+
   return {
     summary: {
       total_events: totalEvents,
@@ -213,6 +268,7 @@ function processEventsIntoStats(events: any[]) {
     top_intent_scores: topIntentScores.slice(0, 10),
     recent_events: recentEvents,
     per_user_stats: perUserStats,
+    timeline_by_day: timeline_by_day,
   };
 }
 
@@ -222,7 +278,17 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const events = await getAllEvents();
+    let events = await getAllEvents();
+    const startDate = request.nextUrl.searchParams.get('startDate');
+    const endDate = request.nextUrl.searchParams.get('endDate');
+    if (startDate || endDate) {
+      const startMs = startDate ? new Date(startDate).getTime() : 0;
+      const endMs = endDate ? new Date(endDate).getTime() : Infinity;
+      events = events.filter((e: any) => {
+        const ts = Number(e.timestamp);
+        return ts >= startMs && ts <= endMs;
+      });
+    }
     const stats = processEventsIntoStats(events);
     
     return NextResponse.json(stats);
