@@ -131,16 +131,24 @@ export async function POST(request: NextRequest) {
       console.log(`[lead.created] ✅ Sequence ${sequence.id} trigger matches, creating run...`);
 
       // Apply trigger filters if any (supports exact match and array "one of" match)
+      // String comparison is case-insensitive to handle "Meta Ads" vs "Meta ads" etc.
       if (spec.trigger.filters) {
         let matches = true;
         for (const [key, value] of Object.entries(spec.trigger.filters)) {
           const attrVal = attributes[key];
+          const normalize = (v: any) => {
+            if (v == null) return '';
+            if (typeof v === 'string') return v.trim().toLowerCase();
+            return String(v).toLowerCase();
+          };
           if (Array.isArray(value)) {
-            if (!value.includes(attrVal)) {
+            const normalizedValues = value.map(normalize);
+            const normalizedAttr = normalize(attrVal);
+            if (!normalizedValues.some((v) => String(v) === String(normalizedAttr))) {
               matches = false;
               break;
             }
-          } else if (attrVal !== value) {
+          } else if (normalize(attrVal) !== normalize(value)) {
             matches = false;
             break;
           }
