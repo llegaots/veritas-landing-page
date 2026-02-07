@@ -211,20 +211,29 @@ function convertButtonsToEmailFriendly(html: string): string {
   
   // Final pass: Convert ANY link containing common CTA words in its text content
   // This catches cases where the link text itself is a CTA (like "Schedule a Call")
+  // Use a more careful regex that preserves the href correctly
   html = html.replace(
-    /<a([^>]*href=["']([^"']+)["'][^>]*)>([^<]*(?:schedule|book|click|sign.?up|register|get.?started|learn.?more|view|see|try|call|meeting|next.?step)[^<]*)<\/a>/gi,
-    (match, attrs, href, content) => {
+    /<a\s+([^>]*?)href=["']([^"']+)["']([^>]*?)>((?:[^<]|<(?!\/a>))*?)<\/a>/gi,
+    (match, attrsBefore, href, attrsAfter, content) => {
       // Check if it already has button-like inline styles
-      if (/style=["'][^"']*background[^"']*color[^"']*["']/.test(attrs) || 
-          /style=["'][^"']*background-color[^"']*["']/.test(attrs)) {
+      const allAttrs = attrsBefore + attrsAfter;
+      if (/style=["'][^"']*background[^"']*color[^"']*["']/.test(allAttrs) || 
+          /style=["'][^"']*background-color[^"']*["']/.test(allAttrs)) {
         return match; // Already styled as button
       }
       
-      // Clean content (remove markdown bold **text** -> text and HTML tags)
+      // Check if content looks like a CTA
       const cleanContent = content
         .replace(/\*\*(.*?)\*\*/g, '$1')
         .replace(/<[^>]+>/g, '')
         .trim();
+      
+      const isCTA = /schedule|book|click|sign.?up|register|get.?started|learn.?more|view|see|try|call|meeting|next.?step/i.test(cleanContent) ||
+                    /calendly/i.test(href);
+      
+      if (!isCTA) {
+        return match; // Don't convert if not a CTA
+      }
       
       const buttonStyles = [
         'display: inline-block',
@@ -240,7 +249,7 @@ function convertButtonsToEmailFriendly(html: string): string {
       ].join('; ');
       
       // Extract existing inline styles
-      const existingStyleMatch = attrs.match(/style=["']([^"']+)["']/);
+      const existingStyleMatch = allAttrs.match(/style=["']([^"']+)["']/);
       const existingStyles = existingStyleMatch ? existingStyleMatch[1] : '';
       
       // Combine styles
@@ -248,12 +257,51 @@ function convertButtonsToEmailFriendly(html: string): string {
         ? `${buttonStyles}; ${existingStyles}`
         : buttonStyles;
       
-      // Remove existing style and add new one
-      const newAttrs = attrs
+      // Remove existing style and class attributes, keep other attributes
+      const cleanedAttrs = allAttrs
         .replace(/style=["'][^"']*["']/gi, '')
+        .replace(/class=["'][^"']*["']/gi, '')
         .trim();
       
-      return `<a href="${href}" style="${combinedStyles}"${newAttrs ? ' ' + newAttrs : ''}>${content}</a>`;
+      // Preserve the original content (with markdown if present)
+      const preservedContent = content.replace(/\*\*(.*?)\*\*/g, '$1');
+      
+      return `<a href="${href}" style="${combinedStyles}"${cleanedAttrs ? ' ' + cleanedAttrs : ''}>${preservedContent}</a>`;
+    }
+  );
+  
+  // Ensure images are preserved and have proper attributes for email clients
+  html = html.replace(
+    /<img([^>]*?)>/gi,
+    (match, attrs) => {
+      // Check if src exists
+      const srcMatch = attrs.match(/src=["']([^"']+)["']/);
+      if (!srcMatch) {
+        return match; // No src, can't fix
+      }
+      
+      // Ensure alt text exists (required for email clients)
+      if (!/alt=["']/.test(attrs)) {
+        attrs += ' alt=""';
+      }
+      
+      // Ensure style includes display block and max-width for email compatibility
+      if (!/style=["']/.test(attrs)) {
+        attrs += ' style="display: block; max-width: 100%; height: auto;"';
+      } else {
+        // Add to existing style if not present
+        attrs = attrs.replace(/style=["']([^"']+)["']/, (_m: string, existingStyle: string) => {
+          if (!existingStyle.includes('display')) {
+            existingStyle += '; display: block;';
+          }
+          if (!existingStyle.includes('max-width')) {
+            existingStyle += '; max-width: 100%; height: auto;';
+          }
+          return `style="${existingStyle}"`;
+        });
+      }
+      
+      return `<img${attrs}>`;
     }
   );
   
