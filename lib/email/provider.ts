@@ -4,8 +4,13 @@
 /**
  * Convert buttons and links in HTML to email-friendly inline-styled versions
  * Email clients strip CSS classes and <style> tags, so buttons need inline styles
+ * 
+ * IMPORTANT: This function should only process links that don't already have button styling
+ * to avoid double-processing or breaking properly formatted links.
  */
 function convertButtonsToEmailFriendly(html: string): string {
+  // Track processed links to avoid double-processing
+  const processedLinks = new Set<string>();
   // Convert <button> elements to <a> elements with inline styles (email clients don't support <button> well)
   html = html.replace(
     /<button([^>]*)>(.*?)<\/button>/gi,
@@ -215,11 +220,17 @@ function convertButtonsToEmailFriendly(html: string): string {
   html = html.replace(
     /<a\s+([^>]*?)href=["']([^"']+)["']([^>]*?)>((?:[^<]|<(?!\/a>))*?)<\/a>/gi,
     (match, attrsBefore, href, attrsAfter, content) => {
-      // Check if it already has button-like inline styles
+      // Create a unique key for this link to avoid double-processing
+      const linkKey = `${href}|${content.substring(0, 50)}`;
+      if (processedLinks.has(linkKey)) {
+        return match; // Already processed, skip
+      }
+      
+      // Check if it already has button-like inline styles (background-color is the key indicator)
       const allAttrs = attrsBefore + attrsAfter;
-      if (/style=["'][^"']*background[^"']*color[^"']*["']/.test(allAttrs) || 
-          /style=["'][^"']*background-color[^"']*["']/.test(allAttrs)) {
-        return match; // Already styled as button
+      if (/style=["'][^"']*background-color[^"']*["']/.test(allAttrs)) {
+        processedLinks.add(linkKey);
+        return match; // Already styled as button, don't modify
       }
       
       // Check if content looks like a CTA
@@ -232,8 +243,12 @@ function convertButtonsToEmailFriendly(html: string): string {
                     /calendly/i.test(href);
       
       if (!isCTA) {
+        processedLinks.add(linkKey);
         return match; // Don't convert if not a CTA
       }
+      
+      // Mark as processed
+      processedLinks.add(linkKey);
       
       const buttonStyles = [
         'display: inline-block',
@@ -252,21 +267,24 @@ function convertButtonsToEmailFriendly(html: string): string {
       const existingStyleMatch = allAttrs.match(/style=["']([^"']+)["']/);
       const existingStyles = existingStyleMatch ? existingStyleMatch[1] : '';
       
-      // Combine styles
+      // Combine styles (existing styles take precedence for conflicting properties)
       const combinedStyles = existingStyles 
         ? `${buttonStyles}; ${existingStyles}`
         : buttonStyles;
       
-      // Remove existing style and class attributes, keep other attributes
+      // Remove existing style and class attributes, keep other attributes (like target, rel, etc.)
       const cleanedAttrs = allAttrs
         .replace(/style=["'][^"']*["']/gi, '')
         .replace(/class=["'][^"']*["']/gi, '')
         .trim();
       
-      // Preserve the original content (with markdown if present)
+      // Preserve the original content (remove markdown bold but keep everything else)
       const preservedContent = content.replace(/\*\*(.*?)\*\*/g, '$1');
       
-      return `<a href="${href}" style="${combinedStyles}"${cleanedAttrs ? ' ' + cleanedAttrs : ''}>${preservedContent}</a>`;
+      // Ensure href is properly escaped and preserved
+      const escapedHref = href.replace(/"/g, '&quot;');
+      
+      return `<a href="${escapedHref}" style="${combinedStyles}"${cleanedAttrs ? ' ' + cleanedAttrs : ''}>${preservedContent}</a>`;
     }
   );
   
