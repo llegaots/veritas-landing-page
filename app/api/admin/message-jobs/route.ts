@@ -88,15 +88,27 @@ export async function GET(request: NextRequest) {
     )).sort();
 
     // If source filter is applied, get matching investor IDs first
+    // Use case-insensitive matching (like sequence trigger filters) to handle "Meta Ads" vs "Meta ads" etc.
     let matchingInvestorIds: Set<number> | null = null;
     if (sourceFilter) {
-      const { data: sourceInvestors } = await supabase
-        .from('investors')
-        .select('id')
-        .eq('source', sourceFilter);
+      const normalize = (v: any) => {
+        if (v == null) return '';
+        if (typeof v === 'string') return v.trim().toLowerCase();
+        return String(v).toLowerCase();
+      };
+      const normalizedFilter = normalize(sourceFilter);
       
-      if (sourceInvestors) {
-        matchingInvestorIds = new Set(sourceInvestors.map((inv: any) => inv.id));
+      // Fetch all investors and filter case-insensitively in JavaScript
+      // (Supabase .eq() is case-sensitive, so we need to do this client-side)
+      const { data: allInvestors } = await supabase
+        .from('investors')
+        .select('id, source');
+      
+      if (allInvestors) {
+        const matching = allInvestors.filter((inv: any) => 
+          normalize(inv.source) === normalizedFilter
+        );
+        matchingInvestorIds = new Set(matching.map((inv: any) => inv.id));
       }
     }
 
