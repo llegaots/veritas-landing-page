@@ -462,13 +462,52 @@ async function sendViaSmtp(options: EmailSendOptions): Promise<EmailSendResult> 
         // Ensure HTML content is complete and not truncated
         let htmlContent = options.html || '';
         
-        // Convert buttons and links to email-friendly inline-styled versions
-        // Email clients strip CSS classes, so we need inline styles for buttons
-        htmlContent = convertButtonsToEmailFriendly(htmlContent);
+        // Check if HTML already has proper button styling (background-color in links)
+        // If it does, we might want to skip conversion to preserve the exact HTML
+        const hasStyledButtons = /<a[^>]*style=["'][^"']*background-color[^"']*["'][^>]*>/i.test(htmlContent);
+        const hasCompleteStructure = /<html[^>]*>/i.test(htmlContent) && /<body[^>]*>/i.test(htmlContent);
+        
+        // Only run conversion if HTML doesn't already have properly styled buttons
+        // This preserves user's exact HTML if they've already styled it correctly
+        if (!hasStyledButtons) {
+          console.log('[Gmail API] Converting buttons/links to email-friendly format');
+          htmlContent = convertButtonsToEmailFriendly(htmlContent);
+        } else {
+          console.log('[Gmail API] HTML already has styled buttons, skipping conversion to preserve exact formatting');
+        }
         
         // Wrap HTML in proper email structure if it's not already wrapped
-        // Some email clients require full HTML document structure
-        if (!htmlContent.trim().toLowerCase().startsWith('<!doctype') && !htmlContent.trim().toLowerCase().startsWith('<html')) {
+        // IMPORTANT: Only wrap if the HTML doesn't already have a complete structure
+        // Check if it's a complete HTML document first
+        const trimmedHtml = htmlContent.trim();
+        const hasDoctype = trimmedHtml.toLowerCase().startsWith('<!doctype');
+        const hasHtmlTag = /<html[^>]*>/i.test(trimmedHtml);
+        const hasBodyTag = /<body[^>]*>/i.test(trimmedHtml);
+        
+        // If it's already a complete HTML document, don't wrap it
+        if (hasDoctype && hasHtmlTag && hasBodyTag) {
+          // Already complete, use as-is
+          console.log('[Gmail API] HTML is already a complete document, using as-is');
+        } else if (hasHtmlTag && hasBodyTag) {
+          // Has html and body tags but no doctype, add doctype
+          if (!hasDoctype) {
+            htmlContent = `<!DOCTYPE html>\n${htmlContent}`;
+            console.log('[Gmail API] Added DOCTYPE to existing HTML structure');
+          }
+        } else if (hasBodyTag && !hasHtmlTag) {
+          // Has body tag but no html tag, wrap in html
+          htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+</head>
+${htmlContent}
+</html>`;
+          console.log('[Gmail API] Wrapped body content in HTML structure');
+        } else {
+          // No structure at all, wrap everything
           htmlContent = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -480,6 +519,7 @@ async function sendViaSmtp(options: EmailSendOptions): Promise<EmailSendResult> 
 ${htmlContent}
 </body>
 </html>`;
+          console.log('[Gmail API] Wrapped content in complete HTML structure');
         }
         
         console.log(`[Gmail API] HTML content length: ${htmlContent.length} chars`);
