@@ -1,6 +1,114 @@
 // Email Provider Abstraction
 // Supports Gmail/SMTP with a unified interface
 
+/**
+ * Convert buttons and links in HTML to email-friendly inline-styled versions
+ * Email clients strip CSS classes and <style> tags, so buttons need inline styles
+ */
+function convertButtonsToEmailFriendly(html: string): string {
+  // Convert <button> elements to <a> elements with inline styles (email clients don't support <button> well)
+  html = html.replace(
+    /<button([^>]*)>(.*?)<\/button>/gi,
+    (match, attrs, content) => {
+      // Extract href from data-href, onclick, or find first link in content
+      let href = '#';
+      const dataHrefMatch = attrs.match(/data-href=["']([^"']+)["']/);
+      const onclickMatch = attrs.match(/onclick=["'][^"']*["'](https?:\/\/[^\s"']+)/);
+      const contentLinkMatch = content.match(/href=["']([^"']+)["']/) || content.match(/(https?:\/\/[^\s<>"']+)/);
+      
+      if (dataHrefMatch) {
+        href = dataHrefMatch[1];
+      } else if (onclickMatch) {
+        href = onclickMatch[1];
+      } else if (contentLinkMatch) {
+        href = contentLinkMatch[1];
+      }
+      
+      // Check if button has blue/primary styling (common patterns)
+      const isBlue = /bg-blue|bg-primary|blue|primary|btn-primary|button-primary/i.test(attrs);
+      
+      // Default button styles for email (blue button)
+      const buttonStyles = [
+        'display: inline-block',
+        'padding: 12px 24px',
+        'text-decoration: none',
+        'border-radius: 6px',
+        'font-weight: 600',
+        'text-align: center',
+        'font-size: 16px',
+        'line-height: 1.5',
+        'background-color: #2563eb',
+        'color: #ffffff',
+        'border: none',
+      ].join('; ');
+      
+      // Extract existing inline styles if any
+      const existingStyleMatch = attrs.match(/style=["']([^"']+)["']/);
+      const existingStyles = existingStyleMatch ? existingStyleMatch[1] : '';
+      
+      // Combine styles (existing styles take precedence, but we ensure button appearance)
+      const combinedStyles = existingStyles 
+        ? `${buttonStyles}; ${existingStyles}`
+        : buttonStyles;
+      
+      // Clean content (remove any nested <a> tags since we're converting button to <a>)
+      const cleanContent = content.replace(/<a[^>]*>(.*?)<\/a>/gi, '$1');
+      
+      return `<a href="${href}" style="${combinedStyles}">${cleanContent}</a>`;
+    }
+  );
+  
+  // Convert links that look like buttons (have button-like classes) to inline-styled buttons
+  html = html.replace(
+    /<a([^>]*class=["'][^"']*(?:button|btn)[^"']*["'][^>]*)>(.*?)<\/a>/gi,
+    (match, attrs, content) => {
+      // Check if it already has comprehensive inline styles (has background-color)
+      if (/style=["'][^"']*background[^"']*["']/.test(attrs)) {
+        return match; // Already has button styles, don't modify
+      }
+      
+      // Extract href
+      const hrefMatch = attrs.match(/href=["']([^"']+)["']/);
+      const href = hrefMatch ? hrefMatch[1] : '#';
+      
+      // Check if it's a blue/primary button
+      const isBlue = /bg-blue|bg-primary|blue|primary|btn-primary|button-primary/i.test(attrs);
+      
+      const buttonStyles = [
+        'display: inline-block',
+        'padding: 12px 24px',
+        'text-decoration: none',
+        'border-radius: 6px',
+        'font-weight: 600',
+        'text-align: center',
+        'font-size: 16px',
+        'line-height: 1.5',
+        'background-color: #2563eb',
+        'color: #ffffff',
+      ].join('; ');
+      
+      // Extract existing inline styles
+      const existingStyleMatch = attrs.match(/style=["']([^"']+)["']/);
+      const existingStyles = existingStyleMatch ? existingStyleMatch[1] : '';
+      
+      // Combine styles
+      const combinedStyles = existingStyles 
+        ? `${buttonStyles}; ${existingStyles}`
+        : buttonStyles;
+      
+      // Remove class attribute and update style
+      const newAttrs = attrs
+        .replace(/class=["'][^"']*["']/gi, '')
+        .replace(/style=["'][^"']*["']/gi, '')
+        .trim();
+      
+      return `<a href="${href}" style="${combinedStyles}"${newAttrs ? ' ' + newAttrs : ''}>${content}</a>`;
+    }
+  );
+  
+  return html;
+}
+
 export interface EmailSendOptions {
   to: string;
   subject: string;
@@ -106,6 +214,10 @@ async function sendViaSmtp(options: EmailSendOptions): Promise<EmailSendResult> 
         
         // Ensure HTML content is complete and not truncated
         let htmlContent = options.html || '';
+        
+        // Convert buttons and links to email-friendly inline-styled versions
+        // Email clients strip CSS classes, so we need inline styles for buttons
+        htmlContent = convertButtonsToEmailFriendly(htmlContent);
         
         // Wrap HTML in proper email structure if it's not already wrapped
         // Some email clients require full HTML document structure
@@ -281,12 +393,15 @@ ${htmlContent}
       return subject;
     };
     
+    // Convert buttons to email-friendly inline-styled versions
+    let htmlContent = convertButtonsToEmailFriendly(options.html);
+    
     // Send email
     const info = await transporter.sendMail({
       from: fromEmail,
       to: options.to,
       subject: encodeSubject(options.subject),
-      html: options.html,
+      html: htmlContent,
       text: options.text,
       replyTo: options.replyTo,
       encoding: 'utf-8', // Explicitly set UTF-8 encoding
