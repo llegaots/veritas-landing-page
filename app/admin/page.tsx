@@ -402,7 +402,7 @@ function AdminDashboardContent() {
                             <YAxis tick={{ fontSize: 11 }} stroke="#9ca3af" allowDecimals={false} />
                             <Tooltip
                               contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb' }}
-                              formatter={(value: number) => [value, 'Visitors']}
+                              formatter={(value: number | undefined) => [value ?? 0, 'Visitors']}
                               labelFormatter={(label) => label}
                             />
                             <Line
