@@ -106,6 +106,157 @@ function convertButtonsToEmailFriendly(html: string): string {
     }
   );
   
+  // Convert plain links that should be buttons (CTA links to Calendly, scheduling, etc.)
+  // Pattern: Links to calendly.com or links with CTA text like "Schedule", "Book", "Click here"
+  html = html.replace(
+    /<a([^>]*href=["']([^"']*(?:calendly|schedule|book|click|sign.?up|register|get.?started)[^"']*)["'][^>]*)>(.*?)<\/a>/gi,
+    (match, attrs, href, content) => {
+      // Check if it already has button-like inline styles
+      if (/style=["'][^"']*background[^"']*color[^"']*["']/.test(attrs) || 
+          /style=["'][^"']*background-color[^"']*["']/.test(attrs)) {
+        return match; // Already styled as button
+      }
+      
+      // Clean content (remove markdown bold **text** -> text)
+      const cleanContent = content.replace(/\*\*(.*?)\*\*/g, '$1').trim();
+      
+      // Check if content looks like a CTA (Schedule, Book, Click, etc.)
+      const isCTA = /schedule|book|click|sign.?up|register|get.?started|learn.?more|view|see|try/i.test(cleanContent);
+      
+      if (isCTA || /calendly/i.test(href)) {
+        const buttonStyles = [
+          'display: inline-block',
+          'padding: 12px 24px',
+          'text-decoration: none',
+          'border-radius: 6px',
+          'font-weight: 600',
+          'text-align: center',
+          'font-size: 16px',
+          'line-height: 1.5',
+          'background-color: #2563eb',
+          'color: #ffffff',
+        ].join('; ');
+        
+        // Extract existing inline styles
+        const existingStyleMatch = attrs.match(/style=["']([^"']+)["']/);
+        const existingStyles = existingStyleMatch ? existingStyleMatch[1] : '';
+        
+        // Combine styles
+        const combinedStyles = existingStyles 
+          ? `${buttonStyles}; ${existingStyles}`
+          : buttonStyles;
+        
+        // Remove existing style and add new one
+        const newAttrs = attrs
+          .replace(/style=["'][^"']*["']/gi, '')
+          .trim();
+        
+        return `<a href="${href}" style="${combinedStyles}"${newAttrs ? ' ' + newAttrs : ''}>${cleanContent}</a>`;
+      }
+      
+      return match; // Don't convert if not a CTA
+    }
+  );
+  
+  // Also convert links with bold text that look like CTAs (e.g., **Schedule a Call**)
+  html = html.replace(
+    /<a([^>]*href=["']([^"']+)["'][^>]*)>(.*?\*\*[^*]+\*\*.*?)<\/a>/gi,
+    (match, attrs, href, content) => {
+      // Check if it already has button-like inline styles
+      if (/style=["'][^"']*background[^"']*color[^"']*["']/.test(attrs) || 
+          /style=["'][^"']*background-color[^"']*["']/.test(attrs)) {
+        return match; // Already styled as button
+      }
+      
+      // Clean content (remove markdown bold **text** -> text)
+      const cleanContent = content.replace(/\*\*(.*?)\*\*/g, '$1').trim();
+      
+      // Check if content looks like a CTA
+      const isCTA = /schedule|book|click|sign.?up|register|get.?started|learn.?more|view|see|try|call|meeting/i.test(cleanContent);
+      
+      if (isCTA) {
+        const buttonStyles = [
+          'display: inline-block',
+          'padding: 12px 24px',
+          'text-decoration: none',
+          'border-radius: 6px',
+          'font-weight: 600',
+          'text-align: center',
+          'font-size: 16px',
+          'line-height: 1.5',
+          'background-color: #2563eb',
+          'color: #ffffff',
+        ].join('; ');
+        
+        // Extract existing inline styles
+        const existingStyleMatch = attrs.match(/style=["']([^"']+)["']/);
+        const existingStyles = existingStyleMatch ? existingStyleMatch[1] : '';
+        
+        // Combine styles
+        const combinedStyles = existingStyles 
+          ? `${buttonStyles}; ${existingStyles}`
+          : buttonStyles;
+        
+        // Remove existing style and add new one
+        const newAttrs = attrs
+          .replace(/style=["'][^"']*["']/gi, '')
+          .trim();
+        
+        return `<a href="${href}" style="${combinedStyles}"${newAttrs ? ' ' + newAttrs : ''}>${cleanContent}</a>`;
+      }
+      
+      return match; // Don't convert if not a CTA
+    }
+  );
+  
+  // Final pass: Convert ANY link containing common CTA words in its text content
+  // This catches cases where the link text itself is a CTA (like "Schedule a Call")
+  html = html.replace(
+    /<a([^>]*href=["']([^"']+)["'][^>]*)>([^<]*(?:schedule|book|click|sign.?up|register|get.?started|learn.?more|view|see|try|call|meeting|next.?step)[^<]*)<\/a>/gi,
+    (match, attrs, href, content) => {
+      // Check if it already has button-like inline styles
+      if (/style=["'][^"']*background[^"']*color[^"']*["']/.test(attrs) || 
+          /style=["'][^"']*background-color[^"']*["']/.test(attrs)) {
+        return match; // Already styled as button
+      }
+      
+      // Clean content (remove markdown bold **text** -> text and HTML tags)
+      const cleanContent = content
+        .replace(/\*\*(.*?)\*\*/g, '$1')
+        .replace(/<[^>]+>/g, '')
+        .trim();
+      
+      const buttonStyles = [
+        'display: inline-block',
+        'padding: 12px 24px',
+        'text-decoration: none',
+        'border-radius: 6px',
+        'font-weight: 600',
+        'text-align: center',
+        'font-size: 16px',
+        'line-height: 1.5',
+        'background-color: #2563eb',
+        'color: #ffffff',
+      ].join('; ');
+      
+      // Extract existing inline styles
+      const existingStyleMatch = attrs.match(/style=["']([^"']+)["']/);
+      const existingStyles = existingStyleMatch ? existingStyleMatch[1] : '';
+      
+      // Combine styles
+      const combinedStyles = existingStyles 
+        ? `${buttonStyles}; ${existingStyles}`
+        : buttonStyles;
+      
+      // Remove existing style and add new one
+      const newAttrs = attrs
+        .replace(/style=["'][^"']*["']/gi, '')
+        .trim();
+      
+      return `<a href="${href}" style="${combinedStyles}"${newAttrs ? ' ' + newAttrs : ''}>${content}</a>`;
+    }
+  );
+  
   return html;
 }
 
