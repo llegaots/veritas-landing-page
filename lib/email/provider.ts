@@ -292,34 +292,64 @@ function convertButtonsToEmailFriendly(html: string): string {
   html = html.replace(
     /<img([^>]*?)>/gi,
     (match, attrs) => {
-      // Check if src exists
-      const srcMatch = attrs.match(/src=["']([^"']+)["']/);
+      // Check if src exists - handle both quoted and unquoted src
+      const srcMatch = attrs.match(/src\s*=\s*["']([^"']+)["']/) || attrs.match(/src\s*=\s*([^\s>]+)/);
       if (!srcMatch) {
+        console.warn('[Email] Image tag found without src attribute:', match);
         return match; // No src, can't fix
       }
       
-      // Ensure alt text exists (required for email clients)
-      if (!/alt=["']/.test(attrs)) {
-        attrs += ' alt=""';
+      let srcValue = srcMatch[1];
+      
+      // If src is a relative URL, warn (email clients need absolute URLs)
+      if (srcValue && !srcValue.startsWith('http://') && !srcValue.startsWith('https://') && !srcValue.startsWith('data:') && !srcValue.startsWith('cid:')) {
+        console.warn('[Email] Image src appears to be relative URL. Email clients require absolute URLs:', srcValue);
+        // Don't modify it - let the user fix it, but log the issue
+      }
+      
+      // Ensure src is preserved (don't modify it, just ensure it's properly quoted)
+      let newAttrs = attrs;
+      
+      // Normalize src attribute to use double quotes
+      newAttrs = newAttrs.replace(/src\s*=\s*["']?([^"'\s>]+)["']?/gi, `src="${srcValue}"`);
+      
+      // Ensure alt text exists (required for email clients, helps with accessibility)
+      if (!/alt\s*=\s*["']/.test(newAttrs)) {
+        // Try to extract meaningful alt from src filename or use generic
+        const altText = srcValue.split('/').pop()?.split('.')[0] || 'Image';
+        newAttrs += ` alt="${altText}"`;
       }
       
       // Ensure style includes display block and max-width for email compatibility
-      if (!/style=["']/.test(attrs)) {
-        attrs += ' style="display: block; max-width: 100%; height: auto;"';
+      if (!/style\s*=\s*["']/.test(newAttrs)) {
+        newAttrs += ' style="display: block; max-width: 100%; height: auto;"';
       } else {
         // Add to existing style if not present
-        attrs = attrs.replace(/style=["']([^"']+)["']/, (_m: string, existingStyle: string) => {
-          if (!existingStyle.includes('display')) {
-            existingStyle += '; display: block;';
+        newAttrs = newAttrs.replace(/style\s*=\s*["']([^"']+)["']/gi, (_m: string, existingStyle: string) => {
+          let updatedStyle = existingStyle;
+          if (!updatedStyle.includes('display')) {
+            updatedStyle += '; display: block;';
           }
-          if (!existingStyle.includes('max-width')) {
-            existingStyle += '; max-width: 100%; height: auto;';
+          if (!updatedStyle.includes('max-width')) {
+            updatedStyle += '; max-width: 100%; height: auto;';
           }
-          return `style="${existingStyle}"`;
+          return `style="${updatedStyle}"`;
         });
       }
       
-      return `<img${attrs}>`;
+      // Ensure border="0" for email clients (prevents blue borders on linked images)
+      if (!/border\s*=\s*["']/.test(newAttrs)) {
+        newAttrs += ' border="0"';
+      }
+      
+      console.log('[Email] Processed image tag:', {
+        original: match.substring(0, 100),
+        src: srcValue,
+        hasAlt: /alt\s*=\s*["']/.test(newAttrs),
+        hasStyle: /style\s*=\s*["']/.test(newAttrs),
+      });
+      
+      return `<img${newAttrs}>`;
     }
   );
   
