@@ -206,8 +206,10 @@ function walkGraph(
     const renderedHtml = renderContent(emailNode.html_content || '', context);
     const renderedText = emailNode.text_content ? renderContent(emailNode.text_content, context) : undefined;
     
-    if (!context.email) {
-      console.warn(`[Compiler] Email node ${currentNodeId} requires email address, but none provided in context`);
+    // Check for valid email (not null, undefined, or empty string)
+    const emailAddress = context.email;
+    if (!emailAddress || typeof emailAddress !== 'string' || emailAddress.trim().length === 0) {
+      console.warn(`[Compiler] Email node ${currentNodeId} requires email address, but none provided in context. Context keys: ${Object.keys(context).join(', ')}, email value: ${JSON.stringify(emailAddress)}`);
       return currentTime;
     }
     
@@ -244,7 +246,7 @@ function walkGraph(
       run_id: context.run_id as string,
       node_id: currentNodeId,
       job_type: 'email',
-      email_address: context.email,
+      email_address: emailAddress.trim(),
       email_subject: renderedSubject,
       email_html: renderedHtml,
       email_text: renderedText,
