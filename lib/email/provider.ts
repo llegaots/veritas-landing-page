@@ -43,19 +43,14 @@ function preserveLineBreaks(html: string): string {
   console.log('[preserveLineBreaks] Has block elements:', hasBlockElements);
   
   if (hasBlockElements) {
-    // Already has block elements - preserve structure, but still convert newlines within text nodes
-    // This handles cases where user types text with line breaks inside existing HTML
-    // However, we need to be careful not to break existing structure
-    // For now, if it has block elements, we'll preserve as-is to avoid breaking structure
-    
-    // BUT: Remove any unwanted <br> tags that might have been added
-    // Check if there are <br> tags that shouldn't be there
+    // Already has block elements - preserve structure
+    // BUT: Remove any unwanted <br> tags that might have been added from textarea wrapping
     const brCount = (html.match(/<br\s*\/?>/gi) || []).length;
     console.log('[preserveLineBreaks] Found', brCount, '<br> tags in HTML with block elements');
     
     if (brCount > 0) {
       // Remove <br> tags that are between text (likely from textarea wrapping)
-      // Keep <br> tags that are at the end of lines or in specific contexts
+      // Pattern: text<br>text (not at end of line, not intentional)
       const cleaned = html.replace(/([^\s>])\s*<br\s*\/?>\s*([^\s<])/gi, '$1 $2');
       console.log('[preserveLineBreaks] Removed <br> tags between text, cleaned length:', cleaned.length);
       return cleaned;
@@ -854,7 +849,7 @@ ${htmlContent}
           from: fromEmail,
           to: options.to,
           subject: encodeSubject(options.subject),
-          html: isTextOnly ? undefined : htmlContent, // Explicitly undefined for text-only
+          html: isTextOnly ? undefined : htmlContent,
           text: options.text || undefined,
           replyTo: options.replyTo || undefined,
         };
@@ -863,26 +858,11 @@ ${htmlContent}
           from: mailOptions.from,
           to: mailOptions.to,
           subject: mailOptions.subject,
-          isTextOnly,
           hasHtml: !!mailOptions.html,
-          htmlValue: mailOptions.html === undefined ? 'undefined' : (mailOptions.html === null ? 'null' : `string(${mailOptions.html.length})`),
           htmlLength: mailOptions.html?.length || 0,
           hasText: !!mailOptions.text,
           textLength: mailOptions.text?.length || 0,
         });
-        
-        // CRITICAL: For text-only emails, ensure html is explicitly undefined (not null or empty string)
-        if (isTextOnly) {
-          if (mailOptions.html !== undefined) {
-            console.error('[SendEmail] ERROR: Text-only email but html is not undefined!', {
-              htmlType: typeof mailOptions.html,
-              htmlValue: mailOptions.html,
-            });
-            // Force it to undefined
-            mailOptions.html = undefined;
-          }
-          console.log('[SendEmail] CONFIRMED: Text-only email, html is undefined');
-        }
         
         const composer = new MailComposer(mailOptions);
         const message = await composer.compile().build();
@@ -1042,11 +1022,7 @@ ${htmlContent}
     
     // Convert buttons to email-friendly inline-styled versions (only if HTML exists)
     let htmlContent: string | undefined;
-    // Check if this is text-only
-    const isTextOnly = !options.html || options.html.trim().length === 0;
-    
-    if (!isTextOnly && options.html) {
-      // HTML email - process it
+    if (options.html) {
       // First, remove any unwanted <br> tags
       let processedHtml = removeUnwantedBrTags(options.html);
       // Then, preserve line breaks (convert newlines to <p> tags, NOT <br>)
@@ -1055,35 +1031,18 @@ ${htmlContent}
       processedHtml = removeUnwantedBrTags(processedHtml);
       // Then convert buttons
       htmlContent = convertButtonsToEmailFriendly(processedHtml);
-    } else {
-      // Text-only email
-      console.log('[SMTP] Text-only email - skipping HTML processing');
-      console.log('[SMTP] Text content length:', options.text?.length || 0);
-      htmlContent = undefined; // Explicitly undefined for text-only
     }
-    
-    console.log('[SMTP] Email type check:', {
-      isTextOnly,
-      hasHtml: !!htmlContent,
-      htmlLength: htmlContent?.length || 0,
-      hasText: !!options.text,
-      textLength: options.text?.length || 0,
-    });
     
     // Send email
     const info = await transporter.sendMail({
       from: fromEmail,
       to: options.to,
       subject: encodeSubject(options.subject),
-      html: isTextOnly ? undefined : htmlContent, // Explicitly undefined for text-only
+      html: htmlContent,
       text: options.text,
       replyTo: options.replyTo,
       encoding: 'utf-8', // Explicitly set UTF-8 encoding
     });
-    
-    if (isTextOnly) {
-      console.log('[SMTP] CONFIRMED: Text-only email sent, html was undefined');
-    }
 
     console.log('[SMTP] Email sent:', {
       messageId: info.messageId,

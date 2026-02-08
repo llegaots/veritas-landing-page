@@ -4,6 +4,7 @@
 import { SequenceSpec, SequenceNode, SendSmsNode, SendEmailNode, WaitNode, ConditionNode } from './spec';
 import { getOutgoingEdges } from './spec';
 import { snapToSendingWindow } from './send-window';
+import { normalizePlainText, unwrapHardWrappedText } from '@/lib/email/normalizePlainText';
 
 export interface JobContext {
   lead_id: string;
@@ -252,18 +253,64 @@ function walkGraph(
         console.warn(`[Compiler] Email node ${currentNodeId} is set to 'text' but has no text_content`);
         return currentTime;
       }
-      renderedText = renderContent(emailNode.text_content, context);
+      
+      // Render variables first
+      let rawText = renderContent(emailNode.text_content, context);
+      
+      // DEBUG: Log exact bytes to see what newlines we're dealing with
+      console.log(`[Compiler] Text Email node ${currentNodeId} - RAW text (JSON):`, JSON.stringify(rawText.substring(0, 200)));
+      console.log(`[Compiler] Text Email node ${currentNodeId} - Newline count:`, (rawText.match(/\n/g) || []).length);
+      console.log(`[Compiler] Text Email node ${currentNodeId} - Has \\r\\n:`, /\r\n/.test(rawText));
+      console.log(`[Compiler] Text Email node ${currentNodeId} - Has \\r:`, /\r/.test(rawText));
+      
+      // Normalize the text (removes unwanted line breaks from textarea wrapping)
+      renderedText = normalizePlainText(rawText);
+      
+      // Check if we still have mid-paragraph newlines (likely from hard-wrapping)
+      const singleNewlineCount = (renderedText.match(/(?<!\n)\n(?!\n)/g) || []).length;
+      const doubleNewlineCount = (renderedText.match(/\n\n/g) || []).length;
+      
+      console.log(`[Compiler] Text Email node ${currentNodeId} - After normalize:`);
+      console.log(`  - Text length: ${renderedText.length} chars`);
+      console.log(`  - Single newlines (mid-paragraph): ${singleNewlineCount}`);
+      console.log(`  - Double newlines (paragraph breaks): ${doubleNewlineCount}`);
+      
+      // If there are many single newlines, likely hard-wrapped - unwrap it
+      if (singleNewlineCount > doubleNewlineCount * 2 && singleNewlineCount > 5) {
+        console.log(`[Compiler] Text Email node ${currentNodeId} - Detected hard-wrapped text, unwrapping...`);
+        renderedText = unwrapHardWrappedText(renderedText);
+        console.log(`[Compiler] Text Email node ${currentNodeId} - After unwrap, length: ${renderedText.length} chars`);
+      }
+      
       console.log(`[Compiler] Processing Text Email node ${currentNodeId}:`);
       console.log(`  - Email type: text`);
-      console.log(`  - Text length: ${renderedText.length} chars`);
+      console.log(`  - Final text length: ${renderedText.length} chars`);
+      console.log(`[Compiler] Final text (first 300 chars):`, renderedText.substring(0, 300));
     } else {
       // HTML email (default)
       if (!emailNode.html_content || emailNode.html_content.trim().length === 0) {
         console.warn(`[Compiler] Email node ${currentNodeId} is set to 'html' but has no html_content`);
         return currentTime;
       }
-      renderedHtml = renderContent(emailNode.html_content || '', context);
-      renderedText = emailNode.text_content ? renderContent(emailNode.text_content, context) : undefined;
+      
+      // Render variables first
+      let rawHtml = renderContent(emailNode.html_content || '', context);
+      
+      // DEBUG: Log exact bytes to see what newlines we're dealing with
+      console.log(`[Compiler] HTML Email node ${currentNodeId} - RAW HTML (JSON, first 200):`, JSON.stringify(rawHtml.substring(0, 200)));
+      console.log(`[Compiler] HTML Email node ${currentNodeId} - Newline count:`, (rawHtml.match(/\n/g) || []).length);
+      console.log(`[Compiler] HTML Email node ${currentNodeId} - Has \\r\\n:`, /\r\n/.test(rawHtml));
+      console.log(`[Compiler] HTML Email node ${currentNodeId} - Has \\r:`, /\r/.test(rawHtml));
+      console.log(`[Compiler] HTML Email node ${currentNodeId} - Has <br> tags:`, /<br\s*\/?>/i.test(rawHtml));
+      
+      // Normalize newlines in HTML (but preserve HTML structure)
+      // This removes unwanted newlines from textarea wrapping while keeping HTML tags intact
+      renderedHtml = rawHtml
+        .replace(/\r\n/g, '\n') // Normalize to \n
+        .replace(/\r/g, '\n')
+        .replace(/\n{3,}/g, '\n\n') // Collapse excessive blank lines
+        .trim();
+      
       const brCountBefore = (renderedHtml.match(/<br\s*\/?>/gi) || []).length;
       const pCountBefore = (renderedHtml.match(/<p[\s>]/gi) || []).length;
       console.log(`[Compiler] Processing HTML Email node ${currentNodeId}:`);
@@ -272,6 +319,8 @@ function walkGraph(
       console.log(`  - HTML has ${brCountBefore} <br> tags BEFORE sending`);
       console.log(`  - HTML has ${pCountBefore} <p> tags BEFORE sending`);
       console.log(`  - HTML preview (first 300): ${renderedHtml.substring(0, 300)}`);
+      
+      renderedText = emailNode.text_content ? normalizePlainText(renderContent(emailNode.text_content, context)) : undefined;
     }
     
     // Calculate scheduled time: apply timing delay AFTER currentTime
