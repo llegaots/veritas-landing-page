@@ -836,9 +836,57 @@ ${htmlContent}
           }
         }
         } else {
-          console.log('[SendEmail] Text-only email - skipping HTML processing');
+          // Text-only email - convert to HTML that looks like plain text
+          console.log('[SendEmail] Text-only email - converting to HTML');
           console.log('[SendEmail] Text content length:', options.text?.length || 0);
           console.log('[SendEmail] Text preview (first 200):', options.text?.substring(0, 200) || '');
+          
+          if (options.text) {
+            // Convert plain text to HTML that looks like plain text
+            // Escape HTML entities
+            let textHtml = options.text
+              .replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;');
+            
+            // Convert newlines to HTML
+            // Split by double newlines (paragraphs) and single newlines (line breaks)
+            const paragraphs = textHtml.split(/\n{2,}/);
+            const formattedParagraphs = paragraphs.map(para => {
+              const trimmed = para.trim();
+              if (!trimmed) return '';
+              // Replace single newlines with <br> tags within paragraphs
+              const withBreaks = trimmed.replace(/\n/g, '<br>');
+              return `<p style="margin: 0 0 1em 0; font-family: Arial, sans-serif; font-size: 16px; line-height: 1.5; color: #333333;">${withBreaks}</p>`;
+            }).filter(Boolean);
+            
+            // Wrap in simple HTML structure that looks like plain text
+            htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+</head>
+<body style="margin: 0; padding: 0; background-color: #f4f4f4; font-family: Arial, sans-serif;">
+  <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f4f4f4;">
+    <tr>
+      <td align="center" style="padding: 20px 0;">
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <tr>
+            <td style="padding: 40px;">
+${formattedParagraphs.join('\n')}
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+            
+            console.log('[SendEmail] Converted text to HTML, length:', htmlContent.length);
+          }
         }
         
         // Use MailComposer to build proper RFC 2822 message (fixes MIME/header issues)
@@ -849,8 +897,8 @@ ${htmlContent}
           from: fromEmail,
           to: options.to,
           subject: encodeSubject(options.subject),
-          html: isTextOnly ? undefined : htmlContent,
-          text: options.text || undefined,
+          html: htmlContent, // Always send HTML now (either original HTML or converted from text)
+          text: options.text || undefined, // Keep text as fallback
           replyTo: options.replyTo || undefined,
         };
         
@@ -1021,6 +1069,7 @@ ${htmlContent}
     };
     
     // Convert buttons to email-friendly inline-styled versions (only if HTML exists)
+    // OR convert text to HTML that looks like plain text
     let htmlContent: string | undefined;
     if (options.html) {
       // First, remove any unwanted <br> tags
@@ -1031,6 +1080,53 @@ ${htmlContent}
       processedHtml = removeUnwantedBrTags(processedHtml);
       // Then convert buttons
       htmlContent = convertButtonsToEmailFriendly(processedHtml);
+    } else if (options.text) {
+      // Text-only email - convert to HTML that looks like plain text
+      console.log('[SMTP] Text-only email - converting to HTML');
+      
+      // Escape HTML entities
+      let textHtml = options.text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      
+      // Convert newlines to HTML
+      // Split by double newlines (paragraphs) and single newlines (line breaks)
+      const paragraphs = textHtml.split(/\n{2,}/);
+      const formattedParagraphs = paragraphs.map(para => {
+        const trimmed = para.trim();
+        if (!trimmed) return '';
+        // Replace single newlines with <br> tags within paragraphs
+        const withBreaks = trimmed.replace(/\n/g, '<br>');
+        return `<p style="margin: 0 0 1em 0; font-family: Arial, sans-serif; font-size: 16px; line-height: 1.5; color: #333333;">${withBreaks}</p>`;
+      }).filter(Boolean);
+      
+      // Wrap in simple HTML structure that looks like plain text
+      htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+</head>
+<body style="margin: 0; padding: 0; background-color: #f4f4f4; font-family: Arial, sans-serif;">
+  <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f4f4f4;">
+    <tr>
+      <td align="center" style="padding: 20px 0;">
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <tr>
+            <td style="padding: 40px;">
+${formattedParagraphs.join('\n')}
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+      
+      console.log('[SMTP] Converted text to HTML, length:', htmlContent.length);
     }
     
     // Send email
@@ -1038,8 +1134,8 @@ ${htmlContent}
       from: fromEmail,
       to: options.to,
       subject: encodeSubject(options.subject),
-      html: htmlContent,
-      text: options.text,
+      html: htmlContent, // Always send HTML now (either original HTML or converted from text)
+      text: options.text, // Keep text as fallback
       replyTo: options.replyTo,
       encoding: 'utf-8', // Explicitly set UTF-8 encoding
     });
