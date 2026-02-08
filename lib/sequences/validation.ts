@@ -46,7 +46,7 @@ export const SendEmailNodeSchema = z.object({
   id: z.string(),
   type: z.literal('send_email'),
   subject: z.string().min(0).max(200), // Email subject max length
-  email_type: z.enum(['html', 'text']).optional().default('text'), // Email format: 'text' (default, plain text) or 'html'
+  email_type: z.enum(['html', 'text']).optional().default('html'), // Email format: 'html' (default) or 'text'
   html_content: z.string().min(0).optional(), // HTML content (required if email_type is 'html')
   text_content: z.string().min(0).optional(), // Plain text content (required if email_type is 'text')
   variables: z.record(z.string(), z.string()).optional(),
@@ -56,13 +56,8 @@ export const SendEmailNodeSchema = z.object({
   if (data.email_type === 'text') {
     return data.text_content !== undefined && data.text_content.trim().length > 0;
   }
-  // If email_type is 'html' or undefined (defaults to 'text'), text_content must be provided
-  // But if email_type is explicitly 'html', html_content must be provided
-  if (data.email_type === 'html') {
-    return data.html_content !== undefined && data.html_content.trim().length > 0;
-  }
-  // Default to 'text' - text_content must be provided
-  return data.text_content !== undefined && data.text_content.trim().length > 0;
+  // If email_type is 'html' or undefined (default), html_content must be provided
+  return data.html_content !== undefined && data.html_content.trim().length > 0;
 }, {
   message: "Email content must match email_type: 'text' requires text_content, 'html' requires html_content",
 });

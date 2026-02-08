@@ -17,7 +17,7 @@ export function NodePropertiesPanel() {
   const { spec, selectedNodeId, setSelectedNodeId, applyOps } = useSequenceStore();
   const [message, setMessage] = useState('');
   const [emailSubject, setEmailSubject] = useState('');
-  const [emailType, setEmailType] = useState<'html' | 'text'>('text');
+  const [emailType, setEmailType] = useState<'html' | 'text'>('html');
   const [emailHtml, setEmailHtml] = useState('');
   const [emailText, setEmailText] = useState('');
   const [timingValue, setTimingValue] = useState('');
@@ -73,7 +73,7 @@ export function NodePropertiesPanel() {
     } else if (selectedNode && isEmailNode) {
       const emailNode = selectedNode as SendEmailNode;
       setEmailSubject(emailNode.subject || '');
-      setEmailType(emailNode.email_type || 'text'); // Default to 'text' for plain text emails
+      setEmailType(emailNode.email_type || 'html'); // Default to 'html' for backward compatibility
       setEmailHtml(emailNode.html_content || '');
       setEmailText(emailNode.text_content || '');
       
@@ -256,7 +256,7 @@ export function NodePropertiesPanel() {
       }
 
       // Update email type
-      const currentEmailType = currentNode.email_type || 'text';
+      const currentEmailType = currentNode.email_type || 'html';
       if (currentEmailType !== emailType) {
         patches.push({
           op: (currentNode.email_type !== undefined ? 'replace' : 'add') as 'replace' | 'add',

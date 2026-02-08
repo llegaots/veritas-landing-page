@@ -841,17 +841,9 @@ ${htmlContent}
           }
         }
         } else {
-          // PLAIN TEXT EMAIL - send exactly as-is, NO processing whatsoever
-          // Newlines are preserved EXACTLY where user pressed ENTER in the textarea
-          // NO conversion, NO HTML, NO modification - just plain text
-          const textContent = options.text || '';
-          console.log('[SendEmail] ===== PLAIN TEXT EMAIL - NO PROCESSING =====');
-          console.log('[SendEmail] Text content length:', textContent.length);
-          console.log('[SendEmail] Text newline count:', (textContent.match(/\n/g) || []).length);
-          console.log('[SendEmail] Text preview (first 500 chars):', textContent.substring(0, 500));
-          console.log('[SendEmail] Text preview (showing newlines as \\n):', textContent.substring(0, 500).replace(/\n/g, '\\n'));
-          console.log('[SendEmail] Text will be sent EXACTLY as-is - newlines ONLY where user pressed ENTER');
-          console.log('[SendEmail] ============================================');
+          console.log('[SendEmail] Text-only email - skipping HTML processing');
+          console.log('[SendEmail] Text content length:', options.text?.length || 0);
+          console.log('[SendEmail] Text preview (first 200):', options.text?.substring(0, 200) || '');
         }
         
         // Use MailComposer to build proper RFC 2822 message (fixes MIME/header issues)
@@ -862,7 +854,7 @@ ${htmlContent}
           from: fromEmail,
           to: options.to,
           subject: encodeSubject(options.subject),
-          html: isTextOnly ? undefined : htmlContent,
+          html: isTextOnly ? undefined : htmlContent, // Explicitly undefined for text-only
           text: options.text || undefined,
           replyTo: options.replyTo || undefined,
         };
@@ -871,11 +863,26 @@ ${htmlContent}
           from: mailOptions.from,
           to: mailOptions.to,
           subject: mailOptions.subject,
+          isTextOnly,
           hasHtml: !!mailOptions.html,
+          htmlValue: mailOptions.html === undefined ? 'undefined' : (mailOptions.html === null ? 'null' : `string(${mailOptions.html.length})`),
           htmlLength: mailOptions.html?.length || 0,
           hasText: !!mailOptions.text,
           textLength: mailOptions.text?.length || 0,
         });
+        
+        // CRITICAL: For text-only emails, ensure html is explicitly undefined (not null or empty string)
+        if (isTextOnly) {
+          if (mailOptions.html !== undefined) {
+            console.error('[SendEmail] ERROR: Text-only email but html is not undefined!', {
+              htmlType: typeof mailOptions.html,
+              htmlValue: mailOptions.html,
+            });
+            // Force it to undefined
+            mailOptions.html = undefined;
+          }
+          console.log('[SendEmail] CONFIRMED: Text-only email, html is undefined');
+        }
         
         const composer = new MailComposer(mailOptions);
         const message = await composer.compile().build();
