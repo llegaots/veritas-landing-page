@@ -463,26 +463,56 @@ async function sendViaSmtp(options: EmailSendOptions): Promise<EmailSendResult> 
         let htmlContent = options.html || '';
         
         // Check if HTML already has proper button styling (background-color in links)
-        // If it does, we might want to skip conversion to preserve the exact HTML
+        // If it does, skip conversion entirely to preserve the exact HTML
         const hasStyledButtons = /<a[^>]*style=["'][^"']*background-color[^"']*["'][^>]*>/i.test(htmlContent);
-        const hasCompleteStructure = /<html[^>]*>/i.test(htmlContent) && /<body[^>]*>/i.test(htmlContent);
+        const isTableBasedEmail = /<table[^>]*role=["']presentation["']/i.test(htmlContent);
         
-        // Only run conversion if HTML doesn't already have properly styled buttons
-        // This preserves user's exact HTML if they've already styled it correctly
-        if (!hasStyledButtons) {
+        // Skip conversion if:
+        // 1. HTML already has styled buttons (user has done the work)
+        // 2. It's a table-based email template (common professional email format)
+        // This preserves user's exact HTML structure
+        if (hasStyledButtons || isTableBasedEmail) {
+          console.log('[Gmail API] HTML already has styled buttons or is table-based email, skipping conversion to preserve exact formatting');
+          // Still process images to ensure they have proper attributes
+          htmlContent = htmlContent.replace(
+            /<img([^>]*?)>/gi,
+            (match, attrs) => {
+              const srcMatch = attrs.match(/src\s*=\s*["']([^"']+)["']/) || attrs.match(/src\s*=\s*([^\s>]+)/);
+              if (!srcMatch) return match;
+              
+              let newAttrs = attrs;
+              const srcValue = srcMatch[1];
+              
+              // Normalize src
+              newAttrs = newAttrs.replace(/src\s*=\s*["']?([^"'\s>]+)["']?/gi, `src="${srcValue}"`);
+              
+              // Ensure alt exists
+              if (!/alt\s*=\s*["']/.test(newAttrs)) {
+                const altText = srcValue.split('/').pop()?.split('.')[0] || 'Image';
+                newAttrs += ` alt="${altText}"`;
+              }
+              
+              // Ensure border="0" for email clients
+              if (!/border\s*=\s*["']/.test(newAttrs)) {
+                newAttrs += ' border="0"';
+              }
+              
+              return `<img${newAttrs}>`;
+            }
+          );
+        } else {
           console.log('[Gmail API] Converting buttons/links to email-friendly format');
           htmlContent = convertButtonsToEmailFriendly(htmlContent);
-        } else {
-          console.log('[Gmail API] HTML already has styled buttons, skipping conversion to preserve exact formatting');
         }
         
         // Wrap HTML in proper email structure if it's not already wrapped
-        // IMPORTANT: Only wrap if the HTML doesn't already have a complete structure
-        // Check if it's a complete HTML document first
+        // IMPORTANT: Check if it's a table-based email template (common pattern)
+        // Table-based emails should be wrapped in body/html but preserve the table structure
         const trimmedHtml = htmlContent.trim();
         const hasDoctype = trimmedHtml.toLowerCase().startsWith('<!doctype');
         const hasHtmlTag = /<html[^>]*>/i.test(trimmedHtml);
         const hasBodyTag = /<body[^>]*>/i.test(trimmedHtml);
+        const isTableBased = /<table[^>]*role=["']presentation["']/i.test(trimmedHtml);
         
         // If it's already a complete HTML document, don't wrap it
         if (hasDoctype && hasHtmlTag && hasBodyTag) {
@@ -506,6 +536,20 @@ async function sendViaSmtp(options: EmailSendOptions): Promise<EmailSendResult> 
 ${htmlContent}
 </html>`;
           console.log('[Gmail API] Wrapped body content in HTML structure');
+        } else if (isTableBased) {
+          // Table-based email template - wrap in minimal structure, preserve table
+          htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+</head>
+<body style="margin: 0; padding: 0; background-color: #ffffff;">
+${htmlContent}
+</body>
+</html>`;
+          console.log('[Gmail API] Wrapped table-based email template in HTML structure');
         } else {
           // No structure at all, wrap everything
           htmlContent = `<!DOCTYPE html>
