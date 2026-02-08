@@ -679,31 +679,6 @@ async function sendViaSmtp(options: EmailSendOptions): Promise<EmailSendResult> 
             htmlContent = htmlContent.replace(/background-color\s*:\s*[^;]+;?/gi, '');
             htmlContent = htmlContent.replace(/background\s*:\s*[^;]+;?/gi, '');
             console.log('[Gmail API] Removed backgrounds from complete HTML document');
-          } else {
-              // Complete document but no width container - need to add it
-              // Extract body content and wrap it
-              const bodyStart = htmlContent.indexOf('<body');
-              const bodyEnd = htmlContent.indexOf('</body>');
-              
-              if (bodyStart >= 0 && bodyEnd >= 0) {
-                const bodyTagEnd = htmlContent.indexOf('>', bodyStart);
-                if (bodyTagEnd >= 0) {
-                  const bodyContent = htmlContent.substring(bodyTagEnd + 1, bodyEnd).trim();
-                  const bodyTag = htmlContent.substring(bodyStart, bodyTagEnd + 1);
-                  
-                  // Simple wrap - no backgrounds, just preserve body content
-                  htmlContent = htmlContent.substring(0, bodyStart) + bodyTag.replace(/style=["'][^"']*background[^"']*["']/gi, '').replace(/style=["']([^"']*)["']/gi, (m, style) => {
-                    // Remove background from body style, keep other styles
-                    const cleanStyle = style.replace(/background[^;]*;?/gi, '').replace(/;\s*;/g, ';').trim();
-                    return cleanStyle ? `style="${cleanStyle}"` : '';
-                  }) + `
-${bodyContent}
-</body>` + htmlContent.substring(bodyEnd + 7);
-                  
-                  console.log('[Gmail API] Added width container to complete HTML document');
-                }
-              }
-            }
           } else if (hasHtmlTag && hasBodyTag) {
             // Has html and body tags but no doctype, add doctype
             if (!hasDoctype) {
