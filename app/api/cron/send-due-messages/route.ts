@@ -234,12 +234,16 @@ export async function GET(request: NextRequest) {
           } else {
             // HTML email (with optional text fallback)
             const htmlLength = job.email_html?.length || 0;
-            const htmlPreview = job.email_html?.substring(0, 200) || '';
-            const htmlEndPreview = job.email_html?.substring(Math.max(0, htmlLength - 200)) || '';
+            const htmlPreview = job.email_html?.substring(0, 500) || '';
+            const htmlEndPreview = job.email_html?.substring(Math.max(0, htmlLength - 500)) || '';
+            const brCount = (job.email_html?.match(/<br\s*\/?>/gi) || []).length;
+            const pCount = (job.email_html?.match(/<p[\s>]/gi) || []).length;
             console.log(`[Cron] Email job ${job.id} is HTML email`);
             console.log(`[Cron] HTML content length: ${htmlLength} chars`);
-            console.log(`[Cron] HTML preview (first 200): ${htmlPreview}`);
-            console.log(`[Cron] HTML preview (last 200): ${htmlEndPreview}`);
+            console.log(`[Cron] HTML has ${brCount} <br> tags`);
+            console.log(`[Cron] HTML has ${pCount} <p> tags`);
+            console.log(`[Cron] HTML preview (first 500): ${htmlPreview}`);
+            console.log(`[Cron] HTML preview (last 500): ${htmlEndPreview}`);
 
             sendResult = await sendEmail({
               to: job.email_address,

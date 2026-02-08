@@ -264,9 +264,14 @@ function walkGraph(
       }
       renderedHtml = renderContent(emailNode.html_content || '', context);
       renderedText = emailNode.text_content ? renderContent(emailNode.text_content, context) : undefined;
+      const brCountBefore = (renderedHtml.match(/<br\s*\/?>/gi) || []).length;
+      const pCountBefore = (renderedHtml.match(/<p[\s>]/gi) || []).length;
       console.log(`[Compiler] Processing HTML Email node ${currentNodeId}:`);
       console.log(`  - Email type: html`);
       console.log(`  - HTML length: ${renderedHtml.length} chars`);
+      console.log(`  - HTML has ${brCountBefore} <br> tags BEFORE sending`);
+      console.log(`  - HTML has ${pCountBefore} <p> tags BEFORE sending`);
+      console.log(`  - HTML preview (first 300): ${renderedHtml.substring(0, 300)}`);
     }
     
     // Calculate scheduled time: apply timing delay AFTER currentTime

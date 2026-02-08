@@ -2,6 +2,25 @@
 // Supports Gmail/SMTP with a unified interface
 
 /**
+ * Remove unwanted <br> tags that are between text (not intentional line breaks)
+ * This fixes the issue where every line has a <br> tag after it
+ */
+function removeUnwantedBrTags(html: string): string {
+  // Remove <br> tags that are between non-whitespace characters
+  // These are likely from textarea wrapping, not intentional line breaks
+  let cleaned = html.replace(/([^\s>])\s*<br\s*\/?>\s*([^\s<])/gi, '$1 $2');
+  
+  // Remove <br> tags that are followed immediately by another <br> (double breaks)
+  cleaned = cleaned.replace(/<br\s*\/?>\s*<br\s*\/?>/gi, '<br>');
+  
+  // Remove <br> tags at the start of paragraphs (they're redundant)
+  cleaned = cleaned.replace(/<p([^>]*)>\s*<br\s*\/?>\s*/gi, '<p$1>');
+  
+  console.log('[removeUnwantedBrTags] Removed unwanted <br> tags');
+  return cleaned;
+}
+
+/**
  * Preserve line breaks in HTML content by converting newlines to <br> tags
  * This ensures that when users press Enter in the editor, it shows as a line break in the email
  * 
@@ -9,18 +28,39 @@
  * - If content has block elements (<p>, <div>, <table>, etc.), preserve as-is (already formatted)
  * - If content is plain text or only has inline tags, convert newlines to <br> or <p> tags
  * - Double newlines (\n\n) create paragraph breaks
- * - Single newlines (\n) create <br> tags
+ * - Single newlines (\n) are collapsed to spaces (NOT converted to <br>)
  */
 function preserveLineBreaks(html: string): string {
+  console.log('[preserveLineBreaks] INPUT HTML length:', html.length);
+  console.log('[preserveLineBreaks] INPUT HTML preview (first 500):', html.substring(0, 500));
+  console.log('[preserveLineBreaks] INPUT HTML has <br> tags:', /<br\s*\/?>/i.test(html));
+  console.log('[preserveLineBreaks] INPUT HTML has <p> tags:', /<p[\s>]/i.test(html));
+  
   // Check if content already has block-level HTML elements
   // If it does, assume the user has already formatted it correctly
   const hasBlockElements = /<(p|div|table|tr|td|th|section|article|header|footer|h[1-6]|ul|ol|li|blockquote|pre)[\s>]/i.test(html);
+  
+  console.log('[preserveLineBreaks] Has block elements:', hasBlockElements);
   
   if (hasBlockElements) {
     // Already has block elements - preserve structure, but still convert newlines within text nodes
     // This handles cases where user types text with line breaks inside existing HTML
     // However, we need to be careful not to break existing structure
     // For now, if it has block elements, we'll preserve as-is to avoid breaking structure
+    
+    // BUT: Remove any unwanted <br> tags that might have been added
+    // Check if there are <br> tags that shouldn't be there
+    const brCount = (html.match(/<br\s*\/?>/gi) || []).length;
+    console.log('[preserveLineBreaks] Found', brCount, '<br> tags in HTML with block elements');
+    
+    if (brCount > 0) {
+      // Remove <br> tags that are between text (likely from textarea wrapping)
+      // Keep <br> tags that are at the end of lines or in specific contexts
+      const cleaned = html.replace(/([^\s>])\s*<br\s*\/?>\s*([^\s<])/gi, '$1 $2');
+      console.log('[preserveLineBreaks] Removed <br> tags between text, cleaned length:', cleaned.length);
+      return cleaned;
+    }
+    
     return html;
   }
   
@@ -46,6 +86,7 @@ function preserveLineBreaks(html: string): string {
         // Replace single newlines with spaces - this prevents unwanted <br> tags
         // Only double newlines create paragraph breaks
         const cleaned = trimmed.replace(/\n/g, ' ').replace(/\s+/g, ' '); // Collapse multiple spaces
+        console.log('[preserveLineBreaks] Processed paragraph, original length:', trimmed.length, 'cleaned length:', cleaned.length);
         // Ensure paragraph fills full width of container (no max-width constraint)
         return `<p style="margin: 0 0 1em 0; line-height: 1.5; width: 100%; max-width: 100%;">${cleaned}</p>`;
       })
@@ -562,9 +603,21 @@ async function sendViaSmtp(options: EmailSendOptions): Promise<EmailSendResult> 
         if (!isTextOnly && options.html) {
           htmlContent = options.html;
           
-          // First, preserve line breaks (convert newlines to <br> or <p> tags)
-          // This ensures that when users press Enter in the editor, it shows as a line break in the email
+          // First, remove any unwanted <br> tags that might already be in the HTML
+          htmlContent = removeUnwantedBrTags(htmlContent);
+          
+          // Then, preserve line breaks (convert newlines to <p> tags, NOT <br>)
+          // This ensures that when users press Enter in the editor, it shows as a paragraph break
+          console.log('[Gmail API] BEFORE preserveLineBreaks - HTML length:', htmlContent.length);
+          console.log('[Gmail API] BEFORE preserveLineBreaks - HTML preview:', htmlContent.substring(0, 300));
+          console.log('[Gmail API] BEFORE preserveLineBreaks - has <br> tags:', /<br\s*\/?>/i.test(htmlContent));
           htmlContent = preserveLineBreaks(htmlContent);
+          console.log('[Gmail API] AFTER preserveLineBreaks - HTML length:', htmlContent.length);
+          console.log('[Gmail API] AFTER preserveLineBreaks - HTML preview:', htmlContent.substring(0, 300));
+          console.log('[Gmail API] AFTER preserveLineBreaks - has <br> tags:', /<br\s*\/?>/i.test(htmlContent));
+          
+          // Final cleanup: remove any <br> tags that were added (shouldn't be any, but just in case)
+          htmlContent = removeUnwantedBrTags(htmlContent);
           
           // Check if HTML already has proper button styling (background-color in links)
           // If it does, skip conversion entirely to preserve the exact HTML
@@ -975,8 +1028,12 @@ ${htmlContent}
     // Convert buttons to email-friendly inline-styled versions (only if HTML exists)
     let htmlContent: string | undefined;
     if (options.html) {
-      // First, preserve line breaks (convert newlines to <br> or <p> tags)
-      let processedHtml = preserveLineBreaks(options.html);
+      // First, remove any unwanted <br> tags
+      let processedHtml = removeUnwantedBrTags(options.html);
+      // Then, preserve line breaks (convert newlines to <p> tags, NOT <br>)
+      processedHtml = preserveLineBreaks(processedHtml);
+      // Final cleanup
+      processedHtml = removeUnwantedBrTags(processedHtml);
       // Then convert buttons
       htmlContent = convertButtonsToEmailFriendly(processedHtml);
     }
