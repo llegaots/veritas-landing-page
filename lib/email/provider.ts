@@ -858,7 +858,8 @@ ${htmlContent}
           to: options.to,
           subject: encodeSubject(options.subject),
           html: isTextOnly ? undefined : htmlContent,
-          text: options.text || undefined,
+          // PLAIN TEXT: Send EXACTLY as-is, NO processing, newlines ONLY where user pressed ENTER
+          text: isTextOnly ? (options.text || undefined) : undefined,
           replyTo: options.replyTo || undefined,
         };
         

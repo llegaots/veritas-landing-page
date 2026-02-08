@@ -247,15 +247,19 @@ function walkGraph(
     let renderedText: string | undefined;
     
     if (emailType === 'text') {
-      // Text-only email
+      // Text-only email - send EXACTLY as typed, only variable substitution, NO other processing
       if (!emailNode.text_content || emailNode.text_content.trim().length === 0) {
         console.warn(`[Compiler] Email node ${currentNodeId} is set to 'text' but has no text_content`);
         return currentTime;
       }
+      // Only do variable substitution - NO HTML escaping, NO newline processing, NOTHING else
+      // Newlines are preserved EXACTLY where user pressed ENTER
       renderedText = renderContent(emailNode.text_content, context);
       console.log(`[Compiler] Processing Text Email node ${currentNodeId}:`);
-      console.log(`  - Email type: text`);
+      console.log(`  - Email type: text (PLAIN TEXT - NO PROCESSING)`);
       console.log(`  - Text length: ${renderedText.length} chars`);
+      console.log(`  - Newline count: ${(renderedText.match(/\n/g) || []).length}`);
+      console.log(`  - Text will be sent EXACTLY as-is - newlines ONLY where user pressed ENTER`);
     } else {
       // HTML email (default)
       if (!emailNode.html_content || emailNode.html_content.trim().length === 0) {
