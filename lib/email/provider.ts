@@ -2,6 +2,76 @@
 // Supports Gmail/SMTP with a unified interface
 
 /**
+ * Preserve line breaks in HTML content by converting newlines to <br> tags
+ * This ensures that when users press Enter in the editor, it shows as a line break in the email
+ * 
+ * Rules:
+ * - If content has block elements (<p>, <div>, <table>, etc.), preserve as-is (already formatted)
+ * - If content is plain text or only has inline tags, convert newlines to <br> or <p> tags
+ * - Double newlines (\n\n) create paragraph breaks
+ * - Single newlines (\n) create <br> tags
+ */
+function preserveLineBreaks(html: string): string {
+  // Check if content already has block-level HTML elements
+  // If it does, assume the user has already formatted it correctly
+  const hasBlockElements = /<(p|div|table|tr|td|th|section|article|header|footer|h[1-6]|ul|ol|li|blockquote|pre)[\s>]/i.test(html);
+  
+  if (hasBlockElements) {
+    // Already has block elements - preserve structure, but still convert newlines within text nodes
+    // This handles cases where user types text with line breaks inside existing HTML
+    // However, we need to be careful not to break existing structure
+    // For now, if it has block elements, we'll preserve as-is to avoid breaking structure
+    return html;
+  }
+  
+  // No block elements - safe to convert newlines
+  // Normalize line endings first
+  let normalized = html.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  
+  // Check if there are any HTML tags at all
+  const hasAnyTags = /<[a-z][\s\S]*>/i.test(normalized);
+  
+  if (!hasAnyTags) {
+    // Pure plain text - convert newlines
+    // Double newlines (\n\n) = paragraph break
+    // Single newlines (\n) = line break (<br>)
+    return normalized
+      .replace(/\n{3,}/g, '\n\n') // Collapse 3+ newlines to 2
+      .split('\n\n') // Split on double newlines (paragraphs)
+      .map(para => {
+        const trimmed = para.trim();
+        if (!trimmed) return '';
+        // Convert single newlines within paragraph to <br>
+        return `<p style="margin: 0 0 1em 0; line-height: 1.5;">${trimmed.replace(/\n/g, '<br>')}</p>`;
+      })
+      .filter(Boolean)
+      .join('\n');
+  }
+  
+  // Has some HTML tags but no block elements (might be inline tags like <a>, <strong>, etc.)
+  // We need to preserve the tags but convert newlines
+  // Split on double newlines first, then process each part
+  const parts = normalized
+    .replace(/\n{3,}/g, '\n\n') // Collapse 3+ newlines to 2
+    .split('\n\n'); // Split on double newlines (paragraphs)
+  
+  return parts
+    .map(para => {
+      const trimmed = para.trim();
+      if (!trimmed) return '';
+      // Convert single newlines within paragraph to <br>
+      const withBreaks = trimmed.replace(/\n/g, '<br>');
+      // Wrap in paragraph if not already wrapped
+      if (!/^<p[\s>]/i.test(withBreaks)) {
+        return `<p style="margin: 0 0 1em 0; line-height: 1.5;">${withBreaks}</p>`;
+      }
+      return withBreaks;
+    })
+    .filter(Boolean)
+    .join('\n');
+}
+
+/**
  * Convert buttons and links in HTML to email-friendly inline-styled versions
  * Email clients strip CSS classes and <style> tags, so buttons need inline styles
  * 
@@ -472,6 +542,11 @@ async function sendViaSmtp(options: EmailSendOptions): Promise<EmailSendResult> 
         
         if (!isTextOnly && options.html) {
           htmlContent = options.html;
+          
+          // First, preserve line breaks (convert newlines to <br> or <p> tags)
+          // This ensures that when users press Enter in the editor, it shows as a line break in the email
+          htmlContent = preserveLineBreaks(htmlContent);
+          
           // Check if HTML already has proper button styling (background-color in links)
           // If it does, skip conversion entirely to preserve the exact HTML
           const hasStyledButtons = /<a[^>]*style=["'][^"']*background-color[^"']*["'][^>]*>/i.test(htmlContent);
@@ -601,6 +676,7 @@ ${htmlContent}
           if (hasPlaceholder) {
             console.warn('[SendEmail] WARNING: Found unresolved {{placeholders}} in HTML - variables may not have been rendered!');
           }
+        }
         } else {
           console.log('[SendEmail] Text-only email - skipping HTML processing');
           console.log('[SendEmail] Text content length:', options.text?.length || 0);
@@ -789,7 +865,10 @@ ${htmlContent}
     // Convert buttons to email-friendly inline-styled versions (only if HTML exists)
     let htmlContent: string | undefined;
     if (options.html) {
-      htmlContent = convertButtonsToEmailFriendly(options.html);
+      // First, preserve line breaks (convert newlines to <br> or <p> tags)
+      let processedHtml = preserveLineBreaks(options.html);
+      // Then convert buttons
+      htmlContent = convertButtonsToEmailFriendly(processedHtml);
     }
     
     // Send email
@@ -833,7 +912,9 @@ async function sendViaMock(options: EmailSendOptions): Promise<EmailSendResult> 
   console.log('[MOCK EMAIL]', {
     to: options.to,
     subject: options.subject,
-    htmlLength: options.html.length,
+    htmlLength: options.html?.length || 0,
+    textLength: options.text?.length || 0,
+    isTextOnly: !options.html,
     metadata: options.metadata,
   });
 
