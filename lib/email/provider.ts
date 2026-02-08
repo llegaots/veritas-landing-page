@@ -798,13 +798,13 @@ ${htmlContent}
               .replace(/</g, '&lt;')
               .replace(/>/g, '&gt;');
             
-            // Convert newlines to HTML
-            // Split by double newlines (paragraphs) and single newlines (line breaks)
+            // Convert newlines to HTML - preserve exact formatting
+            // Split by double newlines (paragraphs) and preserve single newlines as <br>
             const paragraphs = textHtml.split(/\n{2,}/);
             const formattedParagraphs = paragraphs.map(para => {
               const trimmed = para.trim();
               if (!trimmed) return '';
-              // Replace single newlines with <br> tags within paragraphs
+              // Replace ALL newlines with <br> tags to preserve exact formatting
               const withBreaks = trimmed.replace(/\n/g, '<br>');
               return `<p style="margin: 0 0 1em 0; font-family: Arial, sans-serif; font-size: 16px; line-height: 1.5; color: #333333;">${withBreaks}</p>`;
             }).filter(Boolean);
@@ -1027,13 +1027,13 @@ ${formattedParagraphs.join('\n')}
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;');
       
-      // Convert newlines to HTML
-      // Split by double newlines (paragraphs) and single newlines (line breaks)
+      // Convert newlines to HTML - preserve exact formatting
+      // Split by double newlines (paragraphs) and preserve single newlines as <br>
       const paragraphs = textHtml.split(/\n{2,}/);
       const formattedParagraphs = paragraphs.map(para => {
         const trimmed = para.trim();
         if (!trimmed) return '';
-        // Replace single newlines with <br> tags within paragraphs
+        // Replace ALL newlines with <br> tags to preserve exact formatting
         const withBreaks = trimmed.replace(/\n/g, '<br>');
         return `<p style="margin: 0 0 1em 0; font-family: Arial, sans-serif; font-size: 16px; line-height: 1.5; color: #333333;">${withBreaks}</p>`;
       }).filter(Boolean);

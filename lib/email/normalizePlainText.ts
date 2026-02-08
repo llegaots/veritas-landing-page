@@ -26,34 +26,27 @@ export function normalizePlainText(input: string): string {
 }
 
 /**
- * Unwrap plain text - makes textarea behave like "normal writing"
+ * Preserve exact formatting from textarea - don't unwrap anything
  * 
  * Rules:
- * - Only blank lines (2+ newlines) create paragraph breaks
- * - Single line breaks inside a paragraph get treated as spaces
- * - This prevents textarea word-wrapping from creating unwanted line breaks
+ * - Preserve ALL line breaks exactly as typed
+ * - Only normalize newline types (\r\n → \n)
+ * - Only collapse excessive blank lines (3+ newlines → 2)
+ * - This ensures the email looks exactly like what the user typed in the textarea
  * 
- * Result: Paragraphs become flowing text (no "cut off" look), intentional blank lines stay
+ * Result: Exact formatting preserved - bullet lists, line breaks, etc. all stay intact
  */
 export function unwrapPlainText(input: string): string {
   if (!input) return '';
 
+  // Normalize newline types but preserve all line breaks
   let s = input.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
-  // Paragraphs are separated by 1+ blank lines
-  const paras = s.split(/\n{2,}/);
+  // Only collapse excessive blank lines (3+ newlines → 2)
+  s = s.replace(/\n{3,}/g, '\n\n');
 
-  const fixed = paras.map(p =>
-    p
-      .split('\n')                 // lines within a paragraph
-      .map(line => line.trim())
-      .filter(Boolean)
-      .join(' ')                   // join lines into one flowing paragraph
-      .replace(/\s+/g, ' ')
-      .trim()
-  );
-
-  return fixed.join('\n\n').trim(); // keep paragraph spacing
+  // Trim outer whitespace but preserve all internal formatting
+  return s.trim();
 }
 
 /**
