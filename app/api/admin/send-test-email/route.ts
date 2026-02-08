@@ -80,18 +80,41 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No email nodes found in sequence' }, { status: 404 });
     }
 
-    // Get query parameter to specify which email (default to second, index 1)
+    // Get query parameter to specify which email (by index or subject search)
     const { searchParams } = new URL(request.url);
-    const emailIndex = parseInt(searchParams.get('index') || '1', 10);
+    const emailIndexParam = searchParams.get('index');
+    const subjectSearch = searchParams.get('subject');
     
-    if (emailIndex < 0 || emailIndex >= emailNodes.length) {
-      return NextResponse.json(
-        { error: `Email index ${emailIndex} out of range. Sequence has ${emailNodes.length} email node(s). Use ?index=0 to ${emailNodes.length - 1}` },
-        { status: 400 }
+    let selectedEmailNode: any;
+    
+    if (subjectSearch) {
+      // Search by subject
+      selectedEmailNode = emailNodes.find((node: any) => 
+        node.subject && node.subject.toLowerCase().includes(subjectSearch.toLowerCase())
       );
+      
+      if (!selectedEmailNode) {
+        return NextResponse.json(
+          { 
+            error: `Email with subject containing "${subjectSearch}" not found`,
+            availableSubjects: emailNodes.map((n: any, i: number) => ({ index: i, subject: n.subject || '(no subject)' }))
+          },
+          { status: 404 }
+        );
+      }
+    } else {
+      // Use index (default to 0 for first email)
+      const emailIndex = parseInt(emailIndexParam || '0', 10);
+      
+      if (emailIndex < 0 || emailIndex >= emailNodes.length) {
+        return NextResponse.json(
+          { error: `Email index ${emailIndex} out of range. Sequence has ${emailNodes.length} email node(s). Use ?index=0 to ${emailNodes.length - 1}` },
+          { status: 400 }
+        );
+      }
+      
+      selectedEmailNode = emailNodes[emailIndex];
     }
-
-    const selectedEmailNode = emailNodes[emailIndex];
     const emailType = selectedEmailNode.email_type || 'html';
     
     // Get the content
@@ -144,6 +167,7 @@ export async function POST(request: NextRequest) {
     const result = await sendEmail(emailOptions);
 
     if (result.success) {
+      const emailIndex = emailNodes.findIndex((n: any) => n.id === selectedEmailNode.id);
       return NextResponse.json({
         success: true,
         messageId: result.messageId,
