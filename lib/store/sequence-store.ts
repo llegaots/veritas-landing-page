@@ -597,7 +597,7 @@ export const useSequenceStore = create<SequenceStore>((set, get) => ({
       id: newId,
       type: 'send_email',
       subject: '',
-      email_type: 'html', // Default to HTML for new nodes
+      email_type: 'text', // Default to plain text for new nodes
       html_content: '',
       timing: '',
     };

@@ -14,10 +14,10 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { to, html } = body;
+    const { to, text } = body;
 
-    // Test HTML content that simulates what the user types
-    const testHtml = html || `Hi TEST,
+    // Plain text content - no HTML, just like someone typed it
+    const testText = text || `Hi TEST,
 
 Thanks for requesting more information on Horizon Park, a workforce-housing multifamily opportunity in Edmonds, Seattle. If helpful, the next step is a short 10-minute Zoom to see whether this opportunity aligns with your goals and risk tolerance. There's no obligation, the call is simply to walk through the structure, risks, and determine if it's a good fit.
 
@@ -29,19 +29,18 @@ If now isn't the right time, that's completely fine as well.
 Best,
 Veritas Equity Partners`;
 
-    console.log('[Test Email] INPUT HTML:');
-    console.log('[Test Email] Length:', testHtml.length);
-    console.log('[Test Email] Has newlines:', testHtml.includes('\n'));
-    console.log('[Test Email] Newline count:', (testHtml.match(/\n/g) || []).length);
-    console.log('[Test Email] Has <br> tags:', /<br\s*\/?>/i.test(testHtml));
-    console.log('[Test Email] Has <p> tags:', /<p[\s>]/i.test(testHtml));
-    console.log('[Test Email] Preview (first 500 chars):', testHtml.substring(0, 500));
+    console.log('[Test Email] PLAIN TEXT ONLY - NO HTML');
+    console.log('[Test Email] Text length:', testText.length);
+    console.log('[Test Email] Has newlines:', testText.includes('\n'));
+    console.log('[Test Email] Newline count:', (testText.match(/\n/g) || []).length);
+    console.log('[Test Email] Preview (first 500 chars):', testText.substring(0, 500));
     console.log('');
 
     const result = await sendEmail({
       to: to || 'lucaslegatos123@gmail.com',
       subject: 'TEST - Debug Email (next steps for Horizon Park)',
-      html: testHtml,
+      text: testText,
+      // NO HTML - plain text only
     });
 
     return NextResponse.json({
