@@ -1042,7 +1042,11 @@ ${htmlContent}
     
     // Convert buttons to email-friendly inline-styled versions (only if HTML exists)
     let htmlContent: string | undefined;
-    if (options.html) {
+    // Check if this is text-only
+    const isTextOnly = !options.html || options.html.trim().length === 0;
+    
+    if (!isTextOnly && options.html) {
+      // HTML email - process it
       // First, remove any unwanted <br> tags
       let processedHtml = removeUnwantedBrTags(options.html);
       // Then, preserve line breaks (convert newlines to <p> tags, NOT <br>)
@@ -1051,18 +1055,35 @@ ${htmlContent}
       processedHtml = removeUnwantedBrTags(processedHtml);
       // Then convert buttons
       htmlContent = convertButtonsToEmailFriendly(processedHtml);
+    } else {
+      // Text-only email
+      console.log('[SMTP] Text-only email - skipping HTML processing');
+      console.log('[SMTP] Text content length:', options.text?.length || 0);
+      htmlContent = undefined; // Explicitly undefined for text-only
     }
+    
+    console.log('[SMTP] Email type check:', {
+      isTextOnly,
+      hasHtml: !!htmlContent,
+      htmlLength: htmlContent?.length || 0,
+      hasText: !!options.text,
+      textLength: options.text?.length || 0,
+    });
     
     // Send email
     const info = await transporter.sendMail({
       from: fromEmail,
       to: options.to,
       subject: encodeSubject(options.subject),
-      html: htmlContent,
+      html: isTextOnly ? undefined : htmlContent, // Explicitly undefined for text-only
       text: options.text,
       replyTo: options.replyTo,
       encoding: 'utf-8', // Explicitly set UTF-8 encoding
     });
+    
+    if (isTextOnly) {
+      console.log('[SMTP] CONFIRMED: Text-only email sent, html was undefined');
+    }
 
     console.log('[SMTP] Email sent:', {
       messageId: info.messageId,
