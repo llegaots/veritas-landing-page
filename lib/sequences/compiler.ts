@@ -105,7 +105,27 @@ function parseDuration(duration: string, phoneNumber?: string): number {
 }
 
 /**
+ * Escape HTML text content (for use in text nodes)
+ */
+function escapeHtmlText(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+/**
+ * Escape HTML attribute values (for use in href, src, alt, etc.)
+ */
+function escapeHtmlAttr(s: string): string {
+  return escapeHtmlText(s)
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
  * Render content with variable substitution (for SMS or email)
+ * IMPORTANT: Escapes HTML to prevent malformed attributes that Gmail strips
  */
 function renderContent(content: string, context: JobContext): string {
   let rendered = content;
@@ -122,12 +142,22 @@ function renderContent(content: string, context: JobContext): string {
       if (value === undefined) break;
     }
     
-    if (value === undefined) {
+    if (value === undefined || value === null) {
       console.warn(`[renderContent] Variable "${trimmedVarPath}" not found in context. Available keys: ${Object.keys(context).join(', ')}`);
       return match; // Return original placeholder if not found
     }
     
-    return String(value);
+    const str = String(value);
+    
+    // Heuristic: If the value looks like a URL, escape it for use in attributes
+    // This prevents & in URLs from breaking href/src attributes (Gmail strips malformed tags)
+    if (/^https?:\/\//i.test(str)) {
+      return escapeHtmlAttr(str);
+    }
+    
+    // For text content, escape HTML entities but preserve structure
+    // Note: This is safe because we're replacing {{var}} placeholders, not raw HTML
+    return escapeHtmlText(str);
   });
   
   return rendered;

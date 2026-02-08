@@ -566,40 +566,83 @@ ${htmlContent}
           console.log('[Gmail API] Wrapped content in complete HTML structure');
         }
         
-        console.log(`[Gmail API] HTML content length: ${htmlContent.length} chars`);
-        console.log(`[Gmail API] HTML preview (first 200 chars): ${htmlContent.substring(0, 200)}`);
-        console.log(`[Gmail API] HTML preview (last 200 chars): ${htmlContent.substring(Math.max(0, htmlContent.length - 200))}`);
+        // CRITICAL DEBUG: Log final HTML before sending
+        console.log('[SendEmail] Final HTML length:', htmlContent.length);
+        console.log('[SendEmail] Final HTML starts:', htmlContent.slice(0, 400));
+        console.log('[SendEmail] Final HTML ends:', htmlContent.slice(-400));
         
-        // Build email message in RFC 2822 format
-        // Ensure proper line breaks and encoding
-        const headers = [
-          `From: ${fromEmail}`,
-          `To: ${options.to}`,
-          `Subject: ${encodeSubject(options.subject)}`,
-          `MIME-Version: 1.0`,
-          `Content-Type: text/html; charset=UTF-8`,
-          options.replyTo ? `Reply-To: ${options.replyTo}` : '',
-        ].filter(Boolean);
+        // Check for common issues in HTML
+        const hasHref = /href=["']([^"']+)["']/i.test(htmlContent);
+        const hasImg = /<img[^>]*>/i.test(htmlContent);
+        const hasUnescapedAmpersand = /href=["'][^"']*&[^a][^m][^p][^;][^"']*["']/i.test(htmlContent);
+        const hasPlaceholder = /\{\{[^}]+\}\}/.test(htmlContent);
         
-        // Join headers and body with proper line breaks
-        // Use \r\n for email format (RFC 2822)
-        const emailContent = headers.join('\r\n') + '\r\n\r\n' + htmlContent;
+        console.log('[SendEmail] HTML checks:', {
+          hasHref,
+          hasImg,
+          hasUnescapedAmpersand,
+          hasPlaceholder,
+        });
         
-        // Verify the full content before encoding
-        console.log(`[Gmail API] Full email content length: ${emailContent.length} chars`);
-        console.log(`[Gmail API] Email content ends with: ${emailContent.substring(Math.max(0, emailContent.length - 100))}`);
+        if (hasUnescapedAmpersand) {
+          console.warn('[SendEmail] WARNING: Found unescaped & in href attributes - Gmail may strip these links!');
+        }
+        if (hasPlaceholder) {
+          console.warn('[SendEmail] WARNING: Found unresolved {{placeholders}} in HTML - variables may not have been rendered!');
+        }
+        
+        // Use MailComposer to build proper RFC 2822 message (fixes MIME/header issues)
+        // This ensures correct Content-Type, multipart boundaries, and encoding
+        const MailComposer = (await import('nodemailer/lib/mail-composer')).default;
+        
+        const mailOptions = {
+          from: fromEmail,
+          to: options.to,
+          subject: encodeSubject(options.subject),
+          html: htmlContent,
+          text: options.text || undefined,
+          replyTo: options.replyTo || undefined,
+        };
+        
+        console.log('[SendEmail] MailComposer options:', {
+          from: mailOptions.from,
+          to: mailOptions.to,
+          subject: mailOptions.subject,
+          hasHtml: !!mailOptions.html,
+          htmlLength: mailOptions.html?.length || 0,
+          hasText: !!mailOptions.text,
+          textLength: mailOptions.text?.length || 0,
+        });
+        
+        const composer = new MailComposer(mailOptions);
+        const message = await composer.compile().build();
+        
+        // Verify the message structure
+        const messageStr = message.toString('utf-8');
+        
+        // Extract headers for debugging
+        const headerEnd = messageStr.indexOf('\r\n\r\n');
+        const headers = headerEnd > 0 ? messageStr.substring(0, headerEnd) : '';
+        const body = headerEnd > 0 ? messageStr.substring(headerEnd + 4) : messageStr;
+        
+        console.log('[SendEmail] Final headers:', headers);
+        console.log('[SendEmail] Final message body starts:', body.slice(0, 400));
+        console.log('[SendEmail] Final message body ends:', body.slice(-400));
+        
+        // Check Content-Type in the built message
+        const contentTypeMatch = headers.match(/Content-Type:\s*([^\r\n]+)/i);
+        console.log('[SendEmail] Content-Type in message:', contentTypeMatch ? contentTypeMatch[1] : 'NOT FOUND');
+        
+        // Check if it's multipart
+        const isMultipart = /multipart\/alternative/i.test(headers);
+        console.log('[SendEmail] Is multipart/alternative:', isMultipart);
         
         // Encode message in base64url format (Gmail API requirement)
-        // Use utf-8 encoding explicitly to ensure no character loss
-        const emailBuffer = Buffer.from(emailContent, 'utf-8');
-        const encodedMessage = emailBuffer
+        const encodedMessage = message
           .toString('base64')
           .replace(/\+/g, '-')
           .replace(/\//g, '_')
           .replace(/=+$/, '');
-        
-        console.log(`[Gmail API] Buffer length: ${emailBuffer.length} bytes`);
-        console.log(`[Gmail API] Encoded message length: ${encodedMessage.length} chars`);
         
         console.log('[Gmail API] Sending email:', {
           to: options.to,
@@ -607,8 +650,9 @@ ${htmlContent}
           subject: options.subject,
           originalHtmlLength: options.html.length,
           wrappedHtmlLength: htmlContent.length,
-          emailContentLength: emailContent.length,
+          messageLength: message.length,
           encodedMessageLength: encodedMessage.length,
+          contentType: contentTypeMatch ? contentTypeMatch[1] : 'unknown',
         });
         
         const response = await gmail.users.messages.send({
