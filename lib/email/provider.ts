@@ -34,16 +34,20 @@ function preserveLineBreaks(html: string): string {
   if (!hasAnyTags) {
     // Pure plain text - convert newlines
     // Double newlines (\n\n) = paragraph break
-    // Single newlines (\n) = line break (<br>)
+    // Single newlines (\n) = collapse to space (don't create <br>)
+    // This prevents textarea word-wrapping or copy-paste from creating unwanted line breaks
+    // Users can press Enter twice for a paragraph break, or use <br> in HTML if they need a line break
     return normalized
       .replace(/\n{3,}/g, '\n\n') // Collapse 3+ newlines to 2
       .split('\n\n') // Split on double newlines (paragraphs)
       .map(para => {
         const trimmed = para.trim();
         if (!trimmed) return '';
-        // Convert single newlines within paragraph to <br>
+        // Replace single newlines with spaces - this prevents unwanted <br> tags
+        // Only double newlines create paragraph breaks
+        const cleaned = trimmed.replace(/\n/g, ' ').replace(/\s+/g, ' '); // Collapse multiple spaces
         // Ensure paragraph fills full width of container (no max-width constraint)
-        return `<p style="margin: 0 0 1em 0; line-height: 1.5; width: 100%; max-width: 100%;">${trimmed.replace(/\n/g, '<br>')}</p>`;
+        return `<p style="margin: 0 0 1em 0; line-height: 1.5; width: 100%; max-width: 100%;">${cleaned}</p>`;
       })
       .filter(Boolean)
       .join('\n');
@@ -60,15 +64,16 @@ function preserveLineBreaks(html: string): string {
     .map(para => {
       const trimmed = para.trim();
       if (!trimmed) return '';
-      // Convert single newlines within paragraph to <br>
-      const withBreaks = trimmed.replace(/\n/g, '<br>');
+      // Replace single newlines with spaces - this prevents unwanted <br> tags
+      // Only double newlines create paragraph breaks
+      const cleaned = trimmed.replace(/\n/g, ' ').replace(/\s+/g, ' '); // Collapse multiple spaces
       // Wrap in paragraph if not already wrapped
       // Ensure paragraph fills full width of container (no max-width constraint)
-      if (!/^<p[\s>]/i.test(withBreaks)) {
-        return `<p style="margin: 0 0 1em 0; line-height: 1.5; width: 100%; max-width: 100%;">${withBreaks}</p>`;
+      if (!/^<p[\s>]/i.test(cleaned)) {
+        return `<p style="margin: 0 0 1em 0; line-height: 1.5; width: 100%; max-width: 100%;">${cleaned}</p>`;
       }
       // If already wrapped in <p>, ensure it has width styles
-      return withBreaks.replace(/<p([^>]*)>/i, (match, attrs) => {
+      return cleaned.replace(/<p([^>]*)>/i, (match, attrs) => {
         if (!/style\s*=\s*["']/.test(attrs)) {
           return `<p style="width: 100%; max-width: 100%;"${attrs}>`;
         }
