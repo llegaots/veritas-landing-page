@@ -232,15 +232,41 @@ function walkGraph(
     console.log(`  - Updated currentTime to scheduled time: ${currentTime.toISOString()}`);
   } else if (node.type === 'send_email') {
     const emailNode = node as SendEmailNode;
+    const emailType = emailNode.email_type || 'html'; // Default to 'html' for backward compatibility
     const renderedSubject = renderContent(emailNode.subject || '', context);
-    const renderedHtml = renderContent(emailNode.html_content || '', context);
-    const renderedText = emailNode.text_content ? renderContent(emailNode.text_content, context) : undefined;
     
     // Check for valid email (not null, undefined, or empty string)
     const emailAddress = context.email;
     if (!emailAddress || typeof emailAddress !== 'string' || emailAddress.trim().length === 0) {
       console.warn(`[Compiler] Email node ${currentNodeId} requires email address, but none provided in context. Context keys: ${Object.keys(context).join(', ')}, email value: ${JSON.stringify(emailAddress)}`);
       return currentTime;
+    }
+    
+    // Render content based on email type
+    let renderedHtml: string | undefined;
+    let renderedText: string | undefined;
+    
+    if (emailType === 'text') {
+      // Text-only email
+      if (!emailNode.text_content || emailNode.text_content.trim().length === 0) {
+        console.warn(`[Compiler] Email node ${currentNodeId} is set to 'text' but has no text_content`);
+        return currentTime;
+      }
+      renderedText = renderContent(emailNode.text_content, context);
+      console.log(`[Compiler] Processing Text Email node ${currentNodeId}:`);
+      console.log(`  - Email type: text`);
+      console.log(`  - Text length: ${renderedText.length} chars`);
+    } else {
+      // HTML email (default)
+      if (!emailNode.html_content || emailNode.html_content.trim().length === 0) {
+        console.warn(`[Compiler] Email node ${currentNodeId} is set to 'html' but has no html_content`);
+        return currentTime;
+      }
+      renderedHtml = renderContent(emailNode.html_content || '', context);
+      renderedText = emailNode.text_content ? renderContent(emailNode.text_content, context) : undefined;
+      console.log(`[Compiler] Processing HTML Email node ${currentNodeId}:`);
+      console.log(`  - Email type: html`);
+      console.log(`  - HTML length: ${renderedHtml.length} chars`);
     }
     
     // Calculate scheduled time: apply timing delay AFTER currentTime
@@ -251,20 +277,17 @@ function walkGraph(
     if (timingStr && timingStr.length > 0) {
       const waitMs = parseDuration(timingStr, context.phone);
       scheduledTime = new Date(currentTime.getTime() + waitMs);
-      console.log(`[Compiler] Processing Email node ${currentNodeId}:`);
       console.log(`  - Current time: ${currentTime.toISOString()}`);
       console.log(`  - Timing property: "${timingStr}"`);
       console.log(`  - Timing delay: ${waitMs}ms (${waitMs / 1000 / 60} minutes)`);
       console.log(`  - Scheduled time: ${scheduledTime.toISOString()}`);
     } else {
       // No timing = schedule immediately at currentTime (no additional delay)
-      console.log(`[Compiler] Processing Email node ${currentNodeId}:`);
       console.log(`  - Current time: ${currentTime.toISOString()}`);
       console.log(`  - No timing specified (empty/undefined), scheduling immediately at currentTime`);
       scheduledTime = new Date(currentTime); // Explicitly use currentTime (no delay)
     }
     console.log(`  - Subject: ${renderedSubject}`);
-    console.log(`  - HTML length: ${renderedHtml.length} chars`);
 
     // Snap to sending window (9 AM - 7 PM Eastern); roll over to next day if outside
     const windowedTime = snapToSendingWindow(scheduledTime);
@@ -278,8 +301,8 @@ function walkGraph(
       job_type: 'email',
       email_address: emailAddress.trim(),
       email_subject: renderedSubject,
-      email_html: renderedHtml,
-      email_text: renderedText,
+      email_html: renderedHtml, // undefined for text-only emails
+      email_text: renderedText, // required for text-only emails
       scheduled_for: windowedTime.toISOString(),
     });
     

@@ -102,7 +102,7 @@ export function WorkflowSendEmailNode(props: NodeProps) {
           </div>
           {('html_content' in node ? node.html_content : '') && (
             <div className="text-xs text-gray-500 mt-2">
-              HTML content ({('html_content' in node ? node.html_content : '').length} chars)
+              HTML content ({('html_content' in node && node.html_content ? node.html_content : '').length} chars)
             </div>
           )}
         </div>

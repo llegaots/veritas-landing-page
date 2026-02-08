@@ -203,34 +203,56 @@ export async function GET(request: NextRequest) {
 
         if (jobType === 'email') {
           // Send Email
-          if (!job.email_address || !job.email_subject || !job.email_html) {
-            throw new Error('Email job missing required fields: email_address, email_subject, or email_html');
+          if (!job.email_address || !job.email_subject) {
+            throw new Error('Email job missing required fields: email_address or email_subject');
           }
 
-          // Log HTML content length for debugging
-          const htmlLength = job.email_html?.length || 0;
-          const htmlPreview = job.email_html?.substring(0, 200) || '';
-          const htmlEndPreview = job.email_html?.substring(Math.max(0, htmlLength - 200)) || '';
-          console.log(`[Cron] Email job ${job.id} HTML content: ${htmlLength} chars`);
-          console.log(`[Cron] HTML preview (first 200): ${htmlPreview}`);
-          console.log(`[Cron] HTML preview (last 200): ${htmlEndPreview}`);
+          // Check if this is a text-only email or HTML email
+          const isTextOnly = !job.email_html || job.email_html.trim().length === 0;
+          const hasText = job.email_text && job.email_text.trim().length > 0;
 
-          // Ensure we have the full HTML content - check if it seems truncated
-          if (!job.email_html || job.email_html.length === 0) {
-            throw new Error('Email HTML content is empty');
+          if (isTextOnly && !hasText) {
+            throw new Error('Email job must have either HTML content or text content');
           }
 
-          sendResult = await sendEmail({
-            to: job.email_address,
-            subject: job.email_subject,
-            html: job.email_html,
-            text: job.email_text || undefined,
-            metadata: {
-              job_id: job.id,
-              run_id: job.run_id,
-              node_id: job.node_id,
-            },
-          });
+          if (isTextOnly) {
+            // Text-only email
+            console.log(`[Cron] Email job ${job.id} is text-only`);
+            console.log(`[Cron] Text content length: ${job.email_text?.length || 0} chars`);
+            console.log(`[Cron] Text preview (first 200): ${job.email_text?.substring(0, 200) || ''}`);
+
+            sendResult = await sendEmail({
+              to: job.email_address,
+              subject: job.email_subject,
+              text: job.email_text!,
+              metadata: {
+                job_id: job.id,
+                run_id: job.run_id,
+                node_id: job.node_id,
+              },
+            });
+          } else {
+            // HTML email (with optional text fallback)
+            const htmlLength = job.email_html?.length || 0;
+            const htmlPreview = job.email_html?.substring(0, 200) || '';
+            const htmlEndPreview = job.email_html?.substring(Math.max(0, htmlLength - 200)) || '';
+            console.log(`[Cron] Email job ${job.id} is HTML email`);
+            console.log(`[Cron] HTML content length: ${htmlLength} chars`);
+            console.log(`[Cron] HTML preview (first 200): ${htmlPreview}`);
+            console.log(`[Cron] HTML preview (last 200): ${htmlEndPreview}`);
+
+            sendResult = await sendEmail({
+              to: job.email_address,
+              subject: job.email_subject,
+              html: job.email_html!,
+              text: job.email_text || undefined,
+              metadata: {
+                job_id: job.id,
+                run_id: job.run_id,
+                node_id: job.node_id,
+              },
+            });
+          }
         } else {
           // Send SMS (default)
           if (!job.phone_number || !job.message_text) {

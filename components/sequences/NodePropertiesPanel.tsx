@@ -17,6 +17,7 @@ export function NodePropertiesPanel() {
   const { spec, selectedNodeId, setSelectedNodeId, applyOps } = useSequenceStore();
   const [message, setMessage] = useState('');
   const [emailSubject, setEmailSubject] = useState('');
+  const [emailType, setEmailType] = useState<'html' | 'text'>('html');
   const [emailHtml, setEmailHtml] = useState('');
   const [emailText, setEmailText] = useState('');
   const [timingValue, setTimingValue] = useState('');
@@ -72,6 +73,7 @@ export function NodePropertiesPanel() {
     } else if (selectedNode && isEmailNode) {
       const emailNode = selectedNode as SendEmailNode;
       setEmailSubject(emailNode.subject || '');
+      setEmailType(emailNode.email_type || 'html'); // Default to 'html' for backward compatibility
       setEmailHtml(emailNode.html_content || '');
       setEmailText(emailNode.text_content || '');
       
@@ -253,30 +255,56 @@ export function NodePropertiesPanel() {
         });
       }
 
-      // Update HTML content
-      if (currentNode.html_content !== emailHtml) {
+      // Update email type
+      const currentEmailType = currentNode.email_type || 'html';
+      if (currentEmailType !== emailType) {
         patches.push({
-          op: (currentNode.html_content !== undefined ? 'replace' : 'add') as 'replace' | 'add',
-          path: `/nodes/${nodeIndex}/html_content`,
-          value: emailHtml,
+          op: (currentNode.email_type !== undefined ? 'replace' : 'add') as 'replace' | 'add',
+          path: `/nodes/${nodeIndex}/email_type`,
+          value: emailType,
         });
       }
 
-      // Update text content (optional)
-      if (emailText && emailText.trim() !== '') {
-        if (currentNode.text_content !== emailText) {
+      // Update HTML content (only if email_type is 'html')
+      if (emailType === 'html') {
+        if (currentNode.html_content !== emailHtml) {
           patches.push({
-            op: (currentNode.text_content !== undefined ? 'replace' : 'add') as 'replace' | 'add',
-            path: `/nodes/${nodeIndex}/text_content`,
-            value: emailText,
+            op: (currentNode.html_content !== undefined ? 'replace' : 'add') as 'replace' | 'add',
+            path: `/nodes/${nodeIndex}/html_content`,
+            value: emailHtml,
           });
         }
-      } else if (currentNode.text_content !== undefined) {
-        // Remove text_content if empty
-        patches.push({
-          op: 'remove' as const,
-          path: `/nodes/${nodeIndex}/text_content`,
-        });
+        // Remove text_content if switching from text to html
+        if (currentNode.text_content !== undefined) {
+          patches.push({
+            op: 'remove' as const,
+            path: `/nodes/${nodeIndex}/text_content`,
+          });
+        }
+      } else {
+        // Update text content (only if email_type is 'text')
+        if (emailText && emailText.trim() !== '') {
+          if (currentNode.text_content !== emailText) {
+            patches.push({
+              op: (currentNode.text_content !== undefined ? 'replace' : 'add') as 'replace' | 'add',
+              path: `/nodes/${nodeIndex}/text_content`,
+              value: emailText,
+            });
+          }
+        } else if (currentNode.text_content !== undefined) {
+          // Remove text_content if empty
+          patches.push({
+            op: 'remove' as const,
+            path: `/nodes/${nodeIndex}/text_content`,
+          });
+        }
+        // Remove html_content if switching from html to text
+        if (currentNode.html_content !== undefined) {
+          patches.push({
+            op: 'remove' as const,
+            path: `/nodes/${nodeIndex}/html_content`,
+          });
+        }
       }
 
       // Update timing
@@ -353,17 +381,24 @@ export function NodePropertiesPanel() {
                           size="sm"
                           onClick={() => {
                             const variableText = `{{${varName}}}`;
-                            // Check which field is focused, otherwise default to HTML
+                            // Check which field is focused, otherwise default to content field
                             const subjectInput = document.querySelector('input[placeholder*="subject"]') as HTMLInputElement;
                             const htmlTextarea = document.querySelector('textarea[placeholder*="HTML"]') as HTMLTextAreaElement;
+                            const textTextarea = document.querySelector('textarea[placeholder*="Plain text"]') as HTMLTextAreaElement;
                             
                             if (subjectInput && document.activeElement === subjectInput) {
                               setEmailSubject(prev => prev + variableText);
                             } else if (htmlTextarea && document.activeElement === htmlTextarea) {
                               setEmailHtml(prev => prev + variableText);
+                            } else if (textTextarea && document.activeElement === textTextarea) {
+                              setEmailText(prev => prev + variableText);
                             } else {
-                              // Default to HTML content
-                              setEmailHtml(prev => prev + variableText);
+                              // Default to content field based on email type
+                              if (emailType === 'html') {
+                                setEmailHtml(prev => prev + variableText);
+                              } else {
+                                setEmailText(prev => prev + variableText);
+                              }
                             }
                           }}
                           className="text-xs cursor-pointer border-blue-200 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-all"
@@ -379,6 +414,24 @@ export function NodePropertiesPanel() {
 
               <div>
                 <Label className="text-sm font-medium text-gray-700 mb-2 block">
+                  Email Format
+                </Label>
+                <Select value={emailType} onValueChange={(value: 'html' | 'text') => setEmailType(value)}>
+                  <SelectTrigger className="w-full border-gray-200 hover:border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 rounded-lg bg-white transition-all duration-200 cursor-pointer text-gray-900">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="html">HTML Email</SelectItem>
+                    <SelectItem value="text">Plain Text Email</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Choose HTML for rich formatting or Plain Text for simple emails
+                </p>
+              </div>
+
+              <div>
+                <Label className="text-sm font-medium text-gray-700 mb-2 block">
                   Subject
                 </Label>
                 <Input
@@ -389,42 +442,51 @@ export function NodePropertiesPanel() {
                 />
               </div>
 
-              <div>
-                <Label className="text-sm font-medium text-gray-700 mb-2 block">
-                  HTML Content
-                </Label>
-                <Textarea
-                  value={emailHtml}
-                  onChange={(e) => setEmailHtml(e.target.value)}
-                  placeholder="<html>...</html> or HTML content. Use {{FirstName}}, {{PropertyName}}, etc."
-                  className="w-full min-h-[300px] font-mono text-sm border-gray-200 hover:border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 rounded-lg transition-all duration-200 text-gray-900"
-                  onFocus={(e) => {
-                    // When HTML is focused, clicking variable buttons will insert there
-                    e.currentTarget.setAttribute('data-focused', 'true');
-                  }}
-                  onBlur={(e) => {
-                    e.currentTarget.removeAttribute('data-focused');
-                  }}
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Type variables like {'{{'}FirstName{'}}'} or click variable buttons above. Variables will be replaced with investor data.
-                </p>
-              </div>
-
-              <div>
-                <Label className="text-sm font-medium text-gray-700 mb-2 block">
-                  Plain Text Content (Optional)
-                </Label>
-                <Textarea
-                  value={emailText}
-                  onChange={(e) => setEmailText(e.target.value)}
-                  placeholder="Plain text fallback (optional)"
-                  className="w-full min-h-[100px] border-gray-200 hover:border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 rounded-lg transition-all duration-200 text-gray-900"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Optional plain text version for email clients that don't support HTML
-                </p>
-              </div>
+              {emailType === 'html' ? (
+                <div>
+                  <Label className="text-sm font-medium text-gray-700 mb-2 block">
+                    HTML Content
+                  </Label>
+                  <Textarea
+                    value={emailHtml}
+                    onChange={(e) => setEmailHtml(e.target.value)}
+                    placeholder="<html>...</html> or HTML content. Use {{FirstName}}, {{PropertyName}}, etc."
+                    className="w-full min-h-[300px] font-mono text-sm border-gray-200 hover:border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 rounded-lg transition-all duration-200 text-gray-900"
+                    onFocus={(e) => {
+                      // When HTML is focused, clicking variable buttons will insert there
+                      e.currentTarget.setAttribute('data-focused', 'true');
+                    }}
+                    onBlur={(e) => {
+                      e.currentTarget.removeAttribute('data-focused');
+                    }}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Type variables like {'{{'}FirstName{'}}'} or click variable buttons above. Variables will be replaced with investor data.
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <Label className="text-sm font-medium text-gray-700 mb-2 block">
+                    Plain Text Content
+                  </Label>
+                  <Textarea
+                    value={emailText}
+                    onChange={(e) => setEmailText(e.target.value)}
+                    placeholder="Plain text email content. Use {{FirstName}}, {{PropertyName}}, etc."
+                    className="w-full min-h-[300px] border-gray-200 hover:border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0 rounded-lg transition-all duration-200 text-gray-900"
+                    onFocus={(e) => {
+                      // When text is focused, clicking variable buttons will insert there
+                      e.currentTarget.setAttribute('data-focused', 'true');
+                    }}
+                    onBlur={(e) => {
+                      e.currentTarget.removeAttribute('data-focused');
+                    }}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Type variables like {'{{'}FirstName{'}}'} or click variable buttons above. Variables will be replaced with investor data.
+                  </p>
+                </div>
+              )}
 
               <div>
                 <Label className="text-sm font-medium text-gray-700 mb-2 block">

@@ -48,8 +48,9 @@ export interface SendSmsNode extends BaseNode {
 export interface SendEmailNode extends BaseNode {
   type: 'send_email';
   subject: string; // Email subject line with variable placeholders
-  html_content: string; // HTML email content with variable placeholders
-  text_content?: string; // Plain text fallback (optional)
+  email_type?: 'html' | 'text'; // Email format: 'html' (default) or 'text'
+  html_content?: string; // HTML email content with variable placeholders (required if email_type is 'html')
+  text_content?: string; // Plain text email content (required if email_type is 'text')
   variables?: Record<string, string>; // Variable definitions for this node
   timing?: string; // Optional timing override (e.g., "2 hours", "Day 1")
 }

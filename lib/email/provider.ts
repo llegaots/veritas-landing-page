@@ -359,8 +359,8 @@ function convertButtonsToEmailFriendly(html: string): string {
 export interface EmailSendOptions {
   to: string;
   subject: string;
-  html: string;
-  text?: string; // Plain text fallback
+  html?: string; // HTML content (required if text is not provided)
+  text?: string; // Plain text content (required if html is not provided)
   from?: string; // From email address
   replyTo?: string; // Reply-to email address
   metadata?: Record<string, any>;
@@ -459,19 +459,29 @@ async function sendViaSmtp(options: EmailSendOptions): Promise<EmailSendResult> 
           return subject;
         };
         
-        // Ensure HTML content is complete and not truncated
-        let htmlContent = options.html || '';
+        // Check if this is a text-only email
+        const isTextOnly = !options.html || options.html.trim().length === 0;
+        const hasText = options.text && options.text.trim().length > 0;
         
-        // Check if HTML already has proper button styling (background-color in links)
-        // If it does, skip conversion entirely to preserve the exact HTML
-        const hasStyledButtons = /<a[^>]*style=["'][^"']*background-color[^"']*["'][^>]*>/i.test(htmlContent);
-        const isTableBasedEmail = /<table[^>]*role=["']presentation["']/i.test(htmlContent);
+        if (isTextOnly && !hasText) {
+          throw new Error('Email must have either HTML or text content');
+        }
         
-        // Skip conversion if:
-        // 1. HTML already has styled buttons (user has done the work)
-        // 2. It's a table-based email template (common professional email format)
-        // This preserves user's exact HTML structure
-        if (hasStyledButtons || isTableBasedEmail) {
+        // Only process HTML if it exists
+        let htmlContent: string | undefined;
+        
+        if (!isTextOnly && options.html) {
+          htmlContent = options.html;
+          // Check if HTML already has proper button styling (background-color in links)
+          // If it does, skip conversion entirely to preserve the exact HTML
+          const hasStyledButtons = /<a[^>]*style=["'][^"']*background-color[^"']*["'][^>]*>/i.test(htmlContent);
+          const isTableBasedEmail = /<table[^>]*role=["']presentation["']/i.test(htmlContent);
+          
+          // Skip conversion if:
+          // 1. HTML already has styled buttons (user has done the work)
+          // 2. It's a table-based email template (common professional email format)
+          // This preserves user's exact HTML structure
+          if (hasStyledButtons || isTableBasedEmail) {
           console.log('[Gmail API] HTML already has styled buttons or is table-based email, skipping conversion to preserve exact formatting');
           // Still process images to ensure they have proper attributes
           htmlContent = htmlContent.replace(
@@ -508,25 +518,26 @@ async function sendViaSmtp(options: EmailSendOptions): Promise<EmailSendResult> 
         // Wrap HTML in proper email structure if it's not already wrapped
         // IMPORTANT: Check if it's a table-based email template (common pattern)
         // Table-based emails should be wrapped in body/html but preserve the table structure
-        const trimmedHtml = htmlContent.trim();
-        const hasDoctype = trimmedHtml.toLowerCase().startsWith('<!doctype');
-        const hasHtmlTag = /<html[^>]*>/i.test(trimmedHtml);
-        const hasBodyTag = /<body[^>]*>/i.test(trimmedHtml);
-        const isTableBased = /<table[^>]*role=["']presentation["']/i.test(trimmedHtml);
-        
-        // If it's already a complete HTML document, don't wrap it
-        if (hasDoctype && hasHtmlTag && hasBodyTag) {
-          // Already complete, use as-is
-          console.log('[Gmail API] HTML is already a complete document, using as-is');
-        } else if (hasHtmlTag && hasBodyTag) {
-          // Has html and body tags but no doctype, add doctype
-          if (!hasDoctype) {
-            htmlContent = `<!DOCTYPE html>\n${htmlContent}`;
-            console.log('[Gmail API] Added DOCTYPE to existing HTML structure');
-          }
-        } else if (hasBodyTag && !hasHtmlTag) {
-          // Has body tag but no html tag, wrap in html
-          htmlContent = `<!DOCTYPE html>
+        if (htmlContent) {
+          const trimmedHtml = htmlContent.trim();
+          const hasDoctype = trimmedHtml.toLowerCase().startsWith('<!doctype');
+          const hasHtmlTag = /<html[^>]*>/i.test(trimmedHtml);
+          const hasBodyTag = /<body[^>]*>/i.test(trimmedHtml);
+          const isTableBased = /<table[^>]*role=["']presentation["']/i.test(trimmedHtml);
+          
+          // If it's already a complete HTML document, don't wrap it
+          if (hasDoctype && hasHtmlTag && hasBodyTag) {
+            // Already complete, use as-is
+            console.log('[Gmail API] HTML is already a complete document, using as-is');
+          } else if (hasHtmlTag && hasBodyTag) {
+            // Has html and body tags but no doctype, add doctype
+            if (!hasDoctype) {
+              htmlContent = `<!DOCTYPE html>\n${htmlContent}`;
+              console.log('[Gmail API] Added DOCTYPE to existing HTML structure');
+            }
+          } else if (hasBodyTag && !hasHtmlTag) {
+            // Has body tag but no html tag, wrap in html
+            htmlContent = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -535,10 +546,10 @@ async function sendViaSmtp(options: EmailSendOptions): Promise<EmailSendResult> 
 </head>
 ${htmlContent}
 </html>`;
-          console.log('[Gmail API] Wrapped body content in HTML structure');
-        } else if (isTableBased) {
-          // Table-based email template - wrap in minimal structure, preserve table
-          htmlContent = `<!DOCTYPE html>
+            console.log('[Gmail API] Wrapped body content in HTML structure');
+          } else if (isTableBased) {
+            // Table-based email template - wrap in minimal structure, preserve table
+            htmlContent = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -549,10 +560,10 @@ ${htmlContent}
 ${htmlContent}
 </body>
 </html>`;
-          console.log('[Gmail API] Wrapped table-based email template in HTML structure');
-        } else {
-          // No structure at all, wrap everything
-          htmlContent = `<!DOCTYPE html>
+            console.log('[Gmail API] Wrapped table-based email template in HTML structure');
+          } else {
+            // No structure at all, wrap everything
+            htmlContent = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -563,32 +574,37 @@ ${htmlContent}
 ${htmlContent}
 </body>
 </html>`;
-          console.log('[Gmail API] Wrapped content in complete HTML structure');
-        }
-        
-        // CRITICAL DEBUG: Log final HTML before sending
-        console.log('[SendEmail] Final HTML length:', htmlContent.length);
-        console.log('[SendEmail] Final HTML starts:', htmlContent.slice(0, 400));
-        console.log('[SendEmail] Final HTML ends:', htmlContent.slice(-400));
-        
-        // Check for common issues in HTML
-        const hasHref = /href=["']([^"']+)["']/i.test(htmlContent);
-        const hasImg = /<img[^>]*>/i.test(htmlContent);
-        const hasUnescapedAmpersand = /href=["'][^"']*&[^a][^m][^p][^;][^"']*["']/i.test(htmlContent);
-        const hasPlaceholder = /\{\{[^}]+\}\}/.test(htmlContent);
-        
-        console.log('[SendEmail] HTML checks:', {
-          hasHref,
-          hasImg,
-          hasUnescapedAmpersand,
-          hasPlaceholder,
-        });
-        
-        if (hasUnescapedAmpersand) {
-          console.warn('[SendEmail] WARNING: Found unescaped & in href attributes - Gmail may strip these links!');
-        }
-        if (hasPlaceholder) {
-          console.warn('[SendEmail] WARNING: Found unresolved {{placeholders}} in HTML - variables may not have been rendered!');
+            console.log('[Gmail API] Wrapped content in complete HTML structure');
+          }
+          
+          // CRITICAL DEBUG: Log final HTML before sending
+          console.log('[SendEmail] Final HTML length:', htmlContent.length);
+          console.log('[SendEmail] Final HTML starts:', htmlContent.slice(0, 400));
+          console.log('[SendEmail] Final HTML ends:', htmlContent.slice(-400));
+          
+          // Check for common issues in HTML
+          const hasHref = /href=["']([^"']+)["']/i.test(htmlContent);
+          const hasImg = /<img[^>]*>/i.test(htmlContent);
+          const hasUnescapedAmpersand = /href=["'][^"']*&[^a][^m][^p][^;][^"']*["']/i.test(htmlContent);
+          const hasPlaceholder = /\{\{[^}]+\}\}/.test(htmlContent);
+          
+          console.log('[SendEmail] HTML checks:', {
+            hasHref,
+            hasImg,
+            hasUnescapedAmpersand,
+            hasPlaceholder,
+          });
+          
+          if (hasUnescapedAmpersand) {
+            console.warn('[SendEmail] WARNING: Found unescaped & in href attributes - Gmail may strip these links!');
+          }
+          if (hasPlaceholder) {
+            console.warn('[SendEmail] WARNING: Found unresolved {{placeholders}} in HTML - variables may not have been rendered!');
+          }
+        } else {
+          console.log('[SendEmail] Text-only email - skipping HTML processing');
+          console.log('[SendEmail] Text content length:', options.text?.length || 0);
+          console.log('[SendEmail] Text preview (first 200):', options.text?.substring(0, 200) || '');
         }
         
         // Use MailComposer to build proper RFC 2822 message (fixes MIME/header issues)
@@ -599,7 +615,7 @@ ${htmlContent}
           from: fromEmail,
           to: options.to,
           subject: encodeSubject(options.subject),
-          html: htmlContent,
+          html: isTextOnly ? undefined : htmlContent,
           text: options.text || undefined,
           replyTo: options.replyTo || undefined,
         };
@@ -648,8 +664,8 @@ ${htmlContent}
           to: options.to,
           from: fromEmail,
           subject: options.subject,
-          originalHtmlLength: options.html.length,
-          wrappedHtmlLength: htmlContent.length,
+          originalHtmlLength: options.html?.length || 0,
+          wrappedHtmlLength: htmlContent?.length || 0,
           messageLength: message.length,
           encodedMessageLength: encodedMessage.length,
           contentType: contentTypeMatch ? contentTypeMatch[1] : 'unknown',
@@ -757,7 +773,9 @@ ${htmlContent}
       to: options.to,
       from: fromEmail,
       subject: options.subject,
-      htmlLength: options.html.length,
+      htmlLength: options.html?.length || 0,
+      textLength: options.text?.length || 0,
+      isTextOnly: !options.html,
       host: smtpHost,
       port: smtpPort,
     });
@@ -768,8 +786,11 @@ ${htmlContent}
       return subject;
     };
     
-    // Convert buttons to email-friendly inline-styled versions
-    let htmlContent = convertButtonsToEmailFriendly(options.html);
+    // Convert buttons to email-friendly inline-styled versions (only if HTML exists)
+    let htmlContent: string | undefined;
+    if (options.html) {
+      htmlContent = convertButtonsToEmailFriendly(options.html);
+    }
     
     // Send email
     const info = await transporter.sendMail({

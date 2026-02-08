@@ -46,10 +46,20 @@ export const SendEmailNodeSchema = z.object({
   id: z.string(),
   type: z.literal('send_email'),
   subject: z.string().min(0).max(200), // Email subject max length
-  html_content: z.string().min(0), // HTML content (no max for HTML emails)
-  text_content: z.string().optional(), // Plain text fallback
+  email_type: z.enum(['html', 'text']).optional().default('html'), // Email format: 'html' (default) or 'text'
+  html_content: z.string().min(0).optional(), // HTML content (required if email_type is 'html')
+  text_content: z.string().min(0).optional(), // Plain text content (required if email_type is 'text')
   variables: z.record(z.string(), z.string()).optional(),
   timing: z.string().optional(),
+}).refine((data) => {
+  // If email_type is 'text', text_content must be provided
+  if (data.email_type === 'text') {
+    return data.text_content !== undefined && data.text_content.trim().length > 0;
+  }
+  // If email_type is 'html' or undefined (default), html_content must be provided
+  return data.html_content !== undefined && data.html_content.trim().length > 0;
+}, {
+  message: "Email content must match email_type: 'text' requires text_content, 'html' requires html_content",
 });
 
 export const WaitNodeSchema = z.object({
@@ -208,7 +218,13 @@ export function validateBusinessRules(spec: SequenceSpec): ValidationResult {
   }
 
   // Email nodes must have subject and content (only enforce for active sequences)
-  const emailNodes = spec.nodes.filter((n) => n.type === 'send_email') as Array<{ id: string; subject: string; html_content: string }>;
+  const emailNodes = spec.nodes.filter((n) => n.type === 'send_email') as Array<{ 
+    id: string; 
+    subject: string; 
+    email_type?: 'html' | 'text';
+    html_content?: string;
+    text_content?: string;
+  }>;
   for (const node of emailNodes) {
     if (!node.subject || node.subject.trim().length === 0) {
       if (spec.metadata.status === 'active') {
@@ -217,11 +233,22 @@ export function validateBusinessRules(spec: SequenceSpec): ValidationResult {
         warnings.push(`Email node ${node.id} has no subject - add subject before activating sequence`);
       }
     }
-    if (!node.html_content || node.html_content.trim().length === 0) {
-      if (spec.metadata.status === 'active') {
-        errors.push(`Email node ${node.id} must have HTML content`);
-      } else {
-        warnings.push(`Email node ${node.id} has no HTML content - add content before activating sequence`);
+    const emailType = node.email_type || 'html'; // Default to 'html' for backward compatibility
+    if (emailType === 'text') {
+      if (!node.text_content || node.text_content.trim().length === 0) {
+        if (spec.metadata.status === 'active') {
+          errors.push(`Email node ${node.id} must have text content (email_type is 'text')`);
+        } else {
+          warnings.push(`Email node ${node.id} has no text content - add text content before activating sequence`);
+        }
+      }
+    } else {
+      if (!node.html_content || node.html_content.trim().length === 0) {
+        if (spec.metadata.status === 'active') {
+          errors.push(`Email node ${node.id} must have HTML content (email_type is 'html')`);
+        } else {
+          warnings.push(`Email node ${node.id} has no HTML content - add HTML content before activating sequence`);
+        }
       }
     }
   }
