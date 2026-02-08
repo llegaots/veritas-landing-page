@@ -611,8 +611,25 @@ async function sendViaSmtp(options: EmailSendOptions): Promise<EmailSendResult> 
               console.log('[Gmail API] Added DOCTYPE to existing HTML structure');
             }
           } else if (hasBodyTag && !hasHtmlTag) {
-            // Has body tag but no html tag, wrap in html
-            htmlContent = `<!DOCTYPE html>
+            // Has body tag but no html tag, wrap in html with proper email width container
+            // Extract body content and wrap it in proper email structure
+            const bodyStart = htmlContent.indexOf('<body');
+            const bodyEnd = htmlContent.indexOf('</body>');
+            
+            let bodyContent = htmlContent;
+            if (bodyStart >= 0 && bodyEnd >= 0) {
+              const bodyTagEnd = htmlContent.indexOf('>', bodyStart);
+              if (bodyTagEnd >= 0) {
+                bodyContent = htmlContent.substring(bodyTagEnd + 1, bodyEnd).trim();
+              }
+            }
+            
+            // Check if body already has width container
+            const hasWidthContainer = /<table[^>]*role=["']presentation["'][^>]*width/i.test(bodyContent);
+            
+            if (hasWidthContainer) {
+              // Already has width container, just wrap in html
+              htmlContent = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -621,7 +638,33 @@ async function sendViaSmtp(options: EmailSendOptions): Promise<EmailSendResult> 
 </head>
 ${htmlContent}
 </html>`;
-            console.log('[Gmail API] Wrapped body content in HTML structure');
+            } else {
+              // Wrap body content in proper email width container
+              htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+</head>
+<body style="margin: 0; padding: 0; background-color: #f4f4f4; font-family: Arial, sans-serif;">
+  <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f4f4f4;">
+    <tr>
+      <td align="center" style="padding: 20px 0;">
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <tr>
+            <td style="padding: 40px;">
+${bodyContent}
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+            }
+            console.log('[Gmail API] Wrapped body content in HTML structure with proper email width');
           } else if (isTableBased) {
             // Table-based email template - wrap in minimal structure, preserve table
             htmlContent = `<!DOCTYPE html>
@@ -637,7 +680,8 @@ ${htmlContent}
 </html>`;
             console.log('[Gmail API] Wrapped table-based email template in HTML structure');
           } else {
-            // No structure at all, wrap everything
+            // No structure at all, wrap everything with proper email width container
+            // Use table-based layout for email compatibility (standard email width: 600px)
             htmlContent = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -645,11 +689,23 @@ ${htmlContent}
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 </head>
-<body style="margin: 0; padding: 0; background-color: #f4f4f4;">
+<body style="margin: 0; padding: 0; background-color: #f4f4f4; font-family: Arial, sans-serif;">
+  <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f4f4f4;">
+    <tr>
+      <td align="center" style="padding: 20px 0;">
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <tr>
+            <td style="padding: 40px;">
 ${htmlContent}
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>`;
-            console.log('[Gmail API] Wrapped content in complete HTML structure');
+            console.log('[Gmail API] Wrapped content in complete HTML structure with proper email width');
           }
           
           // CRITICAL DEBUG: Log final HTML before sending
