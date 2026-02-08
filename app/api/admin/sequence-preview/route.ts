@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
       phone,
       email,
       FirstName: 'Test',
-      PropertyName: 'Test Property',
+      PropertyName: 'Horizon Park',
     };
 
     const jobs = compileSequenceToJobs(

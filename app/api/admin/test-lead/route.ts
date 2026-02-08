@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
         phone: phone || '+15551234567',
         attributes: {
           FirstName: attributes.FirstName || 'Test',
-          PropertyName: attributes.PropertyName || 'Test Property',
+          PropertyName: attributes.PropertyName || 'Horizon Park',
           ...attributes,
         },
       }),
