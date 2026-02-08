@@ -783,7 +783,8 @@ ${htmlContent}
             console.warn('[SendEmail] WARNING: Found unresolved {{placeholders}} in HTML - variables may not have been rendered!');
           }
         }
-        } else {
+        }
+        else {
           // Text-only email - convert to HTML that looks like plain text
           console.log('[SendEmail] Text-only email - converting to HTML');
           console.log('[SendEmail] Text content length:', options.text?.length || 0);
