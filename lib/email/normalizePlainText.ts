@@ -26,27 +26,45 @@ export function normalizePlainText(input: string): string {
 }
 
 /**
- * Unwrap hard-wrapped text (removes line breaks that are from editor wrapping, not user intent)
- * Use this if your editor/textarea is inserting hard breaks every N characters
+ * Unwrap plain text - makes textarea behave like "normal writing"
  * 
- * This joins single newlines within paragraphs while preserving paragraph breaks (double newlines)
+ * Rules:
+ * - Only blank lines (2+ newlines) create paragraph breaks
+ * - Single line breaks inside a paragraph get treated as spaces
+ * - This prevents textarea word-wrapping from creating unwanted line breaks
+ * 
+ * Result: Paragraphs become flowing text (no "cut off" look), intentional blank lines stay
  */
-export function unwrapHardWrappedText(input: string): string {
+export function unwrapPlainText(input: string): string {
   if (!input) return '';
 
   let s = input.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
-  // Split into paragraphs by blank lines (2+ newlines)
-  const paragraphs = s.split(/\n{2,}/);
+  // Paragraphs are separated by 1+ blank lines
+  const paras = s.split(/\n{2,}/);
 
-  const fixed = paragraphs.map(p =>
+  const fixed = paras.map(p =>
     p
-      .split('\n')
+      .split('\n')                 // lines within a paragraph
       .map(line => line.trim())
       .filter(Boolean)
-      .join(' ')
+      .join(' ')                   // join lines into one flowing paragraph
+      .replace(/\s+/g, ' ')
+      .trim()
   );
 
-  return fixed.join('\n\n').trim();
+  return fixed.join('\n\n').trim(); // keep paragraph spacing
+}
+
+/**
+ * Unwrap hard-wrapped text (removes line breaks that are from editor wrapping, not user intent)
+ * Use this if your editor/textarea is inserting hard breaks every N characters
+ * 
+ * This joins single newlines within paragraphs while preserving paragraph breaks (double newlines)
+ * 
+ * @deprecated Use unwrapPlainText instead - it's the same thing but with a clearer name
+ */
+export function unwrapHardWrappedText(input: string): string {
+  return unwrapPlainText(input);
 }
 

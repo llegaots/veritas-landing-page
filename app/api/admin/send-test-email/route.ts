@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Replace variables with test values
-    const testContext = {
+    const testContext: Record<string, string> = {
       FirstName: 'TEST',
       PropertyName: 'Horizon Park',
       Email: 'lucaslegatos123@gmail.com',

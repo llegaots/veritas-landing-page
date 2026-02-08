@@ -4,7 +4,7 @@
 import { SequenceSpec, SequenceNode, SendSmsNode, SendEmailNode, WaitNode, ConditionNode } from './spec';
 import { getOutgoingEdges } from './spec';
 import { snapToSendingWindow } from './send-window';
-import { normalizePlainText, unwrapHardWrappedText } from '@/lib/email/normalizePlainText';
+import { normalizePlainText, unwrapPlainText } from '@/lib/email/normalizePlainText';
 
 export interface JobContext {
   lead_id: string;
@@ -263,28 +263,15 @@ function walkGraph(
       console.log(`[Compiler] Text Email node ${currentNodeId} - Has \\r\\n:`, /\r\n/.test(rawText));
       console.log(`[Compiler] Text Email node ${currentNodeId} - Has \\r:`, /\r/.test(rawText));
       
-      // Normalize the text (removes unwanted line breaks from textarea wrapping)
-      renderedText = normalizePlainText(rawText);
-      
-      // Check if we still have mid-paragraph newlines (likely from hard-wrapping)
-      const singleNewlineCount = (renderedText.match(/(?<!\n)\n(?!\n)/g) || []).length;
-      const doubleNewlineCount = (renderedText.match(/\n\n/g) || []).length;
-      
-      console.log(`[Compiler] Text Email node ${currentNodeId} - After normalize:`);
-      console.log(`  - Text length: ${renderedText.length} chars`);
-      console.log(`  - Single newlines (mid-paragraph): ${singleNewlineCount}`);
-      console.log(`  - Double newlines (paragraph breaks): ${doubleNewlineCount}`);
-      
-      // If there are many single newlines, likely hard-wrapped - unwrap it
-      if (singleNewlineCount > doubleNewlineCount * 2 && singleNewlineCount > 5) {
-        console.log(`[Compiler] Text Email node ${currentNodeId} - Detected hard-wrapped text, unwrapping...`);
-        renderedText = unwrapHardWrappedText(renderedText);
-        console.log(`[Compiler] Text Email node ${currentNodeId} - After unwrap, length: ${renderedText.length} chars`);
-      }
+      // Unwrap plain text - makes textarea behave like "normal writing"
+      // Only blank lines (2+ newlines) create paragraph breaks
+      // Single line breaks inside a paragraph get treated as spaces
+      renderedText = unwrapPlainText(rawText);
       
       console.log(`[Compiler] Processing Text Email node ${currentNodeId}:`);
       console.log(`  - Email type: text`);
       console.log(`  - Final text length: ${renderedText.length} chars`);
+      console.log(`  - Paragraph count: ${(renderedText.match(/\n\n/g) || []).length + 1}`);
       console.log(`[Compiler] Final text (first 300 chars):`, renderedText.substring(0, 300));
     } else {
       // HTML email (default)
@@ -320,7 +307,7 @@ function walkGraph(
       console.log(`  - HTML has ${pCountBefore} <p> tags BEFORE sending`);
       console.log(`  - HTML preview (first 300): ${renderedHtml.substring(0, 300)}`);
       
-      renderedText = emailNode.text_content ? normalizePlainText(renderContent(emailNode.text_content, context)) : undefined;
+      renderedText = emailNode.text_content ? unwrapPlainText(renderContent(emailNode.text_content, context)) : undefined;
     }
     
     // Calculate scheduled time: apply timing delay AFTER currentTime
