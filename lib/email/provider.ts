@@ -841,9 +841,12 @@ ${htmlContent}
           }
         }
         } else {
-          console.log('[SendEmail] Text-only email - skipping HTML processing');
+          // PLAIN TEXT EMAIL - send exactly as-is, no processing whatsoever
+          console.log('[SendEmail] Text-only email - NO HTML processing, sending plain text exactly as provided');
           console.log('[SendEmail] Text content length:', options.text?.length || 0);
-          console.log('[SendEmail] Text preview (first 200):', options.text?.substring(0, 200) || '');
+          console.log('[SendEmail] Text preview (first 500):', options.text?.substring(0, 500) || '');
+          console.log('[SendEmail] Text newline count:', (options.text?.match(/\n/g) || []).length);
+          console.log('[SendEmail] Text will be sent EXACTLY as-is - newlines preserved exactly where user pressed ENTER');
         }
         
         // Use MailComposer to build proper RFC 2822 message (fixes MIME/header issues)

@@ -17,6 +17,7 @@ export async function POST(request: NextRequest) {
     const { to, text } = body;
 
     // Plain text content - no HTML, just like someone typed it
+    // Line breaks ONLY where user presses ENTER (after "good fit." and before Calendly link)
     const testText = text || `Hi TEST,
 
 Thanks for requesting more information on Horizon Park, a workforce-housing multifamily opportunity in Edmonds, Seattle. If helpful, the next step is a short 10-minute Zoom to see whether this opportunity aligns with your goals and risk tolerance. There's no obligation, the call is simply to walk through the structure, risks, and determine if it's a good fit.
