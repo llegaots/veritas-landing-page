@@ -73,22 +73,33 @@ export async function POST(request: NextRequest) {
 
     const spec = version.spec_jsonb;
 
-    // Find the first email node
+    // Find email nodes
     const emailNodes = (spec.nodes || []).filter((node: any) => node.type === 'send_email');
     
     if (emailNodes.length === 0) {
       return NextResponse.json({ error: 'No email nodes found in sequence' }, { status: 404 });
     }
 
-    const firstEmailNode = emailNodes[0];
-    const emailType = firstEmailNode.email_type || 'html';
+    // Get query parameter to specify which email (default to second, index 1)
+    const { searchParams } = new URL(request.url);
+    const emailIndex = parseInt(searchParams.get('index') || '1', 10);
+    
+    if (emailIndex < 0 || emailIndex >= emailNodes.length) {
+      return NextResponse.json(
+        { error: `Email index ${emailIndex} out of range. Sequence has ${emailNodes.length} email node(s). Use ?index=0 to ${emailNodes.length - 1}` },
+        { status: 400 }
+      );
+    }
+
+    const selectedEmailNode = emailNodes[emailIndex];
+    const emailType = selectedEmailNode.email_type || 'html';
     
     // Get the content
     let emailContent = '';
     if (emailType === 'text') {
-      emailContent = firstEmailNode.text_content || '';
+      emailContent = selectedEmailNode.text_content || '';
     } else {
-      emailContent = firstEmailNode.html_content || '';
+      emailContent = selectedEmailNode.html_content || '';
     }
 
     if (!emailContent || emailContent.trim().length === 0) {
@@ -104,7 +115,7 @@ export async function POST(request: NextRequest) {
     };
 
     let renderedContent = emailContent;
-    let renderedSubject = firstEmailNode.subject || 'Test Email';
+    let renderedSubject = selectedEmailNode.subject || 'Test Email';
     
     // Simple variable replacement
     Object.keys(testContext).forEach(key => {
@@ -137,7 +148,9 @@ export async function POST(request: NextRequest) {
         success: true,
         messageId: result.messageId,
         sequence: facebookSeq.name,
-        nodeId: firstEmailNode.id,
+        nodeId: selectedEmailNode.id,
+        emailIndex,
+        totalEmails: emailNodes.length,
         emailType,
         subject: emailOptions.subject,
       });

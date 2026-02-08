@@ -667,14 +667,19 @@ async function sendViaSmtp(options: EmailSendOptions): Promise<EmailSendResult> 
           const hasBodyTag = /<body[^>]*>/i.test(trimmedHtml);
           const isTableBased = /<table[^>]*role=["']presentation["']/i.test(trimmedHtml);
           
-          // If it's already a complete HTML document, check if it has width container
+          // If it's already a complete HTML document, remove backgrounds
           if (hasDoctype && hasHtmlTag && hasBodyTag) {
-            // Check if it already has a width container table
-            const hasWidthContainer = /<table[^>]*role=["']presentation["'][^>]*width\s*=\s*["']600["']/i.test(htmlContent);
-            if (hasWidthContainer) {
-              // Already complete with width container, use as-is
-              console.log('[Gmail API] HTML is already a complete document with width container, using as-is');
-            } else {
+            // Remove background colors from body and tables
+            htmlContent = htmlContent.replace(/style=["']([^"']*)background[^"']*[^"']*["']/gi, (match, style) => {
+              // Remove background-related styles
+              const cleanStyle = style.replace(/background[^;]*;?/gi, '').replace(/;\s*;/g, ';').trim();
+              return cleanStyle ? `style="${cleanStyle}"` : '';
+            });
+            // Also remove background-color specifically
+            htmlContent = htmlContent.replace(/background-color\s*:\s*[^;]+;?/gi, '');
+            htmlContent = htmlContent.replace(/background\s*:\s*[^;]+;?/gi, '');
+            console.log('[Gmail API] Removed backgrounds from complete HTML document');
+          } else {
               // Complete document but no width container - need to add it
               // Extract body content and wrap it
               const bodyStart = htmlContent.indexOf('<body');
@@ -686,20 +691,13 @@ async function sendViaSmtp(options: EmailSendOptions): Promise<EmailSendResult> 
                   const bodyContent = htmlContent.substring(bodyTagEnd + 1, bodyEnd).trim();
                   const bodyTag = htmlContent.substring(bodyStart, bodyTagEnd + 1);
                   
-                  htmlContent = htmlContent.substring(0, bodyStart) + bodyTag + `
-  <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f4f4f4;">
-    <tr>
-      <td align="center" style="padding: 20px 0;">
-        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-          <tr>
-            <td style="padding: 40px;">
+                  // Simple wrap - no backgrounds, just preserve body content
+                  htmlContent = htmlContent.substring(0, bodyStart) + bodyTag.replace(/style=["'][^"']*background[^"']*["']/gi, '').replace(/style=["']([^"']*)["']/gi, (m, style) => {
+                    // Remove background from body style, keep other styles
+                    const cleanStyle = style.replace(/background[^;]*;?/gi, '').replace(/;\s*;/g, ';').trim();
+                    return cleanStyle ? `style="${cleanStyle}"` : '';
+                  }) + `
 ${bodyContent}
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
 </body>` + htmlContent.substring(bodyEnd + 7);
                   
                   console.log('[Gmail API] Added width container to complete HTML document');
@@ -741,7 +739,7 @@ ${bodyContent}
 ${htmlContent}
 </html>`;
             } else {
-              // Wrap body content in proper email width container
+              // Simple wrap - no backgrounds, left-aligned like plain text
               htmlContent = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -749,26 +747,14 @@ ${htmlContent}
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 </head>
-<body style="margin: 0; padding: 0; background-color: #f4f4f4; font-family: Arial, sans-serif;">
-  <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f4f4f4;">
-    <tr>
-      <td align="center" style="padding: 20px 0;">
-        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-          <tr>
-            <td style="padding: 40px;">
+<body style="margin: 0; padding: 20px; font-family: Arial, sans-serif; font-size: 16px; line-height: 1.5; color: #333333;">
 ${bodyContent}
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
 </body>
 </html>`;
             }
             console.log('[Gmail API] Wrapped body content in HTML structure with proper email width');
           } else if (isTableBased) {
-            // Table-based email template - wrap in minimal structure, preserve table
+            // Table-based email template - wrap in minimal structure, preserve table, no backgrounds
             htmlContent = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -776,14 +762,13 @@ ${bodyContent}
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 </head>
-<body style="margin: 0; padding: 0; background-color: #ffffff;">
+<body style="margin: 0; padding: 20px; font-family: Arial, sans-serif;">
 ${htmlContent}
 </body>
 </html>`;
             console.log('[Gmail API] Wrapped table-based email template in HTML structure');
           } else {
-            // No structure at all, wrap everything with proper email width container
-            // Use table-based layout for email compatibility (standard email width: 600px)
+            // No structure at all - simple wrap, no backgrounds, left-aligned
             htmlContent = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -791,23 +776,11 @@ ${htmlContent}
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 </head>
-<body style="margin: 0; padding: 0; background-color: #f4f4f4; font-family: Arial, sans-serif;">
-  <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f4f4f4;">
-    <tr>
-      <td align="center" style="padding: 20px 0;">
-        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-          <tr>
-            <td style="padding: 40px;">
+<body style="margin: 0; padding: 20px; font-family: Arial, sans-serif; font-size: 16px; line-height: 1.5; color: #333333;">
 ${htmlContent}
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
 </body>
 </html>`;
-            console.log('[Gmail API] Wrapped content in complete HTML structure with proper email width');
+            console.log('[Gmail API] Wrapped content in simple HTML structure (no backgrounds)');
           }
           
           // CRITICAL DEBUG: Log final HTML before sending
