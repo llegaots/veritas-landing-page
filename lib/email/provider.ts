@@ -860,7 +860,7 @@ ${htmlContent}
               return `<p style="margin: 0 0 1em 0; font-family: Arial, sans-serif; font-size: 16px; line-height: 1.5; color: #333333;">${withBreaks}</p>`;
             }).filter(Boolean);
             
-            // Wrap in simple HTML structure that looks like plain text
+            // Wrap in simple HTML structure that looks like plain text (left-aligned, no backgrounds)
             htmlContent = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -868,20 +868,8 @@ ${htmlContent}
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 </head>
-<body style="margin: 0; padding: 0; background-color: #f4f4f4; font-family: Arial, sans-serif;">
-  <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f4f4f4;">
-    <tr>
-      <td align="center" style="padding: 20px 0;">
-        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-          <tr>
-            <td style="padding: 40px;">
+<body style="margin: 0; padding: 20px; font-family: Arial, sans-serif; font-size: 16px; line-height: 1.5; color: #333333;">
 ${formattedParagraphs.join('\n')}
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
 </body>
 </html>`;
             
@@ -1101,7 +1089,7 @@ ${formattedParagraphs.join('\n')}
         return `<p style="margin: 0 0 1em 0; font-family: Arial, sans-serif; font-size: 16px; line-height: 1.5; color: #333333;">${withBreaks}</p>`;
       }).filter(Boolean);
       
-      // Wrap in simple HTML structure that looks like plain text
+      // Wrap in simple HTML structure that looks like plain text (left-aligned, no backgrounds)
       htmlContent = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1109,20 +1097,8 @@ ${formattedParagraphs.join('\n')}
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 </head>
-<body style="margin: 0; padding: 0; background-color: #f4f4f4; font-family: Arial, sans-serif;">
-  <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f4f4f4;">
-    <tr>
-      <td align="center" style="padding: 20px 0;">
-        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-          <tr>
-            <td style="padding: 40px;">
+<body style="margin: 0; padding: 20px; font-family: Arial, sans-serif; font-size: 16px; line-height: 1.5; color: #333333;">
 ${formattedParagraphs.join('\n')}
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
 </body>
 </html>`;
       
