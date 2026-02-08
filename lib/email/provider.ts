@@ -42,7 +42,8 @@ function preserveLineBreaks(html: string): string {
         const trimmed = para.trim();
         if (!trimmed) return '';
         // Convert single newlines within paragraph to <br>
-        return `<p style="margin: 0 0 1em 0; line-height: 1.5;">${trimmed.replace(/\n/g, '<br>')}</p>`;
+        // Ensure paragraph fills full width of container (no max-width constraint)
+        return `<p style="margin: 0 0 1em 0; line-height: 1.5; width: 100%; max-width: 100%;">${trimmed.replace(/\n/g, '<br>')}</p>`;
       })
       .filter(Boolean)
       .join('\n');
@@ -62,10 +63,23 @@ function preserveLineBreaks(html: string): string {
       // Convert single newlines within paragraph to <br>
       const withBreaks = trimmed.replace(/\n/g, '<br>');
       // Wrap in paragraph if not already wrapped
+      // Ensure paragraph fills full width of container (no max-width constraint)
       if (!/^<p[\s>]/i.test(withBreaks)) {
-        return `<p style="margin: 0 0 1em 0; line-height: 1.5;">${withBreaks}</p>`;
+        return `<p style="margin: 0 0 1em 0; line-height: 1.5; width: 100%; max-width: 100%;">${withBreaks}</p>`;
       }
-      return withBreaks;
+      // If already wrapped in <p>, ensure it has width styles
+      return withBreaks.replace(/<p([^>]*)>/i, (match, attrs) => {
+        if (!/style\s*=\s*["']/.test(attrs)) {
+          return `<p style="width: 100%; max-width: 100%;"${attrs}>`;
+        }
+        // Add width to existing style if not present
+        return match.replace(/style\s*=\s*["']([^"']+)["']/i, (m, style) => {
+          if (!style.includes('width')) {
+            return `style="${style}; width: 100%; max-width: 100%;"`;
+          }
+          return m;
+        });
+      });
     })
     .filter(Boolean)
     .join('\n');
@@ -600,10 +614,45 @@ async function sendViaSmtp(options: EmailSendOptions): Promise<EmailSendResult> 
           const hasBodyTag = /<body[^>]*>/i.test(trimmedHtml);
           const isTableBased = /<table[^>]*role=["']presentation["']/i.test(trimmedHtml);
           
-          // If it's already a complete HTML document, don't wrap it
+          // If it's already a complete HTML document, check if it has width container
           if (hasDoctype && hasHtmlTag && hasBodyTag) {
-            // Already complete, use as-is
-            console.log('[Gmail API] HTML is already a complete document, using as-is');
+            // Check if it already has a width container table
+            const hasWidthContainer = /<table[^>]*role=["']presentation["'][^>]*width\s*=\s*["']600["']/i.test(htmlContent);
+            if (hasWidthContainer) {
+              // Already complete with width container, use as-is
+              console.log('[Gmail API] HTML is already a complete document with width container, using as-is');
+            } else {
+              // Complete document but no width container - need to add it
+              // Extract body content and wrap it
+              const bodyStart = htmlContent.indexOf('<body');
+              const bodyEnd = htmlContent.indexOf('</body>');
+              
+              if (bodyStart >= 0 && bodyEnd >= 0) {
+                const bodyTagEnd = htmlContent.indexOf('>', bodyStart);
+                if (bodyTagEnd >= 0) {
+                  const bodyContent = htmlContent.substring(bodyTagEnd + 1, bodyEnd).trim();
+                  const bodyTag = htmlContent.substring(bodyStart, bodyTagEnd + 1);
+                  
+                  htmlContent = htmlContent.substring(0, bodyStart) + bodyTag + `
+  <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f4f4f4;">
+    <tr>
+      <td align="center" style="padding: 20px 0;">
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border-radius: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <tr>
+            <td style="padding: 40px;">
+${bodyContent}
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>` + htmlContent.substring(bodyEnd + 7);
+                  
+                  console.log('[Gmail API] Added width container to complete HTML document');
+                }
+              }
+            }
           } else if (hasHtmlTag && hasBodyTag) {
             // Has html and body tags but no doctype, add doctype
             if (!hasDoctype) {
