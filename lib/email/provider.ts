@@ -841,12 +841,17 @@ ${htmlContent}
           }
         }
         } else {
-          // PLAIN TEXT EMAIL - send exactly as-is, no processing whatsoever
-          console.log('[SendEmail] Text-only email - NO HTML processing, sending plain text exactly as provided');
-          console.log('[SendEmail] Text content length:', options.text?.length || 0);
-          console.log('[SendEmail] Text preview (first 500):', options.text?.substring(0, 500) || '');
-          console.log('[SendEmail] Text newline count:', (options.text?.match(/\n/g) || []).length);
-          console.log('[SendEmail] Text will be sent EXACTLY as-is - newlines preserved exactly where user pressed ENTER');
+          // PLAIN TEXT EMAIL - send exactly as-is, NO processing whatsoever
+          // Newlines are preserved EXACTLY where user pressed ENTER in the textarea
+          // NO conversion, NO HTML, NO modification - just plain text
+          const textContent = options.text || '';
+          console.log('[SendEmail] ===== PLAIN TEXT EMAIL - NO PROCESSING =====');
+          console.log('[SendEmail] Text content length:', textContent.length);
+          console.log('[SendEmail] Text newline count:', (textContent.match(/\n/g) || []).length);
+          console.log('[SendEmail] Text preview (first 500 chars):', textContent.substring(0, 500));
+          console.log('[SendEmail] Text preview (showing newlines as \\n):', textContent.substring(0, 500).replace(/\n/g, '\\n'));
+          console.log('[SendEmail] Text will be sent EXACTLY as-is - newlines ONLY where user pressed ENTER');
+          console.log('[SendEmail] ============================================');
         }
         
         // Use MailComposer to build proper RFC 2822 message (fixes MIME/header issues)
@@ -858,8 +863,7 @@ ${htmlContent}
           to: options.to,
           subject: encodeSubject(options.subject),
           html: isTextOnly ? undefined : htmlContent,
-          // PLAIN TEXT: Send EXACTLY as-is, NO processing, newlines ONLY where user pressed ENTER
-          text: isTextOnly ? (options.text || undefined) : undefined,
+          text: options.text || undefined,
           replyTo: options.replyTo || undefined,
         };
         
