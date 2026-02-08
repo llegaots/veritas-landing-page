@@ -1011,12 +1011,33 @@ function MessageJobsContent() {
                                           </p>
                                         )}
                                       </div>
-                                      {job.email_text && (
+                                      {job.email_text && !job.email_html && (
                                         <div className="p-3 bg-gray-50 rounded border border-gray-200">
-                                          <p className="text-sm font-medium text-gray-700 mb-1">Plain Text:</p>
-                                          <p className="text-sm text-gray-900 whitespace-pre-wrap">
-                                            {job.email_text}
-                                          </p>
+                                          <p className="text-sm font-medium text-gray-700 mb-1">Email Preview (as it will be sent):</p>
+                                          <div 
+                                            className="text-sm text-gray-900"
+                                            dangerouslySetInnerHTML={{ 
+                                              __html: (() => {
+                                                // Convert text to HTML the same way the email provider does
+                                                let textHtml = job.email_text
+                                                  .replace(/&/g, '&amp;')
+                                                  .replace(/</g, '&lt;')
+                                                  .replace(/>/g, '&gt;');
+                                                
+                                                // Split by double newlines (paragraphs) and preserve single newlines as <br>
+                                                const paragraphs = textHtml.split(/\n{2,}/);
+                                                const formattedParagraphs = paragraphs.map(para => {
+                                                  const trimmed = para.trim();
+                                                  if (!trimmed) return '';
+                                                  // Replace ALL newlines with <br> tags to preserve exact formatting
+                                                  const withBreaks = trimmed.replace(/\n/g, '<br>');
+                                                  return `<p style="margin: 0 0 1em 0; font-family: Arial, sans-serif; font-size: 16px; line-height: 1.5; color: #333333;">${withBreaks}</p>`;
+                                                }).filter(Boolean);
+                                                
+                                                return formattedParagraphs.join('\n');
+                                              })()
+                                            }}
+                                          />
                                         </div>
                                       )}
                                     </div>
