@@ -167,7 +167,50 @@ export async function GET(request: NextRequest) {
         
         // Check run status - allow 'active' and 'pending' (pending should be auto-activated)
         // Note: Runs are created as 'active', but if something went wrong, they might be 'pending'
-        if (run.status !== 'active' && run.status !== 'pending') {
+        // Also check if paused runs should actually be active (auto-resume if incorrectly paused)
+        if (run.status === 'paused') {
+          // Check if this run should actually be active
+          // A run should only be paused if:
+          // 1. Investor status is "Interested", OR
+          // 2. Investor replied to SMS, OR
+          // 3. Investor booked Calendly call
+          // If none of these are true, auto-resume the run
+          let shouldBePaused = false;
+          
+          if (run?.investor_id) {
+            const { data: investor } = await supabase
+              .from('investors')
+              .select('id, status')
+              .eq('id', run.investor_id)
+              .single();
+            const investorStatus = (investor?.status || '').toLowerCase().trim();
+            if (investorStatus === 'interested') {
+              shouldBePaused = true;
+              console.log(`[Cron] Run ${run.id} correctly paused - investor ${run.investor_id} status is "Interested"`);
+            } else {
+              console.log(`[Cron] ⚠️ Run ${run.id} is paused but investor ${run.investor_id} status is "${investorStatus}" (not "Interested") - auto-resuming`);
+            }
+          } else {
+            // No investor_id - shouldn't be paused
+            console.log(`[Cron] ⚠️ Run ${run.id} is paused but has no investor_id - auto-resuming`);
+          }
+          
+          if (!shouldBePaused) {
+            // Auto-resume incorrectly paused run
+            await supabase
+              .from('sequence_runs')
+              .update({ status: 'active', updated_at: new Date().toISOString() })
+              .eq('id', run.id)
+              .eq('status', 'paused');
+            run.status = 'active'; // Update local reference
+            console.log(`[Cron] ✅ Auto-resumed run ${run.id} for job ${job.id}`);
+          } else {
+            // Correctly paused - skip
+            console.log(`[Cron] ⏸️ SKIP: Job ${job.id} (type: ${job.job_type || 'sms'}, scheduled: ${job.scheduled_for}) - sequence run ${run.id} is correctly "paused". Run created: ${run.created_at}, updated: ${run.updated_at}`);
+            results.errors.push(`Job ${job.id}: Sequence run is paused`);
+            continue;
+          }
+        } else if (run.status !== 'active' && run.status !== 'pending') {
           console.log(`[Cron] ⏸️ SKIP: Job ${job.id} (type: ${job.job_type || 'sms'}, scheduled: ${job.scheduled_for}) - sequence run ${run.id} is "${run.status}" (not "active" or "pending"). Run created: ${run.created_at}, updated: ${run.updated_at}`);
           results.errors.push(`Job ${job.id}: Sequence run is ${run.status}`);
           continue;
