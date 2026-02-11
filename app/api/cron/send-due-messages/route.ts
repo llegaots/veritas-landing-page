@@ -153,17 +153,22 @@ export async function GET(request: NextRequest) {
     // Process each job
     for (const job of jobs) {
       try {
+        console.log(`[Cron] 🔍 Processing job ${job.id} (type: ${job.job_type || 'sms'}, scheduled: ${job.scheduled_for})`);
+        
         // Check if sequence run is paused - skip if paused
         const run = Array.isArray(job.sequence_runs) ? job.sequence_runs[0] : job.sequence_runs;
         if (!run) {
-          console.log(`[Cron] ⚠️ Skipping job ${job.id} - no sequence run found`);
+          console.log(`[Cron] ⚠️ SKIP: Job ${job.id} - no sequence run found`);
           results.errors.push(`Job ${job.id}: No sequence run found`);
           continue;
         }
+        
+        console.log(`[Cron] Job ${job.id} has run ${run.id} with status "${run.status}"`);
+        
         // Check run status - allow 'active' and 'pending' (pending should be auto-activated)
         // Note: Runs are created as 'active', but if something went wrong, they might be 'pending'
         if (run.status !== 'active' && run.status !== 'pending') {
-          console.log(`[Cron] ⏸️ Skipping job ${job.id} (type: ${job.job_type || 'sms'}, scheduled: ${job.scheduled_for}) - sequence run ${run.id} is "${run.status}" (not "active" or "pending"). Run created: ${run.created_at}, updated: ${run.updated_at}`);
+          console.log(`[Cron] ⏸️ SKIP: Job ${job.id} (type: ${job.job_type || 'sms'}, scheduled: ${job.scheduled_for}) - sequence run ${run.id} is "${run.status}" (not "active" or "pending"). Run created: ${run.created_at}, updated: ${run.updated_at}`);
           results.errors.push(`Job ${job.id}: Sequence run is ${run.status}`);
           continue;
         }
@@ -181,19 +186,21 @@ export async function GET(request: NextRequest) {
 
         // If investor status is "Interested", pause the run and skip - STOP sending
         if (run?.investor_id) {
+          console.log(`[Cron] Checking investor ${run.investor_id} status for job ${job.id}`);
           const { data: investor } = await supabase
             .from('investors')
             .select('id, status')
             .eq('id', run.investor_id)
             .single();
           const investorStatus = (investor?.status || '').toLowerCase().trim();
+          console.log(`[Cron] Investor ${run.investor_id} status: "${investorStatus}"`);
           if (investorStatus === 'interested') {
             await supabase
               .from('sequence_runs')
               .update({ status: 'paused', updated_at: new Date().toISOString() })
               .eq('id', run.id)
               .in('status', ['pending', 'active']);
-            console.log(`[Cron] Skipping job ${job.id} - investor ${run.investor_id} status is "Interested". Sequence run ${run.id} paused.`);
+            console.log(`[Cron] ⏸️ SKIP: Job ${job.id} - investor ${run.investor_id} status is "Interested". Sequence run ${run.id} paused.`);
             continue;
           }
         }
@@ -206,7 +213,7 @@ export async function GET(request: NextRequest) {
         // Allow a small buffer (5 seconds) for clock skew
         const timeDiff = scheduledTime.getTime() - currentTime.getTime();
         if (timeDiff > 5000) {
-          console.log(`[Cron] Skipping job ${job.id} - scheduled for future: ${job.scheduled_for} (${Math.round(timeDiff / 1000)}s ahead)`);
+          console.log(`[Cron] ⏸️ SKIP: Job ${job.id} - scheduled for future: ${job.scheduled_for} (${Math.round(timeDiff / 1000)}s ahead)`);
           continue;
         }
         
@@ -215,15 +222,19 @@ export async function GET(request: NextRequest) {
         const overdueByHours = overdueByMs / (1000 * 60 * 60);
         const isOverdue = overdueByHours > 1;
         
+        console.log(`[Cron] Job ${job.id} timing check: scheduled=${job.scheduled_for}, now=${currentTime.toISOString()}, overdue=${Math.round(overdueByHours * 10) / 10}h, withinWindow=${isWithinWindow}`);
+        
         // If outside sending window, only send overdue messages (more than 1 hour late)
         if (!isWithinWindow && !isOverdue) {
-          console.log(`[Cron] Skipping job ${job.id} - outside sending window and not overdue (scheduled: ${job.scheduled_for}, overdue by: ${Math.round(overdueByHours * 10) / 10}h)`);
+          console.log(`[Cron] ⏸️ SKIP: Job ${job.id} - outside sending window and not overdue (scheduled: ${job.scheduled_for}, overdue by: ${Math.round(overdueByHours * 10) / 10}h)`);
           continue;
         }
         
         if (isOverdue && !isWithinWindow) {
-          console.log(`[Cron] Processing overdue job ${job.id} outside sending window (overdue by ${Math.round(overdueByHours * 10) / 10}h)`);
+          console.log(`[Cron] ✅ Processing overdue job ${job.id} outside sending window (overdue by ${Math.round(overdueByHours * 10) / 10}h)`);
         }
+        
+        console.log(`[Cron] ✅ Job ${job.id} passed all checks, proceeding to send`);
         
         // Mark as processing (optimistic lock)
         const { error: lockError } = await supabase
@@ -247,8 +258,12 @@ export async function GET(request: NextRequest) {
 
         if (jobType === 'email') {
           // Send Email
+          console.log(`[Cron] Processing email job ${job.id}: address="${job.email_address}", subject="${job.email_subject}", has_html=${!!job.email_html}, has_text=${!!job.email_text}`);
+          
           if (!job.email_address || !job.email_subject) {
-            throw new Error('Email job missing required fields: email_address or email_subject');
+            const errorMsg = `Email job ${job.id} missing required fields: email_address="${job.email_address}", email_subject="${job.email_subject}"`;
+            console.error(`[Cron] ❌ ${errorMsg}`);
+            throw new Error(errorMsg);
           }
 
           // Check if this is a text-only email or HTML email
