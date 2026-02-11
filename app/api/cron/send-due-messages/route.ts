@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
     const bufferMs = 5000; // 5 seconds
     const dueTime = new Date(now.getTime() + bufferMs).toISOString();
     
-    // Get due jobs
+    // Get due jobs - IMPORTANT: Filter out paused runs at database level to prevent bulk sends
     const { data: jobs, error: fetchError } = await supabase
       .from('message_jobs')
       .select(`
@@ -108,8 +108,9 @@ export async function GET(request: NextRequest) {
       `)
       .is('sent_at', null) // Not yet sent (use .is() for null checks)
       .lte('scheduled_for', dueTime) // Due now or past (with small buffer)
+      .eq('sequence_runs.status', 'active') // CRITICAL: Only get jobs with active runs (exclude paused)
       .order('scheduled_for', { ascending: true }) // Process in chronological order
-      .limit(100); // Process in batches
+      .limit(50); // Reduced limit to prevent bulk sends
 
     if (fetchError) {
       console.error('Error fetching due jobs:', fetchError);
