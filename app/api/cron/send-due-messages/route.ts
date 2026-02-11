@@ -160,10 +160,23 @@ export async function GET(request: NextRequest) {
           results.errors.push(`Job ${job.id}: No sequence run found`);
           continue;
         }
-        if (run.status !== 'active') {
-          console.log(`[Cron] ⏸️ Skipping job ${job.id} (type: ${job.job_type || 'sms'}, scheduled: ${job.scheduled_for}) - sequence run ${run.id} is "${run.status}" (not "active"). Run created: ${run.created_at}, updated: ${run.updated_at}`);
+        // Check run status - allow 'active' and 'pending' (pending should be auto-activated)
+        // Note: Runs are created as 'active', but if something went wrong, they might be 'pending'
+        if (run.status !== 'active' && run.status !== 'pending') {
+          console.log(`[Cron] ⏸️ Skipping job ${job.id} (type: ${job.job_type || 'sms'}, scheduled: ${job.scheduled_for}) - sequence run ${run.id} is "${run.status}" (not "active" or "pending"). Run created: ${run.created_at}, updated: ${run.updated_at}`);
           results.errors.push(`Job ${job.id}: Sequence run is ${run.status}`);
           continue;
+        }
+        
+        // Auto-activate pending runs (they should have been created as active, but handle edge case)
+        if (run.status === 'pending') {
+          console.log(`[Cron] ⚠️ Auto-activating pending run ${run.id} for job ${job.id}`);
+          await supabase
+            .from('sequence_runs')
+            .update({ status: 'active', updated_at: new Date().toISOString() })
+            .eq('id', run.id)
+            .eq('status', 'pending');
+          run.status = 'active'; // Update local reference
         }
 
         // If investor status is "Interested", pause the run and skip - STOP sending
