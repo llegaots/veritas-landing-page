@@ -136,9 +136,8 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({
           success: true,
-          message: 'Booking processed and sequences paused',
+          message: 'Booking processed - sequences will continue automatically',
           investor_id: investorId,
-          runs_paused: activeRuns?.length || 0,
         });
       } else {
         console.log('[Calendly Webhook] Investor not found, booking recorded but no sequences to pause');
