@@ -162,16 +162,26 @@ export async function POST(request: NextRequest) {
       // Check if a run already exists for this lead + sequence combination
       // This prevents duplicate runs if the webhook is called multiple times
       // IMPORTANT: Check for ANY run (active, paused, or pending) to prevent duplicates
+      // This is critical: if we only checked for 'active' runs, paused runs would allow duplicates
       const { data: existingRun } = await supabase
         .from('sequence_runs')
-        .select('id, status')
+        .select('id, status, created_at, updated_at')
         .eq('sequence_version_id', version.id)
         .eq('lead_id', lead_id.toString())
+        .order('created_at', { ascending: false }) // Get most recent first
         .limit(1)
-        .single();
+        .maybeSingle();
       
       if (existingRun) {
-        console.log(`[lead.created] ⏭️  Skipping sequence ${sequence.id} - run already exists for this lead (run_id: ${existingRun.id}, status: ${existingRun.status})`);
+        // Log duplicate prevention with details for monitoring
+        console.log(`[lead.created] ⏭️  DUPLICATE PREVENTION: Skipping sequence ${sequence.id} - run already exists for this lead`);
+        console.log(`[lead.created]    Existing run: ${existingRun.id.substring(0, 8)}... (status: ${existingRun.status}, created: ${existingRun.created_at}, updated: ${existingRun.updated_at})`);
+        console.log(`[lead.created]    Lead ID: ${lead_id}, Sequence: ${sequence.id}`);
+        
+        // If existing run is paused, log a warning (this shouldn't create a new run)
+        if (existingRun.status === 'paused') {
+          console.log(`[lead.created]    ⚠️  WARNING: Existing run is paused. New run would have been created if we only checked for 'active' runs.`);
+        }
         continue;
       }
 

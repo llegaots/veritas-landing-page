@@ -70,21 +70,22 @@ function SequencesListContent() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this sequence? This will remove it and its message jobs.')) return;
+  const handleArchive = async (id: string) => {
+    if (!confirm('Archive this sequence? It will be hidden from the list but all data will be preserved in the database.')) return;
     
     try {
       const response = await fetch(
-        `/api/sequences?key=${encodeURIComponent(password)}&id=${id}`,
-        { method: 'DELETE' }
+        `/api/sequences/${id}/archive?key=${encodeURIComponent(password)}`,
+        { method: 'PATCH' }
       );
       if (!response.ok) {
-        throw new Error('Failed to delete sequence');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to archive sequence');
       }
       // Remove from UI immediately so it disappears
       setSequences((prev) => prev.filter((s) => s.id !== id));
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to delete sequence');
+      alert(err instanceof Error ? err.message : 'Failed to archive sequence');
     }
   };
 
@@ -235,12 +236,12 @@ function SequencesListContent() {
                       size="sm"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleDelete(sequence.id);
+                        handleArchive(sequence.id);
                       }}
                       className="border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 hover:text-red-700 transition-all duration-200 rounded-lg cursor-pointer"
                     >
                       <Trash2 className="h-4 w-4 mr-2" />
-                      Delete
+                      Archive
                     </Button>
                   </div>
                 </div>

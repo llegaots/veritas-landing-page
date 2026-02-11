@@ -29,19 +29,22 @@ function SequencesPageContent() {
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [deleting, setDeleting] = useState(false);
 
-  const handleDeleteSequence = async () => {
+  const handleArchiveSequence = async () => {
     if (!sequenceId || !password) return;
-    if (!confirm('Are you sure you want to delete this sequence? This will remove it and its message jobs from the system.')) return;
+    if (!confirm('Archive this sequence? It will be hidden but all data will be preserved in the database.')) return;
     setDeleting(true);
     try {
       const response = await fetch(
-        `/api/sequences?key=${encodeURIComponent(password)}&id=${sequenceId}`,
-        { method: 'DELETE' }
+        `/api/sequences/${sequenceId}/archive?key=${encodeURIComponent(password)}`,
+        { method: 'PATCH' }
       );
-      if (!response.ok) throw new Error('Failed to delete sequence');
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to archive sequence');
+      }
       router.push(`/admin/sequences/list?key=${encodeURIComponent(password)}`);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to delete sequence');
+      alert(err instanceof Error ? err.message : 'Failed to archive sequence');
     } finally {
       setDeleting(false);
     }
@@ -353,7 +356,7 @@ function SequencesPageContent() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={handleDeleteSequence}
+                    onClick={handleArchiveSequence}
                     disabled={deleting}
                     className="border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 hover:text-red-700 transition-all duration-200 rounded-lg cursor-pointer"
                   >
@@ -362,7 +365,7 @@ function SequencesPageContent() {
                     ) : (
                       <Trash2 className="h-4 w-4 mr-2" />
                     )}
-                    Delete
+                    Archive
                   </Button>
                 )}
               </div>

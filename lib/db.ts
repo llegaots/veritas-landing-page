@@ -380,7 +380,7 @@ export interface SequenceVersion {
   created_by: string | null;
 }
 
-export async function getSequences(): Promise<Sequence[]> {
+export async function getSequences(includeArchived: boolean = false): Promise<Sequence[]> {
   const client = getSupabaseClient();
   if (!client) {
     throw new Error('Supabase client not initialized. Please configure SUPABASE_URL and SUPABASE_ANON_KEY.');
@@ -396,7 +396,7 @@ export async function getSequences(): Promise<Sequence[]> {
     throw error;
   }
 
-  return (data || []).map((row: any) => ({
+  const sequences = (data || []).map((row: any) => ({
     id: row.id,
     org_id: row.org_id,
     name: row.name,
@@ -404,6 +404,26 @@ export async function getSequences(): Promise<Sequence[]> {
     created_at: row.created_at,
     updated_at: row.updated_at,
   }));
+
+  // Filter out archived sequences unless explicitly requested
+  if (!includeArchived) {
+    const filtered: Sequence[] = [];
+    for (const seq of sequences) {
+      if (seq.active_version_id) {
+        const version = await getSequenceVersion(seq.active_version_id);
+        const status = version?.spec_jsonb?.metadata?.status || 'draft';
+        if (status !== 'archived') {
+          filtered.push(seq);
+        }
+      } else {
+        // Sequences without active version are included (they're likely drafts)
+        filtered.push(seq);
+      }
+    }
+    return filtered;
+  }
+
+  return sequences;
 }
 
 export async function getSequence(id: string): Promise<Sequence | null> {

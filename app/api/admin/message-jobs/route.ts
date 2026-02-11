@@ -26,6 +26,7 @@ export async function GET(request: NextRequest) {
 
   try {
     // Fetch ALL jobs matching jobType, sequenceId, date, source (no status filter - stats need full set)
+    // Include spec_jsonb to check sequence status (archived sequences should be filtered out)
     let query = supabase
       .from('message_jobs')
       .select(`
@@ -36,10 +37,13 @@ export async function GET(request: NextRequest) {
           investor_id,
           status,
           started_at,
+          created_at,
+          archived_at,
           context_jsonb,
           sequence_versions(
             id,
             version_number,
+            spec_jsonb,
             sequences(
               id,
               name
@@ -200,7 +204,8 @@ export async function GET(request: NextRequest) {
 
     // Calculate metrics
     const now = new Date();
-    const jobs = filteredData.map((job: any) => {
+    const jobs = filteredData
+      .map((job: any) => {
       const scheduled = new Date(job.scheduled_for);
       const sent = job.sent_at ? new Date(job.sent_at) : null;
       
@@ -228,6 +233,24 @@ export async function GET(request: NextRequest) {
       const version = Array.isArray(run?.sequence_versions) ? run?.sequence_versions[0] : run?.sequence_versions;
       const sequence = Array.isArray(version?.sequences) ? version?.sequences[0] : version?.sequences;
       
+      // PRIORITY 1: Check if this sequence run is archived for this investor (per-investor archiving)
+      if (run?.archived_at) {
+        console.log(`[message-jobs] Filtering out job ${job.id} - sequence run ${run.id} is archived for investor ${run.investor_id} (archived_at: ${run.archived_at})`);
+        return null; // Filter out jobs from archived runs (per-investor archiving)
+      }
+      
+      // PRIORITY 2: Check if the entire sequence is globally archived (legacy check)
+      if (version?.spec_jsonb?.metadata) {
+        const sequenceStatus = version.spec_jsonb.metadata.status;
+        if (sequenceStatus === 'archived') {
+          console.log(`[message-jobs] Filtering out job ${job.id} - sequence is globally archived (status: ${sequenceStatus})`);
+          return null; // Filter out jobs from globally archived sequences
+        }
+      } else if (version && !version.spec_jsonb) {
+        // Log if we have version but no spec_jsonb (shouldn't happen but helps debug)
+        console.warn(`[message-jobs] Job ${job.id} has version ${version.id} but no spec_jsonb`);
+      }
+      
       const sequenceName = sequence?.name || 'Unknown Sequence';
       const versionNumber = version?.version_number || null;
       
@@ -247,6 +270,7 @@ export async function GET(request: NextRequest) {
         investor_id: run.investor_id,
         status: run.status,
         started_at: run.started_at,
+        created_at: run.created_at,
         context_jsonb: run.context_jsonb,
         sequence_id: sequenceId,
       } : null;
@@ -274,7 +298,18 @@ export async function GET(request: NextRequest) {
         interactions: interactions,
         interaction_count: interactions.length,
       };
+    })
+    .filter((job: any) => {
+      if (job === null) {
+        return false; // Remove null entries (archived sequences)
+      }
+      return true;
     });
+  
+  const archivedCount = filteredData.length - jobs.length;
+  if (archivedCount > 0) {
+    console.log(`[message-jobs] Filtered out ${archivedCount} job(s) from archived sequences`);
+  }
 
     // Helper: resolve job type (legacy jobs may not have job_type)
     const getJobType = (j: any) => j.job_type || (j.phone_number ? 'sms' : 'email');
@@ -324,8 +359,10 @@ export async function GET(request: NextRequest) {
       if (id && !sequenceMap.has(id)) sequenceMap.set(id, name);
     });
     if (sequenceMap.size === 0) {
-      const { data: seqs } = await supabase.from('sequences').select('id, name');
-      (seqs || []).forEach((s: any) => sequenceMap.set(s.id, s.name || 'Unknown'));
+      // Use getSequences to filter out archived sequences
+      const { getSequences } = await import('@/lib/db');
+      const seqs = await getSequences(false); // false = exclude archived
+      seqs.forEach((s) => sequenceMap.set(s.id, s.name || 'Unknown'));
     }
     const availableSequences = Array.from(sequenceMap.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
 

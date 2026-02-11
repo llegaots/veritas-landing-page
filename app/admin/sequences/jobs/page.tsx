@@ -86,6 +86,7 @@ interface MessageJob {
     investor_id: number | null;
     status: string;
     started_at: string;
+    created_at: string;
     context_jsonb: Record<string, any>;
     sequence_id?: string | null;
   };
@@ -134,23 +135,39 @@ function MessageJobsContent() {
   const [availableSequences, setAvailableSequences] = useState<{ id: string; name: string }[]>([]);
   const [pausingRuns, setPausingRuns] = useState<Set<string>>(new Set());
   const [deletingSequenceIds, setDeletingSequenceIds] = useState<Set<string>>(new Set());
+  const [investorMessageFilter, setInvestorMessageFilter] = useState<Map<string, 'all' | 'email' | 'sms' | 'scheduled' | 'failed'>>(new Map());
+  const [expandedMessageIds, setExpandedMessageIds] = useState<Set<string>>(new Set());
 
-  const handleDeleteSequence = async (sequenceId: string) => {
-    if (!confirm('Delete this sequence? This will remove it and all its message jobs.')) return;
-    setDeletingSequenceIds((prev) => new Set(prev).add(sequenceId));
+  const handleArchiveSequenceRun = async (runId: string, sequenceId: string) => {
+    if (!confirm('Archive this sequence for this investor? It will be hidden from the list but all data will be preserved in the database.')) return;
+    
+    // Set loading state ONLY for this specific sequence/run combination
+    const loadingKey = `${runId}-${sequenceId}`;
+    setDeletingSequenceIds((prev) => new Set(prev).add(loadingKey));
+    
     try {
       const res = await fetch(
-        `/api/sequences?key=${encodeURIComponent(password)}&id=${sequenceId}`,
-        { method: 'DELETE' }
+        `/api/admin/sequence-runs/${runId}/archive?key=${encodeURIComponent(password)}`,
+        { method: 'PATCH' }
       );
-      if (!res.ok) throw new Error('Failed to delete');
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to archive sequence run');
+      }
+      
+      // Refresh data to get updated list (API will filter out archived runs)
+      // This ensures we only hide the sequence for this specific investor
       await fetchData();
+      
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to delete sequence');
+      alert(err instanceof Error ? err.message : 'Failed to archive sequence run');
+      // On error, refresh to get correct state
+      await fetchData();
     } finally {
+      // Clear loading state
       setDeletingSequenceIds((prev) => {
         const next = new Set(prev);
-        next.delete(sequenceId);
+        next.delete(loadingKey);
         return next;
       });
     }
@@ -261,9 +278,12 @@ function MessageJobsContent() {
   };
 
   // Group jobs by investor (or phone number if no investor)
+  // Also filter out jobs from archived sequences (client-side backup filter)
   const jobsByInvestor = useMemo(() => {
-    const grouped = new Map<string, { investorId: string | null; investorName: string | null; investorPhone: string | null; investorEmail: string | null; jobs: MessageJob[] }>();
+    const grouped = new Map<string, { investorId: string | null; investorName: string | null; investorPhone: string | null; investorEmail: string | null; investorCreatedAt: string | null; jobs: MessageJob[] }>();
     
+    // Use all jobs - API already filters out archived sequences
+    // No client-side filtering needed - trust the API
     jobs.forEach(job => {
       // Use investor_id if available, otherwise use phone_number or email_address as fallback
       const investorId = job.sequence_runs?.investor_id?.toString() || null;
@@ -272,6 +292,7 @@ function MessageJobsContent() {
       const investorName = job.investor_name || null;
       const investorPhone = job.investor_phone || job.phone_number || null;
       const investorEmail = job.investor_email || job.email_address || null;
+      const investorCreatedAt = job.sequence_runs?.created_at || null;
       
       if (!grouped.has(groupKey)) {
         grouped.set(groupKey, {
@@ -279,6 +300,7 @@ function MessageJobsContent() {
           investorName,
           investorPhone,
           investorEmail,
+          investorCreatedAt,
           jobs: []
         });
       }
@@ -288,14 +310,32 @@ function MessageJobsContent() {
     return grouped;
   }, [jobs]);
 
-  // Sort investors by most recent message
+  // Sort investors by most recent (when they were added - earliest sequence_run created_at)
+  // Also filter by date range if provided
   const sortedInvestors = useMemo(() => {
-    return Array.from(jobsByInvestor.entries()).sort((a, b) => {
-      const aLatest = Math.max(...a[1].jobs.map(j => parseAsUTC(j.scheduled_for).getTime()));
-      const bLatest = Math.max(...b[1].jobs.map(j => parseAsUTC(j.scheduled_for).getTime()));
-      return bLatest - aLatest;
+    let filtered = Array.from(jobsByInvestor.entries());
+    
+    // Filter by date range (investor creation date)
+    if (startDate || endDate) {
+      filtered = filtered.filter(([_, investorData]) => {
+        if (!investorData.investorCreatedAt) return false;
+        const createdAt = parseAsUTC(investorData.investorCreatedAt);
+        const start = startDate ? parseAsUTC(startDate) : null;
+        const end = endDate ? parseAsUTC(endDate + 'T23:59:59') : null;
+        
+        if (start && createdAt < start) return false;
+        if (end && createdAt > end) return false;
+        return true;
+      });
+    }
+    
+    // Sort by most recent first (earliest sequence_run created_at for each investor)
+    return filtered.sort((a, b) => {
+      const aCreated = a[1].investorCreatedAt ? parseAsUTC(a[1].investorCreatedAt).getTime() : 0;
+      const bCreated = b[1].investorCreatedAt ? parseAsUTC(b[1].investorCreatedAt).getTime() : 0;
+      return bCreated - aCreated; // Most recent first
     });
-  }, [jobsByInvestor]);
+  }, [jobsByInvestor, startDate, endDate]);
 
   const toggleInvestor = (investorKey: string) => {
     const newExpanded = new Set(expandedInvestors);
@@ -324,9 +364,60 @@ function MessageJobsContent() {
     const secs = Math.floor(seconds % 60);
     
     if (minutes > 0) {
-      return `${minutes}m ${secs}s`;
+      return `${minutes}m`;
     }
     return `${secs}s`;
+  };
+
+  // New standardized status system (4 states)
+  const getMessageStatus = (job: MessageJob): { status: 'sent' | 'scheduled' | 'sending' | 'failed'; isLate: boolean; lateBy?: string } => {
+    if (job.error) {
+      return { status: 'failed', isLate: false };
+    }
+    if (job.sent_at) {
+      const isLate = job.timing_status === 'late';
+      return { 
+        status: 'sent', 
+        isLate, 
+        lateBy: isLate ? formatTiming(job) || undefined : undefined 
+      };
+    }
+    if (job.provider_status === 'queued' || job.provider_status === 'sending') {
+      return { status: 'sending', isLate: false };
+    }
+    return { status: 'scheduled', isLate: false };
+  };
+
+  const getJobType = (job: MessageJob): 'email' | 'sms' => {
+    return (job.job_type || (job.phone_number ? 'sms' : 'email')) as 'email' | 'sms';
+  };
+
+  const toggleMessageExpansion = (jobId: string) => {
+    const next = new Set(expandedMessageIds);
+    if (next.has(jobId)) {
+      next.delete(jobId);
+    } else {
+      next.add(jobId);
+    }
+    setExpandedMessageIds(next);
+  };
+
+  const convertTextToHtmlForPreview = (text: string): string => {
+    // This should mirror the logic in lib/email/provider.ts for text-to-HTML conversion
+    let textHtml = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+    
+    const paragraphs = textHtml.split(/\n{2,}/);
+    const formattedParagraphs = paragraphs.map(para => {
+      const trimmed = para.trim();
+      if (!trimmed) return '';
+      const withBreaks = trimmed.replace(/\n/g, '<br>');
+      return `<p style="margin: 0 0 1em 0; font-family: Arial, sans-serif; font-size: 16px; line-height: 1.5; color: #333333;">${withBreaks}</p>`;
+    }).filter(Boolean);
+
+    return formattedParagraphs.join('\n');
   };
 
   const getStatusBadge = (job: MessageJob) => {
@@ -651,7 +742,6 @@ function MessageJobsContent() {
             {sortedInvestors.map(([investorKey, investorData]) => {
               const isExpanded = expandedInvestors.has(investorKey);
               const { investorName, investorPhone, investorEmail, jobs: investorJobs } = investorData;
-              const hasAnomalies = investorJobs.some(j => j.is_anomaly);
               // Sort jobs by scheduled_for time (ascending - earliest first)
               // Also sort by run_id to group jobs from the same sequence run together
               const sortedJobs = [...investorJobs].sort((a, b) => {
@@ -694,86 +784,116 @@ function MessageJobsContent() {
               const stopCount = allInteractions.filter(i => i.interaction_type === 'stop').length;
               const bookingCount = allInteractions.filter(i => i.interaction_type === 'calendly_booking').length;
 
+              // Calculate stats for this investor
+              const sentCount = investorJobs.filter(j => j.sent_at).length;
+              const pendingCount = investorJobs.filter(j => !j.sent_at && parseAsUTC(j.scheduled_for) > new Date()).length;
+              const failedCount = investorJobs.filter(j => j.error).length;
+              
+              // Calculate channel-specific stats
+              const emailJobs = investorJobs.filter(j => getJobType(j) === 'email');
+              const smsJobs = investorJobs.filter(j => getJobType(j) === 'sms');
+              const emailSent = emailJobs.filter(j => j.sent_at && !j.error).length;
+              const emailFailed = emailJobs.filter(j => j.error).length;
+              const smsSent = smsJobs.filter(j => j.sent_at && !j.error).length;
+              const smsFailed = smsJobs.filter(j => j.error).length;
+              const smsScheduled = smsJobs.filter(j => !j.sent_at && !j.error && parseAsUTC(j.scheduled_for) > new Date()).length;
+              
+              // Get investor-level message filter
+              const messageFilter = investorMessageFilter.get(investorKey) || 'all';
+              
+              // Filter jobs based on investor-level filter
+              let filteredJobs = sortedJobs;
+              if (messageFilter === 'email') {
+                filteredJobs = sortedJobs.filter(j => getJobType(j) === 'email');
+              } else if (messageFilter === 'sms') {
+                filteredJobs = sortedJobs.filter(j => getJobType(j) === 'sms');
+              } else if (messageFilter === 'scheduled') {
+                filteredJobs = sortedJobs.filter(j => !j.sent_at && !j.error && parseAsUTC(j.scheduled_for) > new Date());
+              } else if (messageFilter === 'failed') {
+                filteredJobs = sortedJobs.filter(j => j.error);
+              }
+
+              // Calculate sequence progress (sent / total)
+              const progressSent = sentCount;
+              const progressTotal = investorJobs.length;
+              const progressPercent = progressTotal > 0 ? (progressSent / progressTotal) * 100 : 0;
+
               return (
                 <Card 
                   key={investorKey} 
-                  className={`bg-white border-0 shadow-sm transition-all ${
-                    hasAnomalies ? 'border-l-4 border-l-orange-500' : ''
-                  }`}
-                >
-                  <CardHeader 
-                    className="cursor-pointer hover:bg-gray-50 transition-colors"
+                  className="bg-white border-0 shadow-sm transition-all cursor-pointer hover:shadow-md"
                     onClick={() => toggleInvestor(investorKey)}
                   >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <CardTitle className="text-lg">
+                  {/* Compact Investor Header */}
+                  <CardHeader className="pb-3 cursor-pointer">
+                    <div className="flex items-start justify-between gap-4">
+                      {/* Left: Name and Stats */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 mb-3">
+                          <CardTitle className="text-lg font-semibold">
                             {investorName || `Investor (${investorPhone || investorEmail || 'Unknown'})`}
                           </CardTitle>
-                          {intentScore > 0 && (
-                            <Badge 
-                              variant="outline" 
-                              className={`gap-1 ${
-                                intentScore >= 15 ? 'border-green-500 text-green-700 bg-green-50' :
-                                intentScore >= 5 ? 'border-blue-500 text-blue-700 bg-blue-50' :
-                                intentScore > 0 ? 'border-yellow-500 text-yellow-700 bg-yellow-50' :
-                                'border-gray-500 text-gray-700 bg-gray-50'
-                              }`}
-                            >
-                              <TrendingUp className="h-3 w-3" />
-                              Intent: {intentScore.toFixed(1)}
-                            </Badge>
-                          )}
-                          {hasAnomalies && (
-                            <Badge variant="destructive" className="gap-1">
-                              <AlertTriangle className="h-3 w-3" />
-                              Issues Detected
-                            </Badge>
-                          )}
                         </div>
-                        <div className="text-sm text-gray-500 space-y-1">
-                          {investorName && (
-                            <p><strong>Name:</strong> {investorName}</p>
-                          )}
-                          {investorPhone && (
-                            <p><strong>Phone:</strong> {investorPhone}</p>
-                          )}
-                          {investorEmail && (
-                            <p><strong>Email:</strong> {investorEmail}</p>
-                          )}
-                          {!investorPhone && !investorEmail && (
-                            <p className="text-gray-400 italic">No contact info</p>
-                          )}
-                          <p><strong>Messages:</strong> {investorJobs.length} total</p>
+                        
+                        {/* Compact Stats Row */}
+                        <div className="flex items-center gap-4 text-sm text-gray-600 mb-2">
+                          <span><strong>{investorJobs.length}</strong> Messages</span>
+                          <span><strong>{sentCount}</strong> Sent</span>
+                          <span><strong>{pendingCount}</strong> Pending</span>
+                          {failedCount > 0 && <span className="text-red-600"><strong>{failedCount}</strong> Failed</span>}
+                        </div>
+                        
+                        {/* Contact Info Row */}
+                        <div className="flex items-center gap-4 text-xs text-gray-500 mb-2">
+                          {investorPhone && <span>{investorPhone}</span>}
+                          {investorEmail && <span>{investorEmail}</span>}
                           {sequences.length > 0 && (
-                            <p><strong>Sequences:</strong> {sequences.join(', ')}</p>
-                          )}
-                          <p>
-                            <strong>Status:</strong>{' '}
-                            {investorJobs.filter(j => j.sent_at).length} sent,{' '}
-                            {investorJobs.filter(j => !j.sent_at && parseAsUTC(j.scheduled_for) > new Date()).length} pending,{' '}
-                            {investorJobs.filter(j => j.error).length} failed
-                            {investorJobs.filter(j => j.has_replies).length > 0 && (
-                              <> • <span className="text-blue-600 font-medium">{investorJobs.filter(j => j.has_replies).length} with replies</span></>
-                            )}
-                          </p>
-                          {(replyCount > 0 || stopCount > 0 || bookingCount > 0) && (
-                            <p>
-                              <strong>Interactions:</strong>{' '}
-                              {replyCount > 0 && <span className="text-green-600 font-medium">✓ {replyCount} reply{replyCount !== 1 ? 'ies' : ''}</span>}
-                              {stopCount > 0 && <span className="text-red-600 font-medium ml-2">✗ {stopCount} STOP</span>}
-                              {bookingCount > 0 && <span className="text-purple-600 font-medium ml-2">📅 {bookingCount} booking{bookingCount !== 1 ? 's' : ''}</span>}
-                            </p>
+                            <span>Sequences: {sequences.join(', ')}</span>
                           )}
                         </div>
+                        
+                        {/* Channel Status Chips - Only show if there's activity */}
+                        {(emailSent > 0 || smsSent > 0) && (
+                          <div className="flex items-center gap-2 mb-2">
+                            {emailSent > 0 && (
+                              <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/60 font-medium">
+                                <Mail className="h-3 w-3" />
+                                Email: {emailSent} sent{emailFailed > 0 ? ` / ${emailFailed} failed` : ''}
+                              </span>
+                            )}
+                            {smsSent > 0 && (
+                              <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md bg-amber-50 text-amber-700 border border-amber-200/60 font-medium">
+                                <MessageSquare className="h-3 w-3" />
+                                SMS: {smsSent} sent{smsFailed > 0 ? ` / ${smsFailed} failed` : ''}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                        
+                        {/* Sequence Progress Bar */}
+                        {progressTotal > 0 && (
+                          <div className="mt-2">
+                            <div className="flex items-center justify-between text-xs text-gray-600 mb-1">
+                              <span>Sequence Progress</span>
+                              <span>{progressSent} / {progressTotal}</span>
                       </div>
-                      <div className="flex items-center gap-3 flex-wrap">
-                        {/* One Pause/Resume + Delete per unique sequence (investor may be in multiple) */}
+                            <div className="w-full bg-gray-200 rounded-full h-2">
+                              <div 
+                                className="bg-purple-600 h-2 rounded-full transition-all"
+                                style={{ width: `${progressPercent}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Right: Sequence Controls */}
+                      <div className="flex items-center gap-2 flex-wrap shrink-0">
                         {Array.from(sequenceControls.values()).map(({ sequenceId, sequenceName, runId, status }) => {
                           const isPaused = status === 'paused';
                           const isPausing = pausingRuns.has(runId);
-                          const isDeleting = deletingSequenceIds.has(sequenceId);
+                          const loadingKey = `${runId}-${sequenceId}`;
+                          const isDeleting = deletingSequenceIds.has(loadingKey);
                           
                           return (
                             <div
@@ -795,7 +915,7 @@ function MessageJobsContent() {
                                   }
                                 }}
                                 disabled={isPausing}
-                                className={isPaused ? "bg-green-600 hover:bg-green-700 text-white shrink-0" : "shrink-0"}
+                                className={`${isPaused ? "bg-green-600 hover:bg-green-700 text-white" : ""} shrink-0 cursor-pointer`}
                               >
                                 {isPausing ? (
                                   <Loader2 className="h-4 w-4 animate-spin mr-1" />
@@ -811,10 +931,11 @@ function MessageJobsContent() {
                                 size="sm"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  handleDeleteSequence(sequenceId);
+                                  handleArchiveSequenceRun(runId, sequenceId);
                                 }}
                                 disabled={isDeleting}
-                                className="border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 hover:text-red-700 shrink-0"
+                                className="border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 hover:text-red-700 shrink-0 cursor-pointer"
+                                title="Archive this sequence for this investor (preserves data, hides from view)"
                               >
                                 {isDeleting ? (
                                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -832,6 +953,7 @@ function MessageJobsContent() {
                             e.stopPropagation();
                             toggleInvestor(investorKey);
                           }}
+                          className="cursor-pointer"
                         >
                           {isExpanded ? 'Collapse' : 'Expand'}
                         </Button>
@@ -840,240 +962,201 @@ function MessageJobsContent() {
                   </CardHeader>
                   {isExpanded && (
                     <CardContent className="pt-0">
-                      {/* Interactions Summary */}
-                      {allInteractions.length > 0 && (
-                        <div className="mb-4 p-4 bg-gradient-to-r from-purple-50 to-blue-50 border border-purple-200 rounded-lg">
-                          <div className="flex items-center gap-2 mb-3">
-                            <Activity className="h-5 w-5 text-purple-600" />
-                            <h3 className="text-sm font-semibold text-gray-900">Interaction History</h3>
-                          </div>
-                          <div className="space-y-2">
-                            {allInteractions.slice(0, 10).map((interaction) => {
-                              const isPositive = interaction.intent_score_change > 0;
-                              const isStop = interaction.interaction_type === 'stop';
-                              const isBooking = interaction.interaction_type === 'calendly_booking';
-                              
-                              return (
-                                <div
-                                  key={interaction.id}
-                                  className={`p-3 rounded-lg border ${
-                                    isStop ? 'bg-red-50 border-red-200' :
-                                    isBooking ? 'bg-purple-50 border-purple-200' :
-                                    'bg-green-50 border-green-200'
-                                  }`}
-                                >
-                                  <div className="flex items-start justify-between">
-                                    <div className="flex-1">
-                                      <div className="flex items-center gap-2 mb-1">
-                                        {isStop && <XCircle className="h-4 w-4 text-red-600" />}
-                                        {isBooking && <CalendarIcon className="h-4 w-4 text-purple-600" />}
-                                        {!isStop && !isBooking && <CheckCircle className="h-4 w-4 text-green-600" />}
-                                        <span className="text-sm font-medium text-gray-900 capitalize">
-                                          {isStop ? 'STOP Request' : 
-                                           isBooking ? 'Calendly Booking' : 
-                                           'SMS Reply'}
-                                        </span>
-                                        <Badge 
-                                          variant="outline" 
-                                          className={`text-xs ${
-                                            isPositive ? 'border-green-500 text-green-700' : 'border-red-500 text-red-700'
-                                          }`}
-                                        >
-                                          {isPositive ? '+' : ''}{interaction.intent_score_change.toFixed(1)} intent
-                                        </Badge>
-                                      </div>
-                                      {interaction.message_body && (
-                                        <p className="text-sm text-gray-700 mt-1">{interaction.message_body}</p>
-                                      )}
-                                      {isBooking && interaction.metadata?.name && (
-                                        <p className="text-sm text-gray-700 mt-1">
-                                          <strong>Booked by:</strong> {interaction.metadata.name}
-                                          {interaction.metadata.start_time && (
-                                            <> • <strong>Date:</strong> {formatDateTimeEST(interaction.metadata.start_time)}</>
-                                          )}
-                                        </p>
-                                      )}
-                                      <p className="text-xs text-gray-500 mt-1">
-                                        {formatDateTimeEST(interaction.created_at)}
-                                      </p>
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                          {allInteractions.length > 10 && (
-                            <p className="text-xs text-gray-500 mt-2 text-center">
-                              Showing 10 of {allInteractions.length} interactions
-                            </p>
-                          )}
-                        </div>
-                      )}
-                      
-                      <div className="space-y-3">
-                        {sortedJobs.map((job) => {
-                          const sequenceName = job.sequence_name || 'Unknown Sequence';
-                          const scheduled = parseAsUTC(job.scheduled_for);
-                          const sent = job.sent_at ? parseAsUTC(job.sent_at) : null;
-                          const isOverdue = !sent && scheduled <= new Date();
-
-                          return (
-                            <div
-                              key={job.id}
-                              className={`p-4 rounded-lg border ${
-                                job.error ? 'bg-red-50 border-red-200' :
-                                isOverdue ? 'bg-orange-50 border-orange-200' :
-                                job.timing_status === 'late' ? 'bg-yellow-50 border-yellow-200' :
-                                'bg-gray-50 border-gray-200'
+                      {/* Filter Controls */}
+                      <div className="mb-4 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          {(['all', 'email', 'sms', 'scheduled', 'failed'] as const).map((f) => (
+                            <button
+                              key={f}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const next = new Map(investorMessageFilter);
+                                next.set(investorKey, f);
+                                setInvestorMessageFilter(next);
+                              }}
+                              className={`px-3 py-1 text-xs font-medium rounded transition-colors cursor-pointer ${
+                                messageFilter === f
+                                  ? 'bg-purple-100 text-purple-700 border border-purple-300'
+                                  : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'
                               }`}
                             >
-                              <div className="flex items-start justify-between mb-2">
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-2 mb-2">
-                                    {getStatusBadge(job)}
-                                    <Badge 
-                                      variant="outline" 
-                                      className={`text-xs ${
-                                        (job.job_type || (job.phone_number ? 'sms' : 'email')) === 'email'
-                                          ? 'border-blue-500 text-blue-700 bg-blue-50'
-                                          : 'border-purple-500 text-purple-700 bg-purple-50'
-                                      }`}
-                                    >
-                                      {(job.job_type || (job.phone_number ? 'sms' : 'email')) === 'email' ? '📧 Email' : '💬 SMS'}
-                                    </Badge>
-                                    <Badge variant="outline" className="text-xs">
-                                      {sequenceName}
-                                    </Badge>
+                              {f === 'all' ? 'All' : f.charAt(0).toUpperCase() + f.slice(1)}
+                            </button>
+                          ))}
+                                      </div>
+                        <div className="text-xs text-gray-500">
+                          Showing {filteredJobs.length} of {sortedJobs.length} messages
+                                    </div>
                                   </div>
-                                  <div className="text-xs text-gray-500 space-y-1">
-                                    <p>
-                                      <strong>Scheduled:</strong>{' '}
-                                      {formatDateTimeEST(scheduled)}
-                                    </p>
-                                    {sent && (
-                                      <p>
-                                        <strong>Sent:</strong>{' '}
-                                        {formatDateTimeEST(sent)}
-                                        {job.timing_accuracy_ms !== null && (
-                                          <span className={`ml-2 ${
-                                            job.timing_status === 'on-time' ? 'text-green-600' :
-                                            job.timing_status === 'late' ? 'text-orange-600' :
-                                            'text-blue-600'
-                                          }`}>
-                                            ({job.timing_status === 'late' ? '+' : ''}{formatTiming(job)})
-                                          </span>
-                                        )}
-                                      </p>
-                                    )}
-                                    {!sent && isOverdue && (
-                                      <p className="text-orange-600 font-medium">
-                                        Overdue by {formatDistanceToNow(scheduled)}
-                                      </p>
-                                    )}
+                      
+                      {/* Timeline View */}
+                      <div className="relative pl-6 border-l-2 border-gray-200">
+                        {filteredJobs.map((job, index) => {
+                          const scheduled = parseAsUTC(job.scheduled_for);
+                          const sent = job.sent_at ? parseAsUTC(job.sent_at) : null;
+                          const messageStatus = getMessageStatus(job);
+                          const jobType = getJobType(job);
+                          const isExpanded = expandedMessageIds.has(job.id);
+                          const timeStr = formatDateTimeEST(sent || scheduled);
+
+                          return (
+                            <div key={job.id} className="relative mb-4 last:mb-0">
+                              {/* Timeline Dot */}
+                              <div className="absolute -left-[21px] top-1">
+                                {messageStatus.status === 'sent' ? (
+                                  <div className="w-4 h-4 rounded-full bg-green-600 border-2 border-white shadow-sm" />
+                                ) : messageStatus.status === 'failed' ? (
+                                  <div className="w-4 h-4 rounded-full bg-red-600 border-2 border-white shadow-sm flex items-center justify-center">
+                                    <XCircle className="h-2.5 w-2.5 text-white" />
                                   </div>
-                                </div>
+                                ) : (
+                                  <div className="w-4 h-4 rounded-full border-2 border-gray-400 bg-white shadow-sm" />
+                                )}
                               </div>
-                              {/* Message Content - SMS or Email */}
-                              {job.job_type === 'email' ? (
-                                <div className="mt-3">
-                                  <button
-                                    type="button"
-                                    onClick={() => toggleEmailPreview(job.id)}
-                                    className="flex items-center gap-2 w-full text-left p-3 bg-white rounded border border-gray-200 hover:bg-gray-50 transition-colors cursor-pointer"
-                                  >
-                                    {expandedEmailPreviews.has(job.id) ? (
-                                      <ChevronDown className="h-4 w-4 text-gray-500 shrink-0" />
-                                    ) : (
-                                      <ChevronRight className="h-4 w-4 text-gray-500 shrink-0" />
+                              
+                              {/* Timeline Content */}
+                              <div className="bg-white rounded-lg border border-gray-200 hover:border-gray-300 transition-colors">
+                                <div className="p-3">
+                                  {/* Header Row */}
+                                  <div className="flex items-start justify-between gap-3 mb-2">
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                        {/* Channel Badge */}
+                                        <span className={`text-xs px-2 py-0.5 rounded ${
+                                          jobType === 'email' 
+                                            ? 'bg-blue-50 text-blue-700 border border-blue-200' 
+                                            : 'bg-purple-50 text-purple-700 border border-purple-200'
+                                        }`}>
+                                          {jobType === 'email' ? '📧 EMAIL' : '💬 SMS'}
+                                        </span>
+                                        
+                                        {/* Status */}
+                                        <span className={`text-xs font-medium ${
+                                          messageStatus.status === 'sent' ? 'text-green-700' :
+                                          messageStatus.status === 'failed' ? 'text-red-700' :
+                                          messageStatus.status === 'sending' ? 'text-yellow-700' :
+                                          'text-gray-700'
+                                        }`}>
+                                          {messageStatus.status === 'sent' ? 'Sent' :
+                                           messageStatus.status === 'failed' ? 'Failed' :
+                                           messageStatus.status === 'sending' ? 'Sending' :
+                                           'Scheduled'}
+                                        </span>
+                                        
+                                        {/* Late Indicator */}
+                                        {messageStatus.isLate && messageStatus.lateBy && (
+                                          <span className="text-xs text-red-600 flex items-center gap-1">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-red-600" />
+                                            Late {messageStatus.lateBy}
+                                          </span>
                                     )}
-                                    <span className="text-sm font-medium text-gray-700">Email preview</span>
-                                    {!expandedEmailPreviews.has(job.id) && job.email_subject && (
-                                      <span className="text-sm text-gray-500 truncate"> — {job.email_subject}</span>
-                                    )}
-                                  </button>
-                                  {expandedEmailPreviews.has(job.id) && (
-                                    <div className="mt-2 space-y-3 p-3 bg-white rounded border border-gray-200 border-t-0">
-                                      <div>
-                                        <p className="text-sm font-medium text-gray-700 mb-1">Subject:</p>
-                                        <p className="text-sm text-gray-900">
-                                          {job.email_subject || <span className="text-gray-400 italic">No subject</span>}
-                                        </p>
-                                      </div>
-                                      <div>
-                                        <p className="text-sm font-medium text-gray-700 mb-1">HTML Content:</p>
-                                        <div 
-                                          className="text-sm text-gray-900 prose prose-sm max-w-none"
-                                          dangerouslySetInnerHTML={{ __html: job.email_html || '' }}
-                                        />
-                                        {job.email_html && (
-                                          <p className="text-xs text-gray-400 mt-2">
-                                            {job.email_html.length} characters (HTML)
-                                          </p>
+                                  </div>
+                                      
+                                      {/* Time - Show both scheduled and sent times */}
+                                      <div className="text-xs text-gray-500 space-y-0.5">
+                                        <div>
+                                          Scheduled: {formatDateTimeEST(scheduled)}
+                                        </div>
+                                        {sent && (
+                                          <div>
+                                            Sent: {formatDateTimeEST(sent)}
+                                          </div>
                                         )}
                                       </div>
-                                      {job.email_text && !job.email_html && (
-                                        <div className="p-3 bg-gray-50 rounded border border-gray-200">
-                                          <p className="text-sm font-medium text-gray-700 mb-1">Email Preview (as it will be sent):</p>
-                                          <div 
-                                            className="text-sm text-gray-900"
-                                            dangerouslySetInnerHTML={{ 
-                                              __html: (() => {
-                                                // Convert text to HTML the same way the email provider does
-                                                let textHtml = job.email_text
-                                                  .replace(/&/g, '&amp;')
-                                                  .replace(/</g, '&lt;')
-                                                  .replace(/>/g, '&gt;');
-                                                
-                                                // Split by double newlines (paragraphs) and preserve single newlines as <br>
-                                                const paragraphs = textHtml.split(/\n{2,}/);
-                                                const formattedParagraphs = paragraphs.map(para => {
-                                                  const trimmed = para.trim();
-                                                  if (!trimmed) return '';
-                                                  // Replace ALL newlines with <br> tags to preserve exact formatting
-                                                  const withBreaks = trimmed.replace(/\n/g, '<br>');
-                                                  return `<p style="margin: 0 0 1em 0; font-family: Arial, sans-serif; font-size: 16px; line-height: 1.5; color: #333333;">${withBreaks}</p>`;
-                                                }).filter(Boolean);
-                                                
-                                                return formattedParagraphs.join('\n');
-                                              })()
-                                            }}
-                                          />
+                                      
+                                      {/* Email Subject or SMS Preview */}
+                                      {jobType === 'email' && job.email_subject && (
+                                        <div className="text-sm text-gray-900 mt-1 font-medium">
+                                          Subject: {job.email_subject}
+                              </div>
+                                      )}
+                                      {jobType === 'sms' && job.message_text && (
+                                        <div className="text-sm text-gray-700 mt-1 line-clamp-2">
+                                          {job.message_text.substring(0, 100)}{job.message_text.length > 100 ? '...' : ''}
                                         </div>
                                       )}
                                     </div>
+                                    
+                                    {/* Expand/Collapse Button */}
+                                  <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleMessageExpansion(job.id);
+                                      }}
+                                      className="shrink-0 text-gray-400 hover:text-gray-600 transition-colors cursor-pointer"
+                                    >
+                                      {isExpanded ? (
+                                        <ChevronDown className="h-4 w-4" />
+                                      ) : (
+                                        <ChevronRight className="h-4 w-4" />
+                                    )}
+                                  </button>
+                                  </div>
+                                  
+                                  {/* Provider Status (subtext) */}
+                                  {job.provider_status && (
+                                    <div className="text-xs text-gray-400 mt-1">
+                                      Provider: {job.provider_status}
+                                    </div>
                                   )}
-                                </div>
-                              ) : (
-                                <div className="mt-3 p-3 bg-white rounded border border-gray-200">
-                                  <p className="text-sm font-medium text-gray-700 mb-1">Message:</p>
-                                  <p className="text-sm text-gray-900 whitespace-pre-wrap">
-                                    {job.message_text || <span className="text-gray-400 italic">No message</span>}
-                                  </p>
-                                  {job.message_text && (
-                                    <p className="text-xs text-gray-400 mt-2">
-                                      {job.message_text.length} characters
-                                    </p>
+                                  
+                                  {/* Expanded Content */}
+                                  {isExpanded && (
+                                    <div className="mt-3 pt-3 border-t border-gray-200 space-y-3">
+                                      {/* Email Content */}
+                                      {jobType === 'email' && (
+                                        <>
+                                          {job.email_subject && (
+                                      <div>
+                                              <p className="text-xs font-medium text-gray-700 mb-1">Subject:</p>
+                                              <p className="text-sm text-gray-900">{job.email_subject}</p>
+                                      </div>
+                                          )}
+                                          {job.email_html && (
+                                      <div>
+                                              <p className="text-xs font-medium text-gray-700 mb-2">Content:</p>
+                                              <div 
+                                                className="text-sm text-gray-900 prose prose-sm max-w-none border border-gray-200 rounded p-3 bg-gray-50"
+                                                dangerouslySetInnerHTML={{ __html: job.email_html }}
+                                              />
+                                        </div>
+                                      )}
+                                          {job.email_text && !job.email_html && (
+                                            <div>
+                                              <p className="text-xs font-medium text-gray-700 mb-2">Content:</p>
+                                              <div 
+                                                className="text-sm text-gray-900 border border-gray-200 rounded p-3 bg-gray-50"
+                                                dangerouslySetInnerHTML={{ __html: convertTextToHtmlForPreview(job.email_text) }}
+                                              />
+                                    </div>
                                   )}
+                                        </>
+                                      )}
+                                      
+                                      {/* SMS Content */}
+                                      {jobType === 'sms' && job.message_text && (
+                                        <div>
+                                          <p className="text-xs font-medium text-gray-700 mb-2">Message:</p>
+                                          <div className="text-sm text-gray-900 whitespace-pre-wrap border border-gray-200 rounded p-3 bg-gray-50">
+                                            {job.message_text}
+                                          </div>
                                 </div>
                               )}
+                                      
+                                      {/* Error */}
                               {job.error && (
-                                <div className="mt-2 p-2 bg-red-100 border border-red-300 rounded">
+                                        <div className="p-2 bg-red-50 border border-red-200 rounded">
                                   <p className="text-xs font-medium text-red-800 mb-1">Error:</p>
                                   <p className="text-xs text-red-700">{job.error}</p>
                                 </div>
                               )}
-                              {job.provider_status && (
-                                <div className="mt-2 text-xs text-gray-500">
-                                  <strong>Provider Status:</strong> {job.provider_status}
-                                </div>
-                              )}
                               
-                              {/* Replies Section */}
+                                      {/* Replies */}
                               {job.has_replies && job.replies && job.replies.length > 0 && (
-                                <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                        <div className="p-3 bg-blue-50 border border-blue-200 rounded">
                                   <div className="flex items-center gap-2 mb-2">
                                     <MessageSquare className="h-4 w-4 text-blue-600" />
-                                    <p className="text-sm font-medium text-blue-800">
+                                            <p className="text-xs font-medium text-blue-800">
                                       Replies ({job.reply_count})
                                     </p>
                                   </div>
@@ -1089,10 +1172,53 @@ function MessageJobsContent() {
                                   </div>
                                 </div>
                               )}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
                             </div>
                           );
                         })}
                       </div>
+                      
+                      {/* Interactions Summary (Collapsible) */}
+                      {allInteractions.length > 0 && (
+                        <div className="mt-6 pt-6 border-t border-gray-200">
+                          <div className="flex items-center gap-2 mb-3">
+                            <Activity className="h-4 w-4 text-purple-600" />
+                            <h3 className="text-sm font-semibold text-gray-900">Interaction History</h3>
+                          </div>
+                          <div className="space-y-2">
+                            {allInteractions.slice(0, 5).map((interaction) => {
+                              const isStop = interaction.interaction_type === 'stop';
+                              const isBooking = interaction.interaction_type === 'calendly_booking';
+                              
+                              return (
+                                <div
+                                  key={interaction.id}
+                                  className={`p-2 rounded border text-xs ${
+                                    isStop ? 'bg-red-50 border-red-200' :
+                                    isBooking ? 'bg-purple-50 border-purple-200' :
+                                    'bg-green-50 border-green-200'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    {isStop && <XCircle className="h-3 w-3 text-red-600" />}
+                                    {isBooking && <CalendarIcon className="h-3 w-3 text-purple-600" />}
+                                    {!isStop && !isBooking && <CheckCircle className="h-3 w-3 text-green-600" />}
+                                    <span className="font-medium">
+                                      {isStop ? 'STOP' : isBooking ? 'Booking' : 'Reply'}
+                                    </span>
+                                    <span className="text-gray-500">
+                                      {formatDateTimeEST(interaction.created_at)}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </CardContent>
                   )}
                 </Card>

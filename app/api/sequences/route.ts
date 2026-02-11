@@ -162,6 +162,9 @@ export async function PUT(request: NextRequest) {
 }
 
 // DELETE /api/sequences?id=... - Delete sequence
+// ⚠️ WARNING: This endpoint DELETES sequences from the database permanently!
+// DO NOT USE THIS ENDPOINT - Use /api/sequences/[id]/archive instead to archive sequences.
+// This endpoint is kept for emergency use only. The UI should NEVER call this.
 export async function DELETE(request: NextRequest) {
   if (!checkAuth(request)) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
