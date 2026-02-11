@@ -134,6 +134,15 @@ export async function GET(request: NextRequest) {
     }
 
     console.log(`[Cron] Found ${jobs.length} due message job(s) to process`);
+    
+    // Diagnostic: Count runs by status
+    const statusCounts: Record<string, number> = {};
+    jobs.forEach((job: any) => {
+      const run = Array.isArray(job.sequence_runs) ? job.sequence_runs[0] : job.sequence_runs;
+      const status = run?.status || 'NO_RUN';
+      statusCounts[status] = (statusCounts[status] || 0) + 1;
+    });
+    console.log(`[Cron] Run status breakdown:`, statusCounts);
 
     const results = {
       sent: 0,
