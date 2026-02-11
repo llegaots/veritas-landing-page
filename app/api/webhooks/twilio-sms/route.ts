@@ -221,30 +221,9 @@ export async function POST(request: NextRequest) {
         .eq('id', messageJob.id);
     }
 
-    // Pause the sequence run when someone replies (so we don't keep auto-sending)
-    if (investor?.id) {
-      const { data: activeRuns } = await supabase
-        .from('sequence_runs')
-        .select('id')
-        .eq('investor_id', investor.id)
-        .in('status', ['pending', 'active']);
-
-      if (activeRuns && activeRuns.length > 0) {
-        const runIds = activeRuns.map((r: { id: string }) => r.id);
-        await supabase
-          .from('sequence_runs')
-          .update({ status: 'paused', updated_at: new Date().toISOString() })
-          .in('id', runIds);
-        console.log(`[Twilio SMS] Paused ${runIds.length} sequence run(s) due to reply`);
-      }
-    } else if (messageJob?.run_id) {
-      await supabase
-        .from('sequence_runs')
-        .update({ status: 'paused', updated_at: new Date().toISOString() })
-        .eq('id', messageJob.run_id)
-        .in('status', ['pending', 'active']);
-      console.log(`[Twilio SMS] Paused sequence run ${messageJob.run_id} due to reply`);
-    }
+    // Note: We no longer auto-pause runs when someone replies
+    // Runs continue automatically unless manually paused by the user
+    console.log(`[Twilio SMS] Reply received from ${fromNumber} - sequences will continue automatically`);
 
     // Return TwiML response (Twilio expects this)
     // You can customize this to send an auto-reply if needed

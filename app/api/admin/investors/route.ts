@@ -248,23 +248,11 @@ export async function PATCH(request: NextRequest) {
       );
     }
 
-    // If status changed to "Interested", pause all active sequence runs - STOP sending
+    // Note: We no longer auto-pause runs when investor status changes to "Interested"
+    // Runs continue automatically unless manually paused by the user
     const newStatus = (filteredUpdates.status ?? updated?.status ?? '').toString().toLowerCase().trim();
     if (newStatus === 'interested') {
-      const { data: activeRuns } = await supabase
-        .from('sequence_runs')
-        .select('id')
-        .eq('investor_id', id)
-        .in('status', ['pending', 'active']);
-
-      if (activeRuns && activeRuns.length > 0) {
-        const runIds = activeRuns.map((r: { id: string }) => r.id);
-        await supabase
-          .from('sequence_runs')
-          .update({ status: 'paused', updated_at: new Date().toISOString() })
-          .in('id', runIds);
-        console.log(`[admin/investors] Paused ${runIds.length} sequence run(s) - investor ${id} status set to Interested`);
-      }
+      console.log(`[admin/investors] Investor ${id} status set to Interested - sequences will continue automatically`);
     }
 
     return NextResponse.json({

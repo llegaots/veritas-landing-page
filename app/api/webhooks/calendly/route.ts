@@ -130,25 +130,9 @@ export async function POST(request: NextRequest) {
 
         console.log(`[Calendly Webhook] Updated intent score: ${currentScore} → ${newScore} (Calendly Booking)`);
 
-        // Pause all active sequence runs for this investor
-        const { data: activeRuns } = await supabase
-          .from('sequence_runs')
-          .select('id')
-          .eq('investor_id', investorId)
-          .in('status', ['pending', 'active']);
-
-        if (activeRuns && activeRuns.length > 0) {
-          const runIds = activeRuns.map(r => r.id);
-          await supabase
-            .from('sequence_runs')
-            .update({
-              status: 'paused',
-              updated_at: new Date().toISOString(),
-            })
-            .in('id', runIds);
-
-          console.log(`[Calendly Webhook] Paused ${runIds.length} sequence run(s) for investor ${investorId}`);
-        }
+        // Note: We no longer auto-pause runs when someone books a Calendly call
+        // Runs continue automatically unless manually paused by the user
+        console.log(`[Calendly Webhook] Booking received for investor ${investorId} - sequences will continue automatically`);
 
         return NextResponse.json({
           success: true,
