@@ -101,7 +101,9 @@ export async function GET(request: NextRequest) {
         sequence_runs!inner(
           id,
           status,
-          investor_id
+          investor_id,
+          created_at,
+          updated_at
         )
       `)
       .is('sent_at', null) // Not yet sent (use .is() for null checks)
@@ -150,7 +152,7 @@ export async function GET(request: NextRequest) {
           continue;
         }
         if (run.status !== 'active') {
-          console.log(`[Cron] ⏸️ Skipping job ${job.id} - sequence run ${run.id} is ${run.status} (not active)`);
+          console.log(`[Cron] ⏸️ Skipping job ${job.id} (type: ${job.job_type || 'sms'}, scheduled: ${job.scheduled_for}) - sequence run ${run.id} is "${run.status}" (not "active"). Run created: ${run.created_at}, updated: ${run.updated_at}`);
           results.errors.push(`Job ${job.id}: Sequence run is ${run.status}`);
           continue;
         }
