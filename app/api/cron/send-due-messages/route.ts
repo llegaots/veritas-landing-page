@@ -181,7 +181,7 @@ export async function GET(request: NextRequest) {
           continue;
         }
         
-        // Auto-activate pending runs (they should have been created as active, but handle edge case)
+        // Note: Pending runs are now filtered out at query level, but handle edge case if one slips through
         if (run.status === 'pending') {
           console.log(`[Cron] ⚠️ Auto-activating pending run ${run.id} for job ${job.id}`);
           await supabase
@@ -190,6 +190,12 @@ export async function GET(request: NextRequest) {
             .eq('id', run.id)
             .eq('status', 'pending');
           run.status = 'active'; // Update local reference
+        }
+        
+        // Double-check run is active (defensive check after query filter)
+        if (run.status !== 'active') {
+          console.log(`[Cron] ⚠️ SKIP: Job ${job.id} - run ${run.id} status is "${run.status}" (expected active after query filter)`);
+          continue;
         }
 
         // Note: We no longer auto-pause runs based on investor status
