@@ -77,15 +77,11 @@ export async function GET(request: NextRequest) {
 
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
   const now = new Date();
+  const isWithinWindow = isWithinSendingWindow(now);
 
-  // Only send during the allowed window: 9 AM - 7 PM Eastern
-  if (!isWithinSendingWindow(now)) {
-    console.log(`[Cron] Outside sending window (9 AM - 7 PM Eastern). Current time (Eastern): ${now.toLocaleString('en-US', { timeZone: 'America/New_York' })}. Skipping.`);
-    return NextResponse.json({
-      success: true,
-      processed: 0,
-      message: 'Outside sending window (9 AM - 7 PM Eastern)',
-    });
+  // Log window status but don't block - we'll check for overdue messages
+  if (!isWithinWindow) {
+    console.log(`[Cron] Outside sending window (9 AM - 7 PM Eastern). Current time (Eastern): ${now.toLocaleString('en-US', { timeZone: 'America/New_York' })}. Will still process overdue messages.`);
   }
 
   try {
@@ -127,12 +123,15 @@ export async function GET(request: NextRequest) {
     }
 
     if (!jobs || jobs.length === 0) {
+      console.log(`[Cron] No due messages found (checked up to ${dueTime})`);
       return NextResponse.json({
         success: true,
         processed: 0,
         message: 'No due messages',
       });
     }
+
+    console.log(`[Cron] Found ${jobs.length} due message job(s) to process`);
 
     const results = {
       sent: 0,
@@ -145,8 +144,14 @@ export async function GET(request: NextRequest) {
       try {
         // Check if sequence run is paused - skip if paused
         const run = Array.isArray(job.sequence_runs) ? job.sequence_runs[0] : job.sequence_runs;
-        if (run && run.status !== 'active') {
-          console.log(`[Cron] Skipping job ${job.id} - sequence run ${run.id} is ${run.status} (not active)`);
+        if (!run) {
+          console.log(`[Cron] ⚠️ Skipping job ${job.id} - no sequence run found`);
+          results.errors.push(`Job ${job.id}: No sequence run found`);
+          continue;
+        }
+        if (run.status !== 'active') {
+          console.log(`[Cron] ⏸️ Skipping job ${job.id} - sequence run ${run.id} is ${run.status} (not active)`);
+          results.errors.push(`Job ${job.id}: Sequence run is ${run.status}`);
           continue;
         }
 
@@ -179,6 +184,21 @@ export async function GET(request: NextRequest) {
         if (timeDiff > 5000) {
           console.log(`[Cron] Skipping job ${job.id} - scheduled for future: ${job.scheduled_for} (${Math.round(timeDiff / 1000)}s ahead)`);
           continue;
+        }
+        
+        // Check if message is overdue (more than 1 hour past scheduled time)
+        const overdueByMs = currentTime.getTime() - scheduledTime.getTime();
+        const overdueByHours = overdueByMs / (1000 * 60 * 60);
+        const isOverdue = overdueByHours > 1;
+        
+        // If outside sending window, only send overdue messages (more than 1 hour late)
+        if (!isWithinWindow && !isOverdue) {
+          console.log(`[Cron] Skipping job ${job.id} - outside sending window and not overdue (scheduled: ${job.scheduled_for}, overdue by: ${Math.round(overdueByHours * 10) / 10}h)`);
+          continue;
+        }
+        
+        if (isOverdue && !isWithinWindow) {
+          console.log(`[Cron] Processing overdue job ${job.id} outside sending window (overdue by ${Math.round(overdueByHours * 10) / 10}h)`);
         }
         
         // Mark as processing (optimistic lock)
