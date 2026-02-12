@@ -27,11 +27,12 @@ export async function GET(request: NextRequest) {
   try {
     // Fetch ALL jobs matching jobType, sequenceId, date, source (no status filter - stats need full set)
     // Include spec_jsonb to check sequence status (archived sequences should be filtered out)
+    // CRITICAL: Filter archived runs at database level for performance (prevents fetching thousands of archived jobs)
     let query = supabase
       .from('message_jobs')
       .select(`
         *,
-        sequence_runs(
+        sequence_runs!inner(
           id,
           lead_id,
           investor_id,
@@ -51,6 +52,7 @@ export async function GET(request: NextRequest) {
           )
         )
       `)
+      .is('sequence_runs.archived_at', null) // CRITICAL: Filter archived runs at DB level (uses index, scales to 10k+ archived runs)
       .order('scheduled_for', { ascending: false })
       .order('run_id', { ascending: true });
 
@@ -233,13 +235,11 @@ export async function GET(request: NextRequest) {
       const version = Array.isArray(run?.sequence_versions) ? run?.sequence_versions[0] : run?.sequence_versions;
       const sequence = Array.isArray(version?.sequences) ? version?.sequences[0] : version?.sequences;
       
-      // PRIORITY 1: Check if this sequence run is archived for this investor (per-investor archiving)
-      if (run?.archived_at) {
-        console.log(`[message-jobs] Filtering out job ${job.id} - sequence run ${run.id} is archived for investor ${run.investor_id} (archived_at: ${run.archived_at})`);
-        return null; // Filter out jobs from archived runs (per-investor archiving)
-      }
+      // NOTE: Archived runs are now filtered at database level (see query above with .is('sequence_runs.archived_at', null))
+      // No need to check run?.archived_at here - archived runs won't be in the results
+      // This improves performance significantly (no need to fetch and filter thousands of archived jobs)
       
-      // PRIORITY 2: Check if the entire sequence is globally archived (legacy check)
+      // Check if the entire sequence is globally archived (legacy check)
       if (version?.spec_jsonb?.metadata) {
         const sequenceStatus = version.spec_jsonb.metadata.status;
         if (sequenceStatus === 'archived') {
@@ -301,14 +301,15 @@ export async function GET(request: NextRequest) {
     })
     .filter((job: any) => {
       if (job === null) {
-        return false; // Remove null entries (archived sequences)
+        return false; // Remove null entries (globally archived sequences only - per-investor archived runs filtered at DB level)
       }
       return true;
     });
   
-  const archivedCount = filteredData.length - jobs.length;
-  if (archivedCount > 0) {
-    console.log(`[message-jobs] Filtered out ${archivedCount} job(s) from archived sequences`);
+  // Note: Archived runs are filtered at database level, so we only log globally archived sequences here
+  const globallyArchivedCount = filteredData.length - jobs.length;
+  if (globallyArchivedCount > 0) {
+    console.log(`[message-jobs] Filtered out ${globallyArchivedCount} job(s) from globally archived sequences`);
   }
 
     // Helper: resolve job type (legacy jobs may not have job_type)

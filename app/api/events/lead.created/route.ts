@@ -258,7 +258,7 @@ export async function POST(request: NextRequest) {
       // Compile sequence to jobs
       // Ensure FullName is available if name is in attributes
       // Note: Database trigger sends email as 'Email' (uppercase), webhooks may send 'email' (lowercase)
-      const emailFromAttributes = attributes.email || attributes.Email || '';
+      // emailFromAttributes is already defined above, reuse it
       const compileContext = {
         lead_id,
         phone: phone || '',
