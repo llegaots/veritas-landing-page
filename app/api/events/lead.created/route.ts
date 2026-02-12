@@ -163,20 +163,60 @@ export async function POST(request: NextRequest) {
       // This prevents duplicate runs if the webhook is called multiple times
       // IMPORTANT: Check for ANY run (active, paused, or pending) to prevent duplicates
       // This is critical: if we only checked for 'active' runs, paused runs would allow duplicates
-      const { data: existingRun } = await supabase
+      // Also check by email/phone to prevent test leads from creating duplicates
+      const emailFromAttributes = attributes.email || attributes.Email || '';
+      const contactEmail = email || emailFromAttributes;
+      const contactPhone = phone || '';
+      
+      // First check by lead_id (primary check)
+      let existingRun = null;
+      const { data: runByLeadId } = await supabase
         .from('sequence_runs')
-        .select('id, status, created_at, updated_at')
+        .select('id, status, created_at, updated_at, context_jsonb')
         .eq('sequence_version_id', version.id)
         .eq('lead_id', lead_id.toString())
-        .order('created_at', { ascending: false }) // Get most recent first
+        .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
       
+      if (runByLeadId) {
+        existingRun = runByLeadId;
+      } else if (contactEmail || contactPhone) {
+        // If no run found by lead_id, check by email/phone to prevent test lead duplicates
+        // This handles cases where test leads use different lead_ids but same email/phone
+        const { data: runsByContact } = await supabase
+          .from('sequence_runs')
+          .select('id, status, created_at, updated_at, context_jsonb')
+          .eq('sequence_version_id', version.id)
+          .order('created_at', { ascending: false });
+        
+        if (runsByContact && runsByContact.length > 0) {
+          // Check if any run has matching email or phone in context_jsonb
+          for (const run of runsByContact) {
+            const context = run.context_jsonb || {};
+            const runEmail = context.email || context.Email || '';
+            const runPhone = context.phone || '';
+            
+            // Match by email (if both have email) or phone (if both have phone)
+            const emailMatch = contactEmail && runEmail && 
+              contactEmail.toLowerCase().trim() === runEmail.toLowerCase().trim();
+            const phoneMatch = contactPhone && runPhone && 
+              contactPhone.replace(/\D/g, '') === runPhone.replace(/\D/g, '');
+            
+            if (emailMatch || phoneMatch) {
+              existingRun = run;
+              console.log(`[lead.created] ⚠️  DUPLICATE DETECTED by contact info (not lead_id): email=${emailMatch}, phone=${phoneMatch}`);
+              break;
+            }
+          }
+        }
+      }
+      
       if (existingRun) {
         // Log duplicate prevention with details for monitoring
-        console.log(`[lead.created] ⏭️  DUPLICATE PREVENTION: Skipping sequence ${sequence.id} - run already exists for this lead`);
+        console.log(`[lead.created] ⏭️  DUPLICATE PREVENTION: Skipping sequence ${sequence.id} - run already exists`);
         console.log(`[lead.created]    Existing run: ${existingRun.id.substring(0, 8)}... (status: ${existingRun.status}, created: ${existingRun.created_at}, updated: ${existingRun.updated_at})`);
-        console.log(`[lead.created]    Lead ID: ${lead_id}, Sequence: ${sequence.id}`);
+        console.log(`[lead.created]    Lead ID: ${lead_id}, Sequence: ${sequence.id}, Email: ${contactEmail || 'none'}, Phone: ${contactPhone || 'none'}`);
         
         // If existing run is paused, log a warning (this shouldn't create a new run)
         if (existingRun.status === 'paused') {

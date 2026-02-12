@@ -13,7 +13,18 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { lead_id, phone, attributes = {} } = body;
+    const { lead_id, phone, email, attributes = {} } = body;
+
+    // Generate consistent lead_id based on email/phone to prevent duplicate runs
+    // This ensures test leads with the same contact info reuse the same lead_id
+    let consistentLeadId = lead_id;
+    if (!consistentLeadId) {
+      const contactKey = email || phone || 'test';
+      // Create a consistent hash-like ID from email/phone
+      // This ensures same email/phone = same lead_id = no duplicates
+      const hash = contactKey.toLowerCase().replace(/[^a-z0-9]/g, '');
+      consistentLeadId = `test_${hash}`;
+    }
 
     // Call the lead.created endpoint
     const baseUrl = request.nextUrl.origin;
@@ -24,11 +35,13 @@ export async function POST(request: NextRequest) {
         'Authorization': `Bearer ${request.nextUrl.searchParams.get('key') || 'veritas2024admin'}`,
       },
       body: JSON.stringify({
-        lead_id: lead_id || `test_${Date.now()}`,
+        lead_id: consistentLeadId,
         phone: phone || '+15551234567',
+        email: email,
         attributes: {
           FirstName: attributes.FirstName || 'Test',
           PropertyName: attributes.PropertyName || 'Horizon Park',
+          Email: email, // Also include in attributes for consistency
           ...attributes,
         },
       }),
