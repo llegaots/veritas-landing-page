@@ -183,6 +183,13 @@ export async function GET(request: NextRequest) {
           continue;
         }
         
+        // Defensive check: Ensure run is not archived (should already be filtered by query, but safety first)
+        if (run.archived_at) {
+          console.log(`[Cron] ⏸️ SKIP: Job ${job.id} (type: ${job.job_type || 'sms'}, scheduled: ${job.scheduled_for}) - sequence run ${run.id} is archived (archived_at: ${run.archived_at}). This should have been filtered by the query.`);
+          results.errors.push(`Job ${job.id}: Sequence run is archived`);
+          continue;
+        }
+        
         // Note: Pending runs are now filtered out at query level, but handle edge case if one slips through
         if (run.status === 'pending') {
           console.log(`[Cron] ⚠️ Auto-activating pending run ${run.id} for job ${job.id}`);
