@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
     const bufferMs = 5000; // 5 seconds
     const dueTime = new Date(now.getTime() + bufferMs).toISOString();
     
-    // Get due jobs - IMPORTANT: Filter out paused runs at database level to prevent bulk sends
+    // Get due jobs - IMPORTANT: Filter out paused and archived runs at database level to prevent bulk sends
     const { data: jobs, error: fetchError } = await supabase
       .from('message_jobs')
       .select(`
@@ -102,6 +102,7 @@ export async function GET(request: NextRequest) {
           id,
           status,
           investor_id,
+          archived_at,
           created_at,
           updated_at
         )
@@ -109,6 +110,7 @@ export async function GET(request: NextRequest) {
       .is('sent_at', null) // Not yet sent (use .is() for null checks)
       .lte('scheduled_for', dueTime) // Due now or past (with small buffer)
       .eq('sequence_runs.status', 'active') // CRITICAL: Only get jobs with active runs (exclude paused)
+      .is('sequence_runs.archived_at', null) // CRITICAL: Only get jobs with non-archived runs (exclude archived)
       .order('scheduled_for', { ascending: true }) // Process in chronological order
       .limit(50); // Reduced limit to prevent bulk sends
 
