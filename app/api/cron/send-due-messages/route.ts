@@ -94,6 +94,33 @@ export async function GET(request: NextRequest) {
     const dueTime = new Date(now.getTime() + bufferMs).toISOString();
     
     // Get due jobs - IMPORTANT: Filter out paused and archived runs at database level to prevent bulk sends
+    // First, get all active, non-archived run IDs
+    const { data: activeRunIds, error: runsError } = await supabase
+      .from('sequence_runs')
+      .select('id')
+      .eq('status', 'active')
+      .is('archived_at', null);
+    
+    if (runsError) {
+      console.error('Error fetching active runs:', runsError);
+      return NextResponse.json(
+        { error: 'Failed to fetch active runs', details: runsError.message },
+        { status: 500 }
+      );
+    }
+    
+    const activeRunIdList = activeRunIds?.map(r => r.id) || [];
+    
+    if (activeRunIdList.length === 0) {
+      console.log(`[Cron] No active, non-archived runs found`);
+      return NextResponse.json({
+        success: true,
+        processed: 0,
+        message: 'No active runs',
+      });
+    }
+    
+    // Now get jobs only for active, non-archived runs
     const { data: jobs, error: fetchError } = await supabase
       .from('message_jobs')
       .select(`
@@ -109,8 +136,8 @@ export async function GET(request: NextRequest) {
       `)
       .is('sent_at', null) // Not yet sent (use .is() for null checks)
       .lte('scheduled_for', dueTime) // Due now or past (with small buffer)
-      .eq('sequence_runs.status', 'active') // CRITICAL: Only get jobs with active runs (exclude paused)
-      .is('sequence_runs.archived_at', null) // CRITICAL: Only get jobs with non-archived runs (exclude archived)
+      .in('run_id', activeRunIdList) // CRITICAL: Only get jobs for active, non-archived runs
+      .eq('sequence_runs.status', 'active') // Double-check status (defensive)
       .order('scheduled_for', { ascending: true }) // Process in chronological order
       .limit(50); // Reduced limit to prevent bulk sends
 
